@@ -6,7 +6,7 @@ The current suites passed on 2026-10-01 on Linux with KVM, using 9front release
 
 - Compiler tests compare native, cross-compiled, and mixed objects, covering
   arguments, callbacks, structures, floating point, and varargs.
-- Guest tests exercise file I/O, errors, process execution, and package behavior.
+- Guest tests exercise installation, module lookup, file I/O, errors, and processes.
   Native builds use the image's libraries; cross builds use rebuilt libraries
   where configured.
 - Library tests use known vectors and independent Python results for checksums,

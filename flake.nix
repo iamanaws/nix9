@@ -195,6 +195,12 @@
           ;
       };
       libbz2 = pkgs.callPackage ./pkgs/libbz2 { inherit cTools sysroot; };
+      luaPackage = pkgs.callPackage ./pkgs/lua/package.nix { inherit lua; };
+      luaPackageTests = pkgs.runCommand "lua-package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${testSupport [ ./tests/install_lua.py ]}/install_lua.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+          ${luaPackage} ${lua.guestPrefix} ${./tests/lua/fixture.lua} "$out"
+      '';
       libbz2Consumer = pkgs.callPackage ./tests/libbz2 {
         inherit
           cTools
@@ -285,6 +291,8 @@
         ape-cross = apeCross;
         ape-tests = apeTests;
         inherit lua;
+        lua-package = luaPackage;
+        lua-package-tests = luaPackageTests;
         inherit libbz2;
         inherit libbsd;
         inherit libap;

@@ -11,6 +11,7 @@
 }:
 let
   version = "5.4.8";
+  guestPrefix = "/usr/local/pkg/lua-${version}";
   archive = fetchurl {
     url = "https://www.lua.org/ftp/lua-${version}.tar.gz";
     hash = "sha256-TxjdrhVOeT5G7qtyfFnvHAwMK3ROe5QhlxDXb1MGKa4=";
@@ -19,6 +20,8 @@ let
   source = runCommand "lua-${version}-ape.tar.gz" { } ''
     tar -xzf ${archive}
     cp ${./ape-config.h} lua-${version}/src/ape-config.h
+    substituteInPlace lua-${version}/src/ape-config.h \
+      --replace-fail '@guestPrefix@' '${guestPrefix}'
     sed -i '1i#include "ape-config.h"' lua-${version}/src/lprefix.h
     tar --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner \
       -czf "$out" lua-${version}
@@ -34,7 +37,7 @@ runCommand "lua-${version}-9front"
     ccroot = sysroot;
     apeBsdLibrary = "${libbsd}/lib/libbsd.a";
     apeCoreLibrary = "${libap}/lib/libap.a";
-    passthru = { inherit source version; };
+    passthru = { inherit source version guestPrefix; };
     meta = {
       description = "Lua interpreter for 9front using APE";
       homepage = "https://www.lua.org";
