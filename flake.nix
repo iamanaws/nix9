@@ -277,7 +277,8 @@
           ''
             ${python}/bin/python ${testSupport [ ./tests/lua.py ]}/lua.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 \
-              ${vm}/9front.qcow2 ${lua.source} ${lua}/bin/lua ${./tests/lua} "$out"
+              ${vm}/9front.qcow2 ${lua.source} ${lua}/bin/lua ${./tests/lua} \
+              ${guestDevelopment} ${guestDevelopment.guestPrefix} ${development.guestPrefix} "$out"
           '';
       apeTests =
         pkgs.runCommand "ape-tests"
