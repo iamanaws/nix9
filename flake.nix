@@ -160,11 +160,15 @@
           ]
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
-          sys/src/libsec sys/src/libmp/port sys/src/cmd/mpc.y
+          sys/src/libsec sys/src/libmp sys/src/cmd/mpc.y
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
       mpc = pkgs.callPackage ./pkgs/mpc { source = secSource; };
+      libmp = pkgs.callPackage ./pkgs/libmp {
+        inherit cTools sysroot;
+        source = secSource;
+      };
       libsec = pkgs.callPackage ./pkgs/libsec {
         inherit cTools sysroot mpc;
         source = secSource;
@@ -175,6 +179,7 @@
           sysroot
           libc
           libsec
+          libmp
           ;
       };
       secTests = pkgs.runCommand "libsec-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
@@ -285,6 +290,7 @@
         inherit libap;
         inherit libc;
         inherit libsec;
+        inherit libmp;
         inherit mpc;
         libsec-tests = secTests;
         libbz2-tests = libbz2Tests;

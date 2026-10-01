@@ -1,4 +1,4 @@
-"""Run upstream libsec vectors with guest and cross-built libraries."""
+"""Check libsec vectors and multiprecision arithmetic with both libraries."""
 
 import functools
 import http.server
@@ -21,7 +21,7 @@ def main():
                 url = f"http://10.0.2.2:{server.server_port}"
                 guest.command("mkdir /tmp/sec")
                 guest.command("cd /tmp/sec")
-                for test in ("sha2", "hmac", "chacha", "aesgcm"):
+                for test in ("sha2", "hmac", "chacha", "aesgcm", "eg", "mp"):
                     guest.command(f"hget -o {test}.c {url}/src/{test}.c")
                     guest.command(f"hget -o cross {url}/bin/{test}")
                     guest.command("chmod +x cross")
@@ -35,7 +35,7 @@ def main():
     destination = Path(output_dir)
     destination.mkdir(parents=True)
     (destination / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    print("\nPASS: four upstream libsec vector suites passed in native and cross builds")
+    print("\nPASS: six libsec and libmp suites passed in native and cross builds")
 
 
 if __name__ == "__main__":
