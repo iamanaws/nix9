@@ -9,7 +9,8 @@ from build_c import ArtifactServer
 from guest import boot
 
 
-def export_tree(qemu, disk, output_path, paths, prepare=()):
+def main():
+    qemu, disk, output_path, *paths = sys.argv[1:]
     if not paths:
         raise ValueError("at least one guest directory is required")
     output = Path(output_path)
@@ -19,8 +20,6 @@ def export_tree(qemu, disk, output_path, paths, prepare=()):
         try:
             with boot(qemu, disk) as guest:
                 members = " ".join("'" + path.replace("'", "''") + "'" for path in paths)
-                for command in prepare:
-                    guest.command(command)
                 guest.command("cd / && tar cf /tmp/export.tar " + members)
                 guest.command(
                     "size=`{ls -l /tmp/export.tar | awk '{print $6}'}; "
@@ -34,5 +33,4 @@ def export_tree(qemu, disk, output_path, paths, prepare=()):
 
 
 if __name__ == "__main__":
-    qemu, disk, output_path, *paths = sys.argv[1:]
-    export_tree(qemu, disk, output_path, paths)
+    main()

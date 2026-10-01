@@ -153,24 +153,20 @@
         source = apeSource;
       };
       secSource = pkgs.runCommand "9front-libsec-source" { requiredSystemFeatures = [ "kvm" ]; } ''
-        export PYTHONPATH=${
+        ${python}/bin/python ${
           testSupport [
             ./tests/export_tree.py
             ./tests/build_c.py
           ]
-        }
-        ${python}/bin/python - "$TMPDIR/source.tar" <<'PY'
-        import sys
-        from export_tree import export_tree
-        export_tree("${pkgs.qemu}/bin/qemu-system-x86_64", "${vm}/9front.qcow2", sys.argv[1],
-                    ["sys/src/libsec", "sys/src/libmp/port"],
-                    prepare=["cd /sys/src/libsec/port && mk secp256r1.c secp384r1.c secp256k1.c jacobian.c"])
-        PY
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/libsec sys/src/libmp/port sys/src/cmd/mpc.y
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
+      mpc = pkgs.callPackage ./pkgs/mpc { source = secSource; };
       libsec = pkgs.callPackage ./pkgs/libsec {
-        inherit cTools sysroot;
+        inherit cTools sysroot mpc;
         source = secSource;
       };
       secCross = pkgs.callPackage ./tests/libsec {
@@ -289,6 +285,7 @@
         inherit libap;
         inherit libc;
         inherit libsec;
+        inherit mpc;
         libsec-tests = secTests;
         libbz2-tests = libbz2Tests;
         lua-tests = luaTests;

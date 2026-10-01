@@ -3,10 +3,14 @@
   cTools,
   sysroot,
   source,
+  mpc,
 }:
 runCommand "9front-libsec"
   {
-    nativeBuildInputs = [ cTools ];
+    nativeBuildInputs = [
+      cTools
+      mpc
+    ];
     ccroot = sysroot;
     passthru = { inherit source; };
   }
@@ -14,6 +18,13 @@ runCommand "9front-libsec"
     cp -r ${source}/sys/src source
     chmod -R u+w source
     cd source/libsec
+    for unit in secp256r1 secp384r1 secp256k1 jacobian; do
+      (
+        cd port
+        printf '#include "os.h"\n#include <mp.h>\n' > "$unit.c"
+        mpc "$unit.mp" >> "$unit.c"
+      )
+    done
     objectDir="$TMPDIR/sec-objects"
     mkdir "$objectDir"
     for part in port amd64; do

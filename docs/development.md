@@ -91,7 +91,8 @@ Run `nix build .#TARGET` from the checkout.
 | `libbsd` | Linux | APE BSD compatibility library rebuilt from the image's source. |
 | `libap` | Linux | APE core runtime rebuilt from C, assembly, and syscall definitions. |
 | `libc` | Linux | Native Plan 9 C runtime rebuilt from the image's source. |
-| `libsec` | Linux | 9front cryptography library; source preparation uses the guest's `mpc`. |
+| `libsec` | Linux | 9front cryptography library. |
+| `mpc` | Linux | Multiprecision compiler used to generate libsec sources. |
 | `libsec-tests` | Linux and 9front VM | Upstream cryptographic test vectors. |
 | `c-abi-cross` | Linux | Compiler test executable and object files. |
 | `c-abi-tests` | Linux and 9front VM | Compiler comparison results. |
