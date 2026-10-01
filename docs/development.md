@@ -11,8 +11,8 @@ nix build .#PACKAGE-tests -o result-tests -L
 ```
 
 Use the second command when the package has a `-tests` target.
-The executables run on 9front. The C compiler uses headers and libraries
-extracted from the pinned VM image. That first extraction needs KVM available
+The executables run on 9front. C builds use rebuilt runtimes, with headers,
+sources, and other libraries extracted from the pinned VM image. Extraction needs KVM available
 to Nix builders. Later builds can reuse those store outputs without a VM.
 Guest tests require KVM.
 
@@ -39,7 +39,7 @@ mkPlan9Program {
 }
 ```
 
-It compiles each source on Linux, links with the extracted 9front libraries,
+It compiles each source on Linux, links with rebuilt libc and any other required libraries,
 checks the executable format, and installs `bin/my-program`. Use `includeDirs`
 for extra header directories and `meta` for package metadata. Both `hello-c-cross`
 and `sha1sum` use this helper.
@@ -89,6 +89,7 @@ Run `nix build .#TARGET` from the checkout.
 | `libbz2-tests` | Linux and 9front VM | Archive and consumer comparison results. |
 | `libbsd` | Linux | APE BSD compatibility library rebuilt from the image's source. |
 | `libap` | Linux | APE core runtime rebuilt from C, assembly, and syscall definitions. |
+| `libc` | Linux | Native Plan 9 C runtime rebuilt from the image's source. |
 | `c-abi-cross` | Linux | Compiler test executable and object files. |
 | `c-abi-tests` | Linux and 9front VM | Compiler comparison results. |
 | `ape-cross` | Linux | POSIX C test executable using APE. |

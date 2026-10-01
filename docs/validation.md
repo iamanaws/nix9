@@ -63,6 +63,9 @@ The APE, Lua, and libbzip2 cross builds use rebuilt `libap` and `libbsd`; guest
 builds use the image's libraries. The rebuilt `libap` matches all 291 archive
 member names in the image.
 
+The native Plan 9 C cross builds use rebuilt `libc`, matching the image's 263
+archive member names. The C smoke test, checksum tests, and ABI suite pass with it.
+
 Guest tests check exit status and expected output, use bounded waits, and discard
 snapshot changes. Manual failure checks confirmed that the guest-control code
 rejects nonzero exit status and missing output. It could still run subsequent

@@ -94,7 +94,14 @@
             export HOME="$TMPDIR" GOCACHE="$TMPDIR/go-cache" GOPROXY=off GOTOOLCHAIN=local
             go run ${./tests/format.go} "$out/bin/hello-c"
           '';
-      mkPlan9Program = import ./lib/mk-plan9-program.nix { inherit pkgs cTools sysroot; };
+      mkPlan9Program = import ./lib/mk-plan9-program.nix {
+        inherit
+          pkgs
+          cTools
+          sysroot
+          libc
+          ;
+      };
       helloCross = pkgs.callPackage ./pkgs/hello-c-cross { inherit mkPlan9Program; };
       sha1sum = pkgs.callPackage ./pkgs/sha1sum { inherit mkPlan9Program; };
       sha1sumTests =
@@ -107,7 +114,7 @@
               ${pkgs.qemu}/bin/qemu-system-x86_64 \
               ${vm}/9front.qcow2 ${sha1sum.source} ${sha1sum}/bin/sha1sum "$out"
           '';
-      abiCross = pkgs.callPackage ./tests/c-abi { inherit cTools sysroot; };
+      abiCross = pkgs.callPackage ./tests/c-abi { inherit cTools sysroot libc; };
       apeCross = pkgs.callPackage ./tests/ape {
         inherit
           cTools
@@ -138,6 +145,10 @@
         source = apeSource;
       };
       libap = pkgs.callPackage ./pkgs/libap {
+        inherit cTools sysroot;
+        source = apeSource;
+      };
+      libc = pkgs.callPackage ./pkgs/libc {
         inherit cTools sysroot;
         source = apeSource;
       };
@@ -243,6 +254,7 @@
         inherit libbz2;
         inherit libbsd;
         inherit libap;
+        inherit libc;
         libbz2-tests = libbz2Tests;
         lua-tests = luaTests;
         c-abi-tests = abiTests;

@@ -2,6 +2,7 @@
   runCommand,
   cTools,
   sysroot,
+  libc,
 }:
 runCommand "c-abi-cross"
   {
@@ -15,5 +16,5 @@ runCommand "c-abi-cross"
         -I ${sysroot}/amd64/include -I ${sysroot}/sys/include -I ${./.} \
         -o "$out/$unit.6" ${./.}/"$unit.c"
     done
-    6l -H2 -o "$out/abi-tests" "$out/main.6" "$out/callee.6"
+    6l -H2 -L ${libc}/lib -o "$out/abi-tests" "$out/main.6" "$out/callee.6"
   ''

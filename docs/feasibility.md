@@ -9,7 +9,7 @@ executable to the Nix store. The examples pass their guest tests.
 
 The Go build uses `GOOS=plan9`, `GOARCH=amd64`, and `CGO_ENABLED=0`.
 The C build uses [goken9cc](https://github.com/aryx/goken9cc/tree/e549ce5515ac036ea757d1ebc660686e59ccc35b)
-on Linux, with headers and libc extracted from the pinned 9front image.
+on Linux, with rebuilt libc and headers extracted from the pinned 9front image.
 The guest build uses the image's own `6c` and `6l`.
 
 ## C toolchain status
@@ -49,10 +49,11 @@ remain disabled.
 
 libbzip2 and APE's `libap` and `libbsd` build from source using `9ar`, including
 APE startup assembly and syscall stubs. APE tests, Lua, and the libbzip2 consumer
-use the rebuilt runtimes. Native Plan 9 `libc` still comes from the image.
+use the rebuilt runtimes. Native Plan 9 `libc` also builds from source and is used
+by the C example, checksum utility, and cross-compiled ABI tests.
 
-We have not tested all instructions or libraries, rebuilt libc from source,
-or established support for general POSIX packages, C++, or cgo. The prebuilt image remains a bootstrap
+We have not tested all instructions or libraries, or established support for
+general POSIX packages, C++, or cgo. The prebuilt image remains a bootstrap
 dependency. Pinned inputs do not establish bitwise reproducibility of the VM disk.
 
 ## Next steps
