@@ -54,9 +54,10 @@ In the guest, with networking configured:
 ```sh
 hget -o /tmp/package.tar http://10.0.2.2:8000/result-package
 cd / && tar xf /tmp/package.tar
-path=(/usr/local/pkg/lua-5.4.8/bin $path)
+. /usr/local/pkg/lua-5.4.8/activate
 lua -e 'print(_VERSION)'
 ```
 
-Packages use `/usr/local/pkg/NAME-VERSION`, with `bin` and `share` directories. Lua finds
-modules in its `share/lua/5.4` directory. The shell path change lasts for this session.
+Packages use `/usr/local/pkg/NAME-VERSION`, with `bin` and `share` directories.
+Source each package's `activate` to set command paths for this session, including
+APE subprocesses. Lua finds modules in its `share/lua/5.4` directory.

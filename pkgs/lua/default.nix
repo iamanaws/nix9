@@ -57,5 +57,6 @@ runCommand "lua-${version}-9front"
     export HOME="$TMPDIR" GOCACHE="$TMPDIR/go-cache" GOPROXY=off GOTOOLCHAIN=local
     go run ${../../tests/format.go} lua
     install -Dm755 lua "$out/bin/lua"
+    mkdir -p "$out/share/lua/5.4"
     install -Dm644 ../doc/readme.html "$out/share/doc/lua/readme.html"
   ''

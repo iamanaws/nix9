@@ -35,6 +35,11 @@ and installs `bin/my-program`. Optional arguments are `includeDirs`, `libraries`
 APE packages use the shared [compile and link functions](../lib/ape-build.sh).
 See [package definitions](../pkgs) for examples and dependencies.
 
+Use `lib.mkGuestPackage { name = "my-program-1"; package = myProgram; }` to
+archive one output for [guest installation](vm.md#install-a-package). It does
+not collect runtime dependencies. `package-tests` checks installation and use
+of multiple packages together.
+
 ## Build inside 9front
 
 ```sh

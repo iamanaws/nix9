@@ -195,11 +195,20 @@
           ;
       };
       libbz2 = pkgs.callPackage ./pkgs/libbz2 { inherit cTools sysroot; };
-      luaPackage = pkgs.callPackage ./pkgs/lua/package.nix { inherit lua; };
-      luaPackageTests = pkgs.runCommand "lua-package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
-        ${python}/bin/python ${testSupport [ ./tests/install_lua.py ]}/install_lua.py \
+      mkGuestPackage = import ./lib/mk-guest-package.nix { inherit pkgs; };
+      luaPackage = mkGuestPackage {
+        name = "lua-${lua.version}";
+        package = lua;
+      };
+      sha1sumPackage = mkGuestPackage {
+        name = "sha1sum-${builtins.substring 0 12 sha1sum.revision}";
+        package = sha1sum;
+      };
+      packageTests = pkgs.runCommand "package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${testSupport [ ./tests/install_packages.py ]}/install_packages.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-          ${luaPackage} ${lua.guestPrefix} ${./tests/lua/fixture.lua} "$out"
+          ${luaPackage} ${luaPackage.guestPrefix} ${sha1sumPackage} ${sha1sumPackage.guestPrefix} \
+          ${./tests/lua/fixture.lua} "$out"
       '';
       libbz2Consumer = pkgs.callPackage ./tests/libbz2 {
         inherit
@@ -280,6 +289,7 @@
     in
     {
       lib.mkPlan9Program = mkPlan9Program;
+      lib.mkGuestPackage = mkGuestPackage;
       packages.${system} = {
         default = hello;
         hello-plan9 = hello;
@@ -292,7 +302,8 @@
         ape-tests = apeTests;
         inherit lua;
         lua-package = luaPackage;
-        lua-package-tests = luaPackageTests;
+        sha1sum-package = sha1sumPackage;
+        package-tests = packageTests;
         inherit libbz2;
         inherit libbsd;
         inherit libap;
