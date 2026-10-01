@@ -204,10 +204,19 @@
         name = "sha1sum-${builtins.substring 0 12 sha1sum.revision}";
         package = sha1sum;
       };
+      mkGuestEnvironment = import ./lib/mk-guest-environment.nix { inherit pkgs; };
+      guestEnvironment = mkGuestEnvironment {
+        name = "default";
+        packages = [
+          luaPackage
+          sha1sumPackage
+        ];
+      };
       packageTests = pkgs.runCommand "package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${testSupport [ ./tests/install_packages.py ]}/install_packages.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-          ${luaPackage} ${luaPackage.guestPrefix} ${sha1sumPackage} ${sha1sumPackage.guestPrefix} \
+          ${guestEnvironment} ${guestEnvironment.guestPrefix} \
+          ${luaPackage.guestPrefix} ${sha1sumPackage.guestPrefix} \
           ${./tests/lua/fixture.lua} "$out"
       '';
       libbz2Consumer = pkgs.callPackage ./tests/libbz2 {
@@ -290,6 +299,7 @@
     {
       lib.mkPlan9Program = mkPlan9Program;
       lib.mkGuestPackage = mkGuestPackage;
+      lib.mkGuestEnvironment = mkGuestEnvironment;
       packages.${system} = {
         default = hello;
         hello-plan9 = hello;
@@ -304,6 +314,7 @@
         lua-package = luaPackage;
         sha1sum-package = sha1sumPackage;
         package-tests = packageTests;
+        guest-environment = guestEnvironment;
         inherit libbz2;
         inherit libbsd;
         inherit libap;

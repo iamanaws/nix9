@@ -40,12 +40,12 @@ nix run .#run-vm -- experiment.qcow2
 
 The smoke tests use temporary snapshots and discard their changes.
 
-## Install a package
+## Install packages
 
-On the host, build and serve the Lua archive:
+On the host, build and serve the default environment:
 
 ```sh
-nix build .#lua-package -o result-package
+nix build .#guest-environment -o result-package
 nix develop -c python -m http.server 8000 --bind 127.0.0.1
 ```
 
@@ -54,10 +54,10 @@ In the guest, with networking configured:
 ```sh
 hget -o /tmp/package.tar http://10.0.2.2:8000/result-package
 cd / && tar xf /tmp/package.tar
-. /usr/local/pkg/lua-5.4.8/activate
+. /usr/local/env/default/activate
 lua -e 'print(_VERSION)'
 ```
 
-Packages use `/usr/local/pkg/NAME-VERSION`, with `bin` and `share` directories.
-Source each package's `activate` to set command paths for this session, including
-APE subprocesses. Lua finds modules in its `share/lua/5.4` directory.
+The environment bundles Lua and the checksum tool under `/usr/local/pkg`.
+Its `activate` sets command paths for this session, including APE subprocesses.
+Individual package archives also have an `activate` file.

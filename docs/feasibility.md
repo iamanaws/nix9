@@ -23,7 +23,7 @@ establish bitwise reproducibility of the VM disk.
 ## Next steps
 
 Expand compiler and library coverage as packages need it, and build on the
-[guest installation layout](vm.md#install-a-package) before adding profiles,
+[guest installation layout](vm.md#install-packages) before adding profiles,
 rollback, or a native stdenv.
 The OpenBSD work provides a bootstrap pattern, but its system integration
 cannot be reused directly on Plan 9.

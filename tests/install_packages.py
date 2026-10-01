@@ -1,4 +1,4 @@
-"""Install and activate two packages together in a fresh 9front guest."""
+"""Install and activate a package environment in a fresh 9front guest."""
 
 import functools
 import hashlib
@@ -14,11 +14,10 @@ from guest import boot
 
 
 def main():
-    qemu, disk, archive, prefix, sums_archive, sums_prefix, fixture, output_dir = sys.argv[1:]
+    qemu, disk, archive, environment, prefix, sums_prefix, fixture, output_dir = sys.argv[1:]
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         shutil.copyfile(archive, root / "package.tar")
-        shutil.copyfile(sums_archive, root / "sums.tar")
         (root / "payload").write_bytes(b"abc")
         digest = hashlib.sha1(b"abc").hexdigest()
         shutil.copyfile(fixture, root / "fixture.lua")
@@ -44,12 +43,9 @@ def main():
                     url = f"http://10.0.2.2:{server.server_port}"
                     guest.command(f"hget -o /tmp/package.tar {url}/package.tar")
                     guest.command("cd / && tar xf /tmp/package.tar")
-                    guest.command(f". {prefix}/activate")
+                    guest.command(f". {environment}/activate")
                     guest.command("cd /tmp")
                     guest.command("lua -e 'print(6 * 7)'", expected="42")
-                    guest.command(f"hget -o /tmp/sums.tar {url}/sums.tar")
-                    guest.command("cd / && tar xf /tmp/sums.tar")
-                    guest.command(f". {sums_prefix}/activate")
                     guest.command("whatis sha1sum", expected=f"{sums_prefix}/bin/sha1sum")
                     guest.command("whatis lua", expected=f"{prefix}/bin/lua")
                     guest.command(f"hget -o /tmp/payload {url}/payload")
@@ -59,7 +55,7 @@ def main():
                     guest.command(f"hget -o /tmp/check.lua {url}/check.lua")
                     guest.command("lua /tmp/check.lua",
                                   expected="PASS: installed packages work together")
-                    guest.command("rm /tmp/package.tar /tmp/sums.tar /tmp/check.lua")
+                    guest.command("rm /tmp/package.tar /tmp/check.lua")
                     guest.command("cd / && lua -e 'print(require(\"fixture\").twice(21))'",
                                   expected="42")
             finally:
@@ -67,6 +63,7 @@ def main():
     destination = Path(output_dir)
     destination.mkdir(parents=True)
     (destination / "results.json").write_text(json.dumps({
+        "environment": environment,
         "prefix": prefix,
         "checksum-prefix": sums_prefix,
         "executable": "passed",
