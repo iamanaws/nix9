@@ -3,8 +3,9 @@
 ## What works
 
 Nix on Linux cross-compiles Go and C examples for 9front.
+It also cross-compiles 9front's `sha1sum` using a shared C package helper.
 It can also build the C program inside a 9front VM and return the
-executable to the Nix store. All three executables pass their guest tests.
+executable to the Nix store. The examples pass their guest tests.
 
 The Go build uses `GOOS=plan9`, `GOARCH=amd64`, and `CGO_ENABLED=0`.
 The C build uses [goken9cc](https://github.com/aryx/goken9cc/tree/e549ce5515ac036ea757d1ebc660686e59ccc35b)
@@ -33,17 +34,28 @@ This compiler is specific to the 9front target. Its changed ABI and archive
 format may break upstream's Linux-targeting examples. It is a different compiler
 lineage from the guest's compiler, even though both use the same target libraries.
 
-Tests cover one C program and the libc functions it calls. We have not tested
-all instructions or libraries, rebuilt libc from source, or established support
-for general POSIX packages, C++, or cgo. The prebuilt image remains a bootstrap
+The C tests cover file and process operations, arguments, recursion, pointers,
+callbacks, structure passing and returns, floating point, and varargs.
+Native, cross-compiled and mixed-compiler builds pass the same assertions.
+See [compiler tests](development.md#compiler-tests).
+
+APE cross and guest builds pass memory, file I/O, error, and process tests.
+The [cross build](../tests/ape/default.nix) uses GCC only for preprocessing,
+redirects absolute header paths, and links the image's prebuilt `libap` explicitly.
+
+Lua 5.4.8 passes cross and guest tests with APE's POSIX interfaces, including
+subprocess pipes and exit status. It uses 32-bit integers; dynamic C modules
+remain disabled.
+
+We have not tested all instructions or libraries, rebuilt libc from source,
+or established support for general POSIX packages, C++, or cgo. The prebuilt image remains a bootstrap
 dependency. Pinned inputs do not establish bitwise reproducibility of the VM disk.
 
 ## Next steps
 
-1. Test floating point, structures, varargs, and more libraries.
-2. Build a useful package and add a reusable Nix helper for C builds.
-3. Test APE with selected POSIX C packages.
-4. Define package metadata and a guest installation layout before adding
+1. Expand library and compiler coverage as packages expose new requirements.
+2. Test APE with packages that need more POSIX interfaces.
+3. Define package metadata and a guest installation layout before adding
    profiles, rollback, or a native stdenv.
 
 The OpenBSD work provides a bootstrap pattern, but its packages and system

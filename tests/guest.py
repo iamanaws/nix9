@@ -23,6 +23,7 @@ class Guest:
             r"(?m)^" + re.escape(expected) + r"\r*$", output
         ):
             raise RuntimeError(f"missing guest output {expected!r}: {command}")
+        return output.replace("\r", "")
 
 
 class SerialLog:

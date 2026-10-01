@@ -56,17 +56,24 @@
         '';
       };
       python = pkgs.python3.withPackages (p: [ p.pexpect ]);
-      testSupport = pkgs.lib.fileset.toSource {
-        root = ./tests;
-        fileset = pkgs.lib.fileset.fileFilter (file: file.hasExt "py") ./tests;
-      };
+      testSupport =
+        files:
+        pkgs.lib.fileset.toSource {
+          root = ./tests;
+          fileset = pkgs.lib.fileset.unions ([ ./tests/guest.py ] ++ files);
+        };
       sysroot =
         pkgs.runCommand "9front-11952-amd64-sysroot"
           {
             requiredSystemFeatures = [ "kvm" ];
           }
           ''
-            ${python}/bin/python ${testSupport}/export_sysroot.py \
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/export_sysroot.py
+                ./tests/build_c.py
+              ]
+            }/export_sysroot.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 \
               ${vm}/9front.qcow2 "$TMPDIR/sysroot.tar"
             mkdir -p "$out"
@@ -81,17 +88,62 @@
             nativeBuildInputs = [ pkgs.go ];
           }
           ''
-            ${python}/bin/python ${testSupport}/build_c.py \
+            ${python}/bin/python ${testSupport [ ./tests/build_c.py ]}/build_c.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 \
               ${vm}/9front.qcow2 ${./pkgs/hello-c-native} "$out"
             export HOME="$TMPDIR" GOCACHE="$TMPDIR/go-cache" GOPROXY=off GOTOOLCHAIN=local
             go run ${./tests/format.go} "$out/bin/hello-c"
           '';
-      helloCross = pkgs.callPackage ./pkgs/hello-c-cross { inherit cTools sysroot; };
+      mkPlan9Program = import ./lib/mk-plan9-program.nix { inherit pkgs cTools sysroot; };
+      helloCross = pkgs.callPackage ./pkgs/hello-c-cross { inherit mkPlan9Program; };
+      sha1sum = pkgs.callPackage ./pkgs/sha1sum { inherit mkPlan9Program; };
+      sha1sumTests =
+        pkgs.runCommand "sha1sum-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+          }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/sha1sum.py ]}/sha1sum.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 \
+              ${vm}/9front.qcow2 ${sha1sum.source} ${sha1sum}/bin/sha1sum "$out"
+          '';
+      abiCross = pkgs.callPackage ./tests/c-abi { inherit cTools sysroot; };
+      apeCross = pkgs.callPackage ./tests/ape { inherit cTools sysroot; };
+      lua = pkgs.callPackage ./pkgs/lua { inherit cTools sysroot; };
+      luaTests =
+        pkgs.runCommand "lua-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+          }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/lua.py ]}/lua.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 \
+              ${vm}/9front.qcow2 ${lua.source} ${lua}/bin/lua ${./tests/lua} "$out"
+          '';
+      apeTests =
+        pkgs.runCommand "ape-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+          }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/ape.py ]}/ape.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 \
+              ${vm}/9front.qcow2 ${./tests/ape/main.c} ${apeCross}/bin/ape-tests "$out"
+          '';
+      abiTests =
+        pkgs.runCommand "c-abi-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+          }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/c_abi.py ]}/c_abi.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 \
+              ${vm}/9front.qcow2 ${./tests/c-abi} ${abiCross} "$out"
+          '';
       smoke = pkgs.writeShellApplication {
         name = "smoke-test";
         text = ''
-          exec ${python}/bin/python ${testSupport}/smoke.py \
+          exec ${python}/bin/python ${testSupport [ ./tests/smoke.py ]}/smoke.py \
             ${pkgs.qemu}/bin/qemu-system-x86_64 \
             ${vm}/9front.qcow2 ${hello}/bin/hello \
             'Hello from Nix on plan9/amd64!' "$@"
@@ -100,7 +152,7 @@
       smokeC = pkgs.writeShellApplication {
         name = "smoke-test-c";
         text = ''
-          exec ${python}/bin/python ${testSupport}/smoke.py \
+          exec ${python}/bin/python ${testSupport [ ./tests/smoke.py ]}/smoke.py \
             ${pkgs.qemu}/bin/qemu-system-x86_64 \
             ${vm}/9front.qcow2 ${helloC}/bin/hello-c \
             'Hello from Nix-built C on 9front/amd64!' "$@"
@@ -109,7 +161,7 @@
       smokeCross = pkgs.writeShellApplication {
         name = "smoke-test-c-cross";
         text = ''
-          exec ${python}/bin/python ${testSupport}/smoke.py \
+          exec ${python}/bin/python ${testSupport [ ./tests/smoke.py ]}/smoke.py \
             ${pkgs.qemu}/bin/qemu-system-x86_64 \
             ${vm}/9front.qcow2 ${helloCross}/bin/hello-c \
             'Hello from Nix-built C on 9front/amd64!' "$@"
@@ -117,11 +169,20 @@
       };
     in
     {
+      lib.mkPlan9Program = mkPlan9Program;
       packages.${system} = {
         default = hello;
         hello-plan9 = hello;
         hello-c-native = helloC;
         hello-c-cross = helloCross;
+        inherit sha1sum;
+        sha1sum-tests = sha1sumTests;
+        c-abi-cross = abiCross;
+        ape-cross = apeCross;
+        ape-tests = apeTests;
+        inherit lua;
+        lua-tests = luaTests;
+        c-abi-tests = abiTests;
         goken9cc = cTools;
         sysroot = sysroot;
         vm-image = vm;

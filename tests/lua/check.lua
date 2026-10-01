@@ -1,0 +1,95 @@
+assert(_VERSION == "Lua 5.4" and arg[1] == "23")
+-- The C89 configuration uses Plan 9's 32-bit long and 64-bit double.
+assert(math.maxinteger == 2147483647 and math.mininteger == -2147483648)
+local function factorial(n)
+  if n == 0 then return 1 end
+  return n * factorial(n - 1)
+end
+assert(factorial(10) == 3628800)
+assert(math.sqrt(81) == 9 and math.abs(math.log(8, 2) - 3) < 1e-12)
+assert(string.format("%d:%.2f", 123, 1.25) == "123:1.25")
+print("PASS: arguments and arithmetic")
+
+local values = {9, 1, 4, 2}
+table.sort(values)
+assert(table.concat(values, ",") == "1,2,4,9")
+assert(("abc123"):match("(%d+)") == "123")
+assert(utf8.len("a\195\169\226\130\172") == 3)
+assert(utf8.codepoint("\226\130\172") == 0x20ac)
+print("PASS: tables strings and UTF-8")
+
+local bytes = {}
+for i = 0, 255 do bytes[#bytes + 1] = string.char(i) end
+local payload = string.rep(table.concat(bytes), 257) .. "tail\0"
+local file = assert(io.open("data.bin", "w+b"))
+assert(file:write(payload))
+assert(file:flush())
+assert(file:seek("set", 0) == 0)
+assert(file:read("a") == payload)
+assert(file:read(1) == nil)
+assert(file:close())
+assert(os.rename("data.bin", "renamed.bin"))
+assert(os.remove("renamed.bin"))
+local missing, message, code = io.open("renamed.bin", "rb")
+assert(missing == nil and type(message) == "string" and type(code) == "number")
+print("PASS: binary file IO and errors")
+
+package.path = "/tmp/lua/?.lua"
+local module = require("fixture")
+assert(module.twice(21) == 42 and require("fixture") == module)
+print("PASS: Lua modules")
+
+local thread = coroutine.create(function(value)
+  local resumed = coroutine.yield(value + 1)
+  return resumed * 2
+end)
+local ok, value = coroutine.resume(thread, 10)
+assert(ok and value == 11)
+ok, value = coroutine.resume(thread, 21)
+assert(ok and value == 42 and coroutine.status(thread) == "dead")
+print("PASS: coroutines")
+
+ok, message = pcall(function() error("expected failure") end)
+assert(not ok and message:find("expected failure", 1, true))
+assert(load("return (") == nil)
+local object = setmetatable({}, {__close = function() value = 99 end})
+do local closing <close> = object end
+assert(value == 99)
+print("PASS: protected errors and closing")
+
+local compiled = assert(load("return function(x) return x * 3 end"))()
+local restored = assert(load(string.dump(compiled)))
+assert(restored(14) == 42)
+collectgarbage("collect")
+print("PASS: bytecode and garbage collection")
+
+local pipe = assert(io.popen("echo pipe-output", "r"))
+assert(pipe:read("a") == "pipe-output\n")
+local success, kind, status = pipe:close()
+assert(success == true and kind == "exit" and status == 0)
+pipe = assert(io.popen("cat > pipe.bin", "w"))
+assert(pipe:write(payload))
+success, kind, status = pipe:close()
+assert(success == true and kind == "exit" and status == 0)
+file = assert(io.open("pipe.bin", "rb"))
+assert(file:read("a") == payload)
+assert(file:close())
+assert(os.remove("pipe.bin"))
+pipe = assert(io.popen("exit 7", "r"))
+assert(pipe:read("a") == "")
+success, kind, status = pipe:close()
+assert(success == nil and kind == "exit" and status == 7)
+success, kind, status = os.execute("exit 23")
+assert(success == nil and kind == "exit" and status == 23)
+success, kind, status = os.execute("exit 0")
+assert(success == true and kind == "exit" and status == 0)
+print("PASS: subprocess pipes and exit status")
+
+local temporary = os.tmpname()
+file = assert(io.open(temporary, "rb"))
+assert(file:close())
+assert(os.remove(temporary))
+local utc = os.date("!*t", 0)
+assert(utc.year == 1970 and utc.month == 1 and utc.day == 1)
+assert(utc.hour == 0 and utc.min == 0 and utc.sec == 0)
+print("PASS: temporary files and UTC time")
