@@ -1,0 +1,150 @@
+--- a/include/objexec/6.out.h
++++ b/include/objexec/6.out.h
+@@ -698,6 +698,20 @@
+ 	ASWAPGS,
+ 
+ 	AMODE,
++	AMOVQL,
++	AHADDPD,
++	AHADDPS,
++	AHSUBPD,
++	AHSUBPS,
++	AADDSUBPD,
++	AADDSUBPS,
++	AROUNDSD,
++	AROUNDSS,
++	AROUNDPD,
++	AROUNDPS,
++	ADPPD,
++	ADPPS,
++	AJMPF,
+ 
+ 	ALAST
+ };
+@@ -792,31 +806,8 @@
+ 	T_SCONST	= 1<<5,
+ 	T_64	= 1<<6,
+ 
+-	/*
+-	 * claude: was D_BP. This isn't a vanilla-plan9 bug so much as a
+-	 * calling-convention mismatch with this project: on native Plan9,
+-	 * REGARG lets the first argument of an eligible call pass in a
+-	 * register instead of on the stack, with caller and callee
+-	 * cooperating -- 5c genuinely uses this for arm (REGARG=D_R0=0,
+-	 * see compilers/5c/txt.c), where both compiled and hand-written
+-	 * amd64/arm callees were written expecting it. Every assembly
+-	 * stub we've written for this project instead assumes the plain
+-	 * all-on-the-stack convention (matching 8c, REGARG=-1, and every
+-	 * hand-assembled .s test here) -- none of them know to look in BP
+-	 * for the first argument. So 6c's caller side faithfully computed
+-	 * the value into BP (garg1() in compilers/6c/txt.c), but nothing
+-	 * ever read it from there or spilled it to the stack, so e.g.
+-	 * write(fd, buf, len) silently used whatever garbage was on the
+-	 * stack as fd. -1 disables the optimization, so every argument
+-	 * passes on the stack uniformly, matching 8c and everything else
+-	 * in this project -- see the same REGARG>=0 guards 8c/5c already
+-	 * use throughout compilers/6c/{cgen,txt,peep}.c. Even the Go-era
+-	 * 6cg (src/cmd/6c) agrees: it also sets REGARG=-1 (src/cmd/6l/
+-	 * 6.out.h) and already uses the >=0 guard everywhere (plus a
+-	 * "regaalloc1 and REGARG<0" sanity diag() in its txt.c) -- so
+-	 * every amd64 6c that ever actually shipped made this same call.
+-	 */
+-	REGARG		= -1,
++	/* Match the native Plan 9 amd64 first-argument register. */
++	REGARG		= D_BP,
+ 	REGRET		= D_AX,
+ 	FREGRET		= D_X0,
+ 	REGSP		= D_SP,
+--- a/linkers/6l/optab.c
++++ b/linkers/6l/optab.c
+@@ -293,6 +293,12 @@
+ {
+ 	Ynone,	Yml,	Zo_m64,	2,
+ 	Ynone,	Ybr,	Zjmp,	1,
++	0
++};
++
++uchar	yjmpf[] =
++{
++	Ynone, Ybr, Zjmpf, 1,
+ 	0
+ };
+ 
+@@ -707,6 +713,7 @@
+ 	{ AJLS,		yjcond,	Px, 0x76,0x86 },
+ 	{ AJLT,		yjcond,	Px, 0x7c,0x8c },
+ 	{ AJMI,		yjcond,	Px, 0x78,0x88 },
++	{ AJMPF, yjmpf, Px, 0xe9 },
+ 	{ AJMP,		yjmp,	Px, 0xff,(04),0xeb,0xe9 },
+ 	{ AJNE,		yjcond,	Px, 0x75,0x85 },
+ 	{ AJOC,		yjcond,	Px, 0x71,0x81,(00) },
+@@ -759,6 +766,7 @@
+ 	{ AMOVHLPS,	yxr,	Pm, 0x12 },
+ 	{ AMOVHPD,	yxmov,	Pe, 0x16,0x17 },
+ 	{ AMOVHPS,	yxmov,	Pm, 0x16,0x17 },
++	{ AMOVQL, yrl_ml, Px, 0x89 },
+ 	{ AMOVL,	ymovl,	Px, 0x89,0x8b,0x31,0xb8,0xc7,(00),0x6e,0x7e,Pe,0x6e,Pe,0x7e },
+ 	{ AMOVLHPS,	yxr,	Pm, 0x16 },
+ 	{ AMOVLPD,	yxmov,	Pe, 0x12,0x13 },
+--- a/linkers/6l/l.h
++++ b/linkers/6l/l.h
+@@ -189,6 +189,7 @@
+ 	Z_rp,
+ 	Zbr,
+ 	Zcall,
++	Zjmpf,
+ 	Zib_,
+ 	Zib_rp,
+ 	Zibo_m,
+--- a/linkers/6l/span.c
++++ b/linkers/6l/span.c
+@@ -1430,6 +1430,7 @@
+ 		}
+ 		break;
+ 
++	case Zjmpf:
+ 	case Zcall:
+ 		q = p->pcond;
+ 		if(q) {
+--- a/linkers/6l/pass.c
++++ b/linkers/6l/pass.c
+@@ -142,7 +142,7 @@
+ 		return;
+ 	if(p->as == ATEXT)
+ 		curtext = p;
+-	if(p->as == AJMP)
++	if(p->as == AJMP || p->as == AJMPF)
+ 	if((q = p->pcond) != P) {
+ 		p->mark = 1;
+ 		p = q;
+@@ -319,7 +319,7 @@
+ 	for(p = firstp; p != P; p = p->link) {
+ 		if(p->as == ATEXT)
+ 			curtext = p;
+-		if(p->as == ACALL || p->as == ARET) {
++		if(p->as == ACALL || p->as == ARET || p->as == AJMPF) {
+ 			s = p->to.sym;
+ 			if(s) {
+ 				if(debug['c'])
+--- a/compilers/6c/enam.c
++++ b/compilers/6c/enam.c
+@@ -665,5 +665,19 @@
+ 	"RETFQ",
+ 	"SWAPGS",
+ 	"MODE",
++	"MOVQL",
++	"HADDPD",
++	"HADDPS",
++	"HSUBPD",
++	"HSUBPS",
++	"ADDSUBPD",
++	"ADDSUBPS",
++	"ROUNDSD",
++	"ROUNDSS",
++	"ROUNDPD",
++	"ROUNDPS",
++	"DPPD",
++	"DPPS",
++	"JMPF",
+ 	"LAST",
+ };

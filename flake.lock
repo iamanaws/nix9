@@ -1,0 +1,62 @@
+{
+  "nodes": {
+    "goken9cc": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790180184,
+        "narHash": "sha256-rZzst7+AYPejmnHPOQ5H93L6xaNLDs/qQAuhbc4Zq1A=",
+        "owner": "aryx",
+        "repo": "goken9cc",
+        "rev": "e549ce5515ac036ea757d1ebc660686e59ccc35b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aryx",
+        "repo": "goken9cc",
+        "rev": "e549ce5515ac036ea757d1ebc660686e59ccc35b",
+        "type": "github"
+      }
+    },
+    "ninefront": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1786424549,
+        "narHash": "sha256-A2heoXEgaVr20oumxQ+sb0/g98CSIqKkaXC3jYzQBg8=",
+        "owner": "majiru",
+        "repo": "9front-in-a-box",
+        "rev": "9f47fc9309cc2acea8ef9051ffa1c485d77df8f7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "majiru",
+        "repo": "9front-in-a-box",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1790750587,
+        "narHash": "sha256-VfjaoJ1Uyb7JZTrBgE5Jf2nhjtQPmD9KOd19HJwmZwM=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "78e9c786dc08cd4f3420c2395cd977206a9b1da2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "goken9cc": "goken9cc",
+        "ninefront": "ninefront",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

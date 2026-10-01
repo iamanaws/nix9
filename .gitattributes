@@ -1,0 +1,2 @@
+# Unified diff context includes leading spaces before upstream tabs/blank lines.
+*.patch -whitespace

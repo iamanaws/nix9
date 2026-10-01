@@ -1,0 +1,12 @@
+diff --git a/include/objexec/ar.h b/include/objexec/ar.h
+--- a/include/objexec/ar.h
++++ b/include/objexec/ar.h
+@@ -10,7 +10,7 @@
+ 
+ // size ar name entry
+ //old: used to be 16, extended in go-era as go symbols can be long
+-#define SARNAME	64
++#define SARNAME	16
+ 
+ struct	ar_hdr
+ {
