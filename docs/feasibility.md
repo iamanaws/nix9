@@ -47,6 +47,9 @@ Lua 5.4.8 passes cross and guest tests with APE's POSIX interfaces, including
 subprocess pipes and exit status. It uses 32-bit integers; dynamic C modules
 remain disabled.
 
+libbzip2 is built from source as a static archive using `9ar`. Native and
+cross-built consumers pass with both native and cross-built archives.
+
 We have not tested all instructions or libraries, rebuilt libc from source,
 or established support for general POSIX packages, C++, or cgo. The prebuilt image remains a bootstrap
 dependency. Pinned inputs do not establish bitwise reproducibility of the VM disk.

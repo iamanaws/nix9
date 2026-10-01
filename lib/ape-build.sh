@@ -8,8 +8,8 @@ substituteInPlace "$apeIncludeDir"/{stddef,stdint}.h \
 apeCompile() {
   local source="$1" object="$2" standard="${3:-c99}"
   gcc -E -P -undef -nostdinc -D_Noreturn= \
-    -std="$standard" -I "$apeIncludeDir" -I "$ccroot/sys/include/ape" \
-    "$source" -o "$object.i"
+    -std="$standard" "${@:4}" \
+    -I "$apeIncludeDir" -I "$ccroot/sys/include/ape" "$source" -o "$object.i"
   6c -o "$object" "$object.i"
 }
 

@@ -84,11 +84,13 @@ Run `nix build .#TARGET` from the checkout.
 | `sha1sum-tests` | Linux and 9front VM | Checksum and error-handling results. |
 | `lua` | Linux | Lua interpreter built with APE. |
 | `lua-tests` | Linux and 9front VM | Lua comparison results. |
+| `libbz2` | Linux | Static bzip2 library and header for APE. |
+| `libbz2-tests` | Linux and 9front VM | Archive and consumer comparison results. |
 | `c-abi-cross` | Linux | Compiler test executable and object files. |
 | `c-abi-tests` | Linux and 9front VM | Compiler comparison results. |
 | `ape-cross` | Linux | POSIX C test executable using APE. |
 | `ape-tests` | Linux and 9front VM | APE comparison results. |
-| `goken9cc` | Linux | Patched C compiler, assembler and linker. |
+| `goken9cc` | Linux | C compiler, assembler, linker and `9ar` archiver. |
 | `sysroot` | 9front VM | Extracted headers and libraries. |
 | `vm-image` | Linux with KVM | Prepared VM image. |
 

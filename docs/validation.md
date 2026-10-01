@@ -19,6 +19,7 @@ The compiler also uses the patches in `pkgs/goken9cc`.
 | `nix build .#sha1sum-tests -L` | Native and cross builds passed 46 checksum and error cases, with hashes checked against Python. |
 | `nix build .#ape-tests -L` | Cross and guest `pcc` builds each passed four POSIX groups: memory, buffered I/O, descriptors and errno, and pipe/fork/exec/wait. |
 | `nix build .#lua-tests -L` | Cross and guest builds each passed 11 Lua groups, including subprocess I/O and exit status. |
+| `nix build .#libbz2-tests -L` | Seven groups passed in four native/cross archive and consumer combinations, with compressed bytes checked against Python. |
 | `nix run .#smoke-test` | Ran the Go binary in a fresh guest. |
 | `nix run .#smoke-test-c` | Ran the retrieved guest-built C binary in a fresh guest. |
 | `nix run .#smoke-test-c-cross` | Ran the cross-compiled C binary in a fresh guest. |
@@ -74,5 +75,5 @@ VM setup created a writable disk and refused to overwrite it. The launcher
 rejected a missing disk. Logs normalize serial CR/CR/LF line endings so Nix
 displays the guest output correctly.
 
-These results cover the examples, APE API tests, checksum utility, and Lua. See
+These results cover the examples, APE API tests, sha1sum, Lua, and libbzip2. See
 [toolchain limits](feasibility.md#c-toolchain-status) before using other packages.

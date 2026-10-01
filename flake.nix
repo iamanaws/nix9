@@ -110,6 +110,18 @@
       abiCross = pkgs.callPackage ./tests/c-abi { inherit cTools sysroot; };
       apeCross = pkgs.callPackage ./tests/ape { inherit cTools sysroot; };
       lua = pkgs.callPackage ./pkgs/lua { inherit cTools sysroot; };
+      libbz2 = pkgs.callPackage ./pkgs/libbz2 { inherit cTools sysroot; };
+      libbz2Consumer = pkgs.callPackage ./tests/libbz2 { inherit cTools sysroot libbz2; };
+      libbz2Tests =
+        pkgs.runCommand "libbz2-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+          }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/libbz2.py ]}/libbz2.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${libbz2.source} ${libbz2} ${libbz2Consumer} ${./tests/libbz2/main.c} "$out"
+          '';
       luaTests =
         pkgs.runCommand "lua-tests"
           {
@@ -181,6 +193,8 @@
         ape-cross = apeCross;
         ape-tests = apeTests;
         inherit lua;
+        inherit libbz2;
+        libbz2-tests = libbz2Tests;
         lua-tests = luaTests;
         c-abi-tests = abiTests;
         goken9cc = cTools;

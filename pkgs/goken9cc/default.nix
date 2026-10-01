@@ -25,7 +25,7 @@ stdenv.mkDerivation {
     ./scripts/promote-mk.sh
     . ./env.sh
     export objtype cputype ostype
-    for part in BOOT/lib9 lib_core/libbio compilers/cck assemblers/6a linkers/6l compilers/6c; do
+    for part in BOOT/lib9 lib_core/libbio lib_toolchain/libmach compilers/cck assemblers/6a linkers/6l compilers/6c linkers/ar; do
       (cd "$part"; mk install)
     done
     runHook postBuild
@@ -34,10 +34,11 @@ stdenv.mkDerivation {
     runHook preInstall
     mkdir -p "$out/bin"
     cp ROOT/arch/boot-gcc/bin/6{a,c,l} "$out/bin/"
+    cp ROOT/arch/boot-gcc/bin/iar "$out/bin/9ar"
     runHook postInstall
   '';
   meta = {
-    description = "Experimental Linux-hosted Plan 9 amd64 compiler, assembler, and linker";
+    description = "Experimental Linux-hosted Plan 9 amd64 compiler, assembler, linker, and archiver";
     homepage = "https://github.com/aryx/goken9cc";
     platforms = [ "x86_64-linux" ];
   };
