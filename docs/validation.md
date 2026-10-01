@@ -17,6 +17,7 @@ The compiler also uses the patches in `pkgs/goken9cc`.
 | `nix build .#hello-c-native` | Compiled and ran C in the guest, retrieved the binary, and checked its format. |
 | `nix build .#hello-c-cross` | Compiled and linked C on Linux and checked its format. |
 | `nix build .#sha1sum-tests -L` | Native and cross builds passed 46 checksum and error cases, with hashes checked against Python. |
+| `nix build .#libsec-tests -L` | Native and cross builds passed upstream SHA-2, HMAC, ChaCha, and AES-GCM vectors. |
 | `nix build .#ape-tests -L` | Cross and guest `pcc` builds each passed four POSIX groups: memory, buffered I/O, descriptors and errno, and pipe/fork/exec/wait. |
 | `nix build .#lua-tests -L` | Cross and guest builds each passed 11 Lua groups, including subprocess I/O and exit status. |
 | `nix build .#libbz2-tests -L` | Seven groups passed in four native/cross archive and consumer combinations, with compressed bytes checked against Python. |
@@ -65,6 +66,8 @@ member names in the image.
 
 The native Plan 9 C cross builds use rebuilt `libc`, matching the image's 263
 archive member names. The C smoke test, checksum tests, and ABI suite pass with it.
+The checksum and libsec cross tests also use rebuilt `libsec`; other libraries,
+including `libmp` used by the AES-GCM test, still come from the image.
 
 Guest tests check exit status and expected output, use bounded waits, and discard
 snapshot changes. Manual failure checks confirmed that the guest-control code

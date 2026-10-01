@@ -103,7 +103,7 @@
           ;
       };
       helloCross = pkgs.callPackage ./pkgs/hello-c-cross { inherit mkPlan9Program; };
-      sha1sum = pkgs.callPackage ./pkgs/sha1sum { inherit mkPlan9Program; };
+      sha1sum = pkgs.callPackage ./pkgs/sha1sum { inherit mkPlan9Program libsec; };
       sha1sumTests =
         pkgs.runCommand "sha1sum-tests"
           {
@@ -152,6 +152,39 @@
         inherit cTools sysroot;
         source = apeSource;
       };
+      secSource = pkgs.runCommand "9front-libsec-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        export PYTHONPATH=${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/build_c.py
+          ]
+        }
+        ${python}/bin/python - "$TMPDIR/source.tar" <<'PY'
+        import sys
+        from export_tree import export_tree
+        export_tree("${pkgs.qemu}/bin/qemu-system-x86_64", "${vm}/9front.qcow2", sys.argv[1],
+                    ["sys/src/libsec", "sys/src/libmp/port"],
+                    prepare=["cd /sys/src/libsec/port && mk secp256r1.c secp384r1.c secp256k1.c jacobian.c"])
+        PY
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
+      libsec = pkgs.callPackage ./pkgs/libsec {
+        inherit cTools sysroot;
+        source = secSource;
+      };
+      secCross = pkgs.callPackage ./tests/libsec {
+        inherit
+          cTools
+          sysroot
+          libc
+          libsec
+          ;
+      };
+      secTests = pkgs.runCommand "libsec-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${testSupport [ ./tests/libsec.py ]}/libsec.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${secCross} "$out"
+      '';
       lua = pkgs.callPackage ./pkgs/lua {
         inherit
           cTools
@@ -255,6 +288,8 @@
         inherit libbsd;
         inherit libap;
         inherit libc;
+        inherit libsec;
+        libsec-tests = secTests;
         libbz2-tests = libbz2Tests;
         lua-tests = luaTests;
         c-abi-tests = abiTests;
@@ -296,9 +331,9 @@
           pkgs.go
           pkgs.qemu
           python
-          pkgs.nixfmt
+          pkgs.nixfmt-tree
         ];
       };
-      formatter.${system} = pkgs.nixfmt;
+      formatter.${system} = pkgs.nixfmt-tree;
     };
 }

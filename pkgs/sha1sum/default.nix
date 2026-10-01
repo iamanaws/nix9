@@ -1,4 +1,8 @@
-{ fetchurl, mkPlan9Program }:
+{
+  fetchurl,
+  mkPlan9Program,
+  libsec,
+}:
 let
   revision = "228167f32bf5b14fcb41e52eab527a1c8531638a";
   source = fetchurl {
@@ -9,6 +13,7 @@ in
 (mkPlan9Program {
   name = "sha1sum";
   sources = [ source ];
+  libraries = [ libsec ];
   meta = {
     description = "9front SHA-1 and SHA-2 checksum utility";
     homepage = "https://9front.org";

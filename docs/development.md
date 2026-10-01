@@ -41,7 +41,8 @@ mkPlan9Program {
 
 It compiles each source on Linux, links with rebuilt libc and any other required libraries,
 checks the executable format, and installs `bin/my-program`. Use `includeDirs`
-for extra header directories and `meta` for package metadata. Both `hello-c-cross`
+for extra header directories, `libraries` for rebuilt library packages, and `meta`
+for package metadata. Both `hello-c-cross`
 and `sha1sum` use this helper.
 
 APE builds share [compile and link functions](../lib/ape-build.sh) and use rebuilt
@@ -90,6 +91,8 @@ Run `nix build .#TARGET` from the checkout.
 | `libbsd` | Linux | APE BSD compatibility library rebuilt from the image's source. |
 | `libap` | Linux | APE core runtime rebuilt from C, assembly, and syscall definitions. |
 | `libc` | Linux | Native Plan 9 C runtime rebuilt from the image's source. |
+| `libsec` | Linux | 9front cryptography library; source preparation uses the guest's `mpc`. |
+| `libsec-tests` | Linux and 9front VM | Upstream cryptographic test vectors. |
 | `c-abi-cross` | Linux | Compiler test executable and object files. |
 | `c-abi-tests` | Linux and 9front VM | Compiler comparison results. |
 | `ape-cross` | Linux | POSIX C test executable using APE. |
