@@ -43,10 +43,16 @@ explicitly. `package-tests` checks installation and use of the default environme
 
 ## Build inside 9front
 
+Install `guest-development` using the [VM instructions](vm.md#install-packages).
+In the guest, activate it and compile native Plan 9 C:
+
 ```sh
-nix build .#hello-c-native
-nix run .#smoke-test-c
+. /usr/local/env/development/activate
+6c -o main.6 main.c
+6l -o main main.6
+./main
 ```
 
-Nix boots a temporary guest, compiles and tests C with the guest toolchain,
-and returns the executable to the store. The smoke test runs it in a fresh VM.
+The wrappers use the guest's compiler and linker with installed headers and
+rebuilt libc. `guest-development-tests` verifies builds with the image's headers
+and libraries hidden. Nix still runs on Linux.

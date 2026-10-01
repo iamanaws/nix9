@@ -12,6 +12,8 @@ The current suites passed on 2026-10-01 on Linux with KVM, using 9front release
 - Library tests use known vectors and independent Python results for checksums,
   compression, and arithmetic. Generator checks compare output with the guest.
 - Build checks cover executable format and archive handling.
+  Guest development tests compile against installed headers and rebuilt libc,
+  with the image's headers and libraries hidden.
 
 Tests check exit status and expected results, use bounded waits, and discard VM
 snapshot changes. File transfers use host loopback without forwarded guest

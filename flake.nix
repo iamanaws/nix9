@@ -212,6 +212,28 @@
           sha1sumPackage
         ];
       };
+      development = pkgs.callPackage ./pkgs/guest-development { inherit sysroot libc; };
+      developmentPackage = mkGuestPackage {
+        name = "c-development-11952";
+        package = development;
+      };
+      guestDevelopment = mkGuestEnvironment {
+        name = "development";
+        packages = [ developmentPackage ];
+      };
+      developmentTests =
+        pkgs.runCommand "guest-development-tests" { requiredSystemFeatures = [ "kvm" ]; }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/guest_development.py
+                ./tests/c_abi.py
+              ]
+            }/guest_development.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${guestDevelopment} ${guestDevelopment.guestPrefix} ${development.guestPrefix} \
+              ${./pkgs/hello-c-native/main.c} ${./tests/c-abi} "$out"
+          '';
       packageTests = pkgs.runCommand "package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${testSupport [ ./tests/install_packages.py ]}/install_packages.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
@@ -315,6 +337,8 @@
         sha1sum-package = sha1sumPackage;
         package-tests = packageTests;
         guest-environment = guestEnvironment;
+        guest-development = guestDevelopment;
+        guest-development-tests = developmentTests;
         inherit libbz2;
         inherit libbsd;
         inherit libap;
