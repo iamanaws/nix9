@@ -53,6 +53,7 @@ In the guest, activate it and compile native Plan 9 C:
 ./main
 ```
 
-The wrappers use the guest's compiler and linker with installed headers and
-rebuilt libc. `guest-development-tests` verifies builds with the image's headers
-and libraries hidden. Nix still runs on Linux.
+Use `pcc -o program source.c` for POSIX C through APE. The wrappers use the guest's
+tools with installed headers and rebuilt runtimes. `pcc` sets up a private
+namespace for APE's standard paths. `guest-development-tests` verifies builds
+with the image's headers and libraries hidden. Nix still runs on Linux.

@@ -212,7 +212,14 @@
           sha1sumPackage
         ];
       };
-      development = pkgs.callPackage ./pkgs/guest-development { inherit sysroot libc; };
+      development = pkgs.callPackage ./pkgs/guest-development {
+        inherit
+          sysroot
+          libc
+          libap
+          libbsd
+          ;
+      };
       developmentPackage = mkGuestPackage {
         name = "c-development-11952";
         package = development;
@@ -228,11 +235,13 @@
               testSupport [
                 ./tests/guest_development.py
                 ./tests/c_abi.py
+                ./tests/ape.py
               ]
             }/guest_development.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${guestDevelopment} ${guestDevelopment.guestPrefix} ${development.guestPrefix} \
-              ${./pkgs/hello-c-native/main.c} ${./tests/c-abi} "$out"
+              ${./pkgs/hello-c-native/main.c} ${./tests/c-abi} ${./tests/ape/main.c} \
+              ${./tests/guest-development/bsd.c} "$out"
           '';
       packageTests = pkgs.runCommand "package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${testSupport [ ./tests/install_packages.py ]}/install_packages.py \
