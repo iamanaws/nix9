@@ -17,10 +17,10 @@ The guest build uses the image's own `6c` and `6l`.
 The Linux compiler needs these changes to work with the image's libraries:
 
 - `plan9-archive.patch` changes archive member names from the old Go format's
-  64-byte field to 9front's 16-byte field.
+  64-byte field to 9front's 16-byte field and fixes handling of full-length names.
 - `9front-amd64.patch` restores `REGARG = D_BP`, the first-argument register
-  used by 9front's amd64 calling convention. It adds `JMPF` and `MOVQL` linker
-  support and matches 9front's opcode numbers and diagnostic names.
+  used by 9front's amd64 calling convention. It adds `JMPF` assembler and linker
+  support, `MOVQL` linker support, and matches 9front's opcode numbers and names.
 - The build defines `_Noreturn` as empty because the compiler cannot parse it.
   This drops the annotation's compiler checks and optimization hints.
 
@@ -41,14 +41,15 @@ See [compiler tests](development.md#compiler-tests).
 
 APE cross and guest builds pass memory, file I/O, error, and process tests.
 The [cross build](../tests/ape/default.nix) uses GCC only for preprocessing,
-redirects absolute header paths, and links the image's prebuilt `libap` explicitly.
+redirects absolute header paths, and links `libap` explicitly.
 
 Lua 5.4.8 passes cross and guest tests with APE's POSIX interfaces, including
 subprocess pipes and exit status. It uses 32-bit integers; dynamic C modules
 remain disabled.
 
-libbzip2 is built from source as a static archive using `9ar`. Native and
-cross-built consumers pass with both native and cross-built archives.
+libbzip2 and APE's `libap` and `libbsd` build from source using `9ar`, including
+APE startup assembly and syscall stubs. APE tests, Lua, and the libbzip2 consumer
+use the rebuilt runtimes. Native Plan 9 `libc` still comes from the image.
 
 We have not tested all instructions or libraries, rebuilt libc from source,
 or established support for general POSIX packages, C++, or cgo. The prebuilt image remains a bootstrap

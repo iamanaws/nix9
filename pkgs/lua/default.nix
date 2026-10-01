@@ -6,6 +6,8 @@
   go,
   cTools,
   sysroot,
+  libbsd,
+  libap,
 }:
 let
   version = "5.4.8";
@@ -30,6 +32,8 @@ runCommand "lua-${version}-9front"
       cTools
     ];
     ccroot = sysroot;
+    apeBsdLibrary = "${libbsd}/lib/libbsd.a";
+    apeCoreLibrary = "${libap}/lib/libap.a";
     passthru = { inherit source version; };
     meta = {
       description = "Lua interpreter for 9front using APE";

@@ -10,3 +10,22 @@ diff --git a/include/objexec/ar.h b/include/objexec/ar.h
  
  struct	ar_hdr
  {
+diff --git a/linkers/ar/ar.c b/linkers/ar/ar.c
+--- a/linkers/ar/ar.c
++++ b/linkers/ar/ar.c
+@@ -472,5 +472,6 @@ tcmd(char *arname, int count, char **files)
+ 			if(vflag)
+ 				longt(bp);
+ 			trim(file, name, ARNAMESIZE);
++			name[ARNAMESIZE] = 0;
+ 			Bprint(&bout, "%s\n", name);
+ 		}
+@@ -731,7 +732,7 @@ armove(Biobuf *b, Arfile *ap, Armember *bp)
+ 	trim(file, (char*)bp->hdr.name, sizeof(bp->hdr.name));
+ 	for (cp = memchr(bp->hdr.name, 0, sizeof(bp->hdr.name));	/* blank pad on right */
+-		cp < bp->hdr.name+sizeof(bp->hdr.name); cp++)
++		cp != nil && cp < bp->hdr.name+sizeof(bp->hdr.name); cp++)
+ 			*cp = ' ';
+ 	sprint((char*)bp->hdr.date, "%-12ld", Dflag ? 0 : (long)d->mtime);
+ 	sprint((char*)bp->hdr.uid, "%-6d", 0);
+ 	sprint((char*)bp->hdr.gid, "%-6d", 0);

@@ -14,10 +14,11 @@ apeCompile() {
 }
 
 apeLink() {
+  local core="${apeCoreLibrary:-$ccroot/amd64/lib/ape/libap.a}"
   # Ignore absolute guest library pragmas. The two APE libraries refer to
   # one another, so resolve libap again after libbsd.
   6l -H2 -l -E _main -o "$@" \
-    "$ccroot/amd64/lib/ape/libap.a" \
-    "$ccroot/amd64/lib/ape/libbsd.a" \
-    "$ccroot/amd64/lib/ape/libap.a"
+    "$core" \
+    "${apeBsdLibrary:-$ccroot/amd64/lib/ape/libbsd.a}" \
+    "$core"
 }

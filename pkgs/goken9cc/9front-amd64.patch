@@ -1,3 +1,13 @@
+--- a/assemblers/6a/lex.c
++++ b/assemblers/6a/lex.c
+@@ -438,6 +438,7 @@
+ 
+ 	"JCXZ",		LTYPER,	AJCXZ,
+ 	"JMP",		LTYPEC,	AJMP,
++	"JMPF",		LTYPEC,	AJMPF,
+ 	"LAHF",		LTYPE0,	ALAHF,
+ 	"LARL",		LTYPE3,	ALARL,
+ 	"LARW",		LTYPE3,	ALARW,
 --- a/include/objexec/6.out.h
 +++ b/include/objexec/6.out.h
 @@ -698,6 +698,20 @@

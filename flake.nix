@@ -70,12 +70,12 @@
           ''
             ${python}/bin/python ${
               testSupport [
-                ./tests/export_sysroot.py
+                ./tests/export_tree.py
                 ./tests/build_c.py
               ]
-            }/export_sysroot.py \
+            }/export_tree.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 \
-              ${vm}/9front.qcow2 "$TMPDIR/sysroot.tar"
+              ${vm}/9front.qcow2 "$TMPDIR/sysroot.tar" sys/include amd64/include amd64/lib
             mkdir -p "$out"
             tar -xf "$TMPDIR/sysroot.tar" -C "$out"
             test -s "$out/amd64/lib/libc.a"
@@ -108,10 +108,57 @@
               ${vm}/9front.qcow2 ${sha1sum.source} ${sha1sum}/bin/sha1sum "$out"
           '';
       abiCross = pkgs.callPackage ./tests/c-abi { inherit cTools sysroot; };
-      apeCross = pkgs.callPackage ./tests/ape { inherit cTools sysroot; };
-      lua = pkgs.callPackage ./pkgs/lua { inherit cTools sysroot; };
+      apeCross = pkgs.callPackage ./tests/ape {
+        inherit
+          cTools
+          sysroot
+          libap
+          libbsd
+          ;
+      };
+      apeSource =
+        pkgs.runCommand "9front-ape-source"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+          }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/export_tree.py
+                ./tests/build_c.py
+              ]
+            }/export_tree.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+              sys/src/ape sys/src/libc
+            mkdir -p "$out"
+            tar -xf "$TMPDIR/source.tar" -C "$out"
+          '';
+      libbsd = pkgs.callPackage ./pkgs/libbsd {
+        inherit cTools sysroot;
+        source = apeSource;
+      };
+      libap = pkgs.callPackage ./pkgs/libap {
+        inherit cTools sysroot;
+        source = apeSource;
+      };
+      lua = pkgs.callPackage ./pkgs/lua {
+        inherit
+          cTools
+          sysroot
+          libbsd
+          libap
+          ;
+      };
       libbz2 = pkgs.callPackage ./pkgs/libbz2 { inherit cTools sysroot; };
-      libbz2Consumer = pkgs.callPackage ./tests/libbz2 { inherit cTools sysroot libbz2; };
+      libbz2Consumer = pkgs.callPackage ./tests/libbz2 {
+        inherit
+          cTools
+          sysroot
+          libbz2
+          libap
+          libbsd
+          ;
+      };
       libbz2Tests =
         pkgs.runCommand "libbz2-tests"
           {
@@ -194,6 +241,8 @@
         ape-tests = apeTests;
         inherit lua;
         inherit libbz2;
+        inherit libbsd;
+        inherit libap;
         libbz2-tests = libbz2Tests;
         lua-tests = luaTests;
         c-abi-tests = abiTests;

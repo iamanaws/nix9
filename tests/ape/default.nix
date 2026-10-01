@@ -4,6 +4,8 @@
   go,
   cTools,
   sysroot,
+  libap,
+  libbsd,
 }:
 runCommand "ape-cross"
   {
@@ -13,6 +15,8 @@ runCommand "ape-cross"
       cTools
     ];
     ccroot = sysroot;
+    apeCoreLibrary = "${libap}/lib/libap.a";
+    apeBsdLibrary = "${libbsd}/lib/libbsd.a";
   }
   ''
     source ${../../lib/ape-build.sh}

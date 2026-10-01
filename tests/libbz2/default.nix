@@ -5,6 +5,8 @@
   cTools,
   sysroot,
   libbz2,
+  libap,
+  libbsd,
 }:
 runCommand "libbz2-consumer"
   {
@@ -14,6 +16,8 @@ runCommand "libbz2-consumer"
       cTools
     ];
     ccroot = sysroot;
+    apeCoreLibrary = "${libap}/lib/libap.a";
+    apeBsdLibrary = "${libbsd}/lib/libbsd.a";
   }
   ''
     source ${../../lib/ape-build.sh}

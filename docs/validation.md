@@ -13,7 +13,7 @@ The compiler also uses the patches in `pkgs/goken9cc`.
 | `nix flake check -L` | Validated the Go binary's Plan 9 amd64 header and text section. |
 | `nix build .#vm-image` | Fetched the hash-verified image and prepared its serial console. |
 | `nix build .#sysroot` | Extracted `sys/include`, `amd64/include`, and `amd64/lib`. |
-| `nix build .#goken9cc` | Built the patched compiler, assembler, and linker on Linux. |
+| `nix build .#goken9cc` | Built the toolchain and checked archive creation, listing, and extraction with full-length member names. |
 | `nix build .#hello-c-native` | Compiled and ran C in the guest, retrieved the binary, and checked its format. |
 | `nix build .#hello-c-cross` | Compiled and linked C on Linux and checked its format. |
 | `nix build .#sha1sum-tests -L` | Native and cross builds passed 46 checksum and error cases, with hashes checked against Python. |
@@ -58,6 +58,10 @@ The build saves `results.json` in its Nix output. See
 These tests cover selected ABI cases, not every type, instruction or library.
 
 ## Test behavior
+
+The APE, Lua, and libbzip2 cross builds use rebuilt `libap` and `libbsd`; guest
+builds use the image's libraries. The rebuilt `libap` matches all 291 archive
+member names in the image.
 
 Guest tests check exit status and expected output, use bounded waits, and discard
 snapshot changes. Manual failure checks confirmed that the guest-control code

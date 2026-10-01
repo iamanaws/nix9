@@ -44,7 +44,8 @@ checks the executable format, and installs `bin/my-program`. Use `includeDirs`
 for extra header directories and `meta` for package metadata. Both `hello-c-cross`
 and `sha1sum` use this helper.
 
-APE builds share [compile and link functions](../lib/ape-build.sh).
+APE builds share [compile and link functions](../lib/ape-build.sh) and use rebuilt
+`libap` and `libbsd` runtimes.
 
 ## Compiler tests
 
@@ -86,6 +87,8 @@ Run `nix build .#TARGET` from the checkout.
 | `lua-tests` | Linux and 9front VM | Lua comparison results. |
 | `libbz2` | Linux | Static bzip2 library and header for APE. |
 | `libbz2-tests` | Linux and 9front VM | Archive and consumer comparison results. |
+| `libbsd` | Linux | APE BSD compatibility library rebuilt from the image's source. |
+| `libap` | Linux | APE core runtime rebuilt from C, assembly, and syscall definitions. |
 | `c-abi-cross` | Linux | Compiler test executable and object files. |
 | `c-abi-tests` | Linux and 9front VM | Compiler comparison results. |
 | `ape-cross` | Linux | POSIX C test executable using APE. |
