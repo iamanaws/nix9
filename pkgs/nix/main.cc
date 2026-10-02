@@ -16,6 +16,7 @@ RegisterLegacyCommand::Commands & RegisterLegacyCommand::commands()
 void showManPage(const std::string &)
 {
     std::cout << "Usage: nix-store [--store URI] OPERATION [ARGS...]\n"
+                 "  --realise PATH...      Build or realise store paths\n"
                  "  --add PATH...          Copy files or directories into the store\n"
                  "  --query FLAG PATH...   Query --hash, --size, --references or --requisites\n"
                  "  --dump PATH            Write a NAR to stdout\n"
@@ -23,7 +24,7 @@ void showManPage(const std::string &)
                  "  --check-validity PATH  Check store registration\n"
                  "  --version              Print the Nix version\n"
                  "Use --store /tmp/nix9 for a writable store in the guest.\n"
-                 "Experimental 9front port: builds, GC and symlinks are unsupported.\n";
+                 "Experimental 9front port: local builds are limited; GC and symlinks are unsupported.\n";
     throw Exit();
 }
 

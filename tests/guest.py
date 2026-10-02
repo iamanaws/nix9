@@ -50,6 +50,8 @@ def boot(qemu, disk):
         codec_errors="replace",
         timeout=120,
     )
+    # QEMU can take longer than ptyprocess's 0.1s default to release a VM.
+    child.ptyproc.delayafterterminate = 1
     child.logfile_read = SerialLog()
     try:
         child.expect("bootargs is")

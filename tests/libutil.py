@@ -1,6 +1,6 @@
 """Exercise upstream Nix's libutil on 9front, using host Nix as the oracle.
 
-Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_EVAL_ELF OUTPUT
+Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_EVAL_ELF HELLO_SOURCE NATIVE_TOOLS OUTPUT
 """
 
 import base64
@@ -13,11 +13,12 @@ import tempfile
 from cxx import cc9_guest
 from nix_store import check_nix_store
 from nix_eval import eval_fixtures, check_nix_eval
+from nix_build import build_fixtures, check_nix_build
 from libutil_compression import check_compression
 from libutil_keys import key_fixtures, check_keys
 
 
-qemu, disk, cc9, executable, nix_store, nix_eval, output = sys.argv[1:]
+qemu, disk, cc9, executable, nix_store, nix_eval, hello, tools, output = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     tree = root / "tree"
@@ -49,6 +50,8 @@ with tempfile.TemporaryDirectory() as directory:
     files = {"probe.elf": executable, "nix-store.elf": nix_store, "nix-eval.elf": nix_eval}
     files.update(key_fixtures(root))
     files.update(eval_fixtures(root))
+    build_files, build_paths = build_fixtures(root, Path(hello), Path(tools))
+    files.update(build_files)
     for name, data in fixtures.items():
         path = root / f"{name}.nar"
         path.write_bytes(data)
@@ -78,6 +81,7 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("elf2aout /tmp/probe.elf /tmp/libutil-probe && chmod +x /tmp/libutil-probe")
         cli = check_nix_store(guest, fixtures)
         evaluator = check_nix_eval(guest)
+        native_builds = check_nix_build(guest, build_paths)
         guest.command("mkdir -p /tmp/nix9-process-dir")
         guest.command("/tmp/libutil-probe sqlite", "libstore SQLite PASS")
         guest.command("/tmp/libutil-probe store", "libstore LocalStore PASS")
@@ -105,6 +109,7 @@ with tempfile.TemporaryDirectory() as directory:
         "compression": compression,
         "nix_store": cli,
         "evaluator": evaluator,
+        "native_builds": native_builds,
         "urls": ["parsing", "encoding", "relative resolution", "invalid input"],
         "signatures": signatures,
         "processes": ["pipes", "exit status", "PATH", "environment", "working directory",

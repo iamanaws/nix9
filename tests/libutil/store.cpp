@@ -96,7 +96,7 @@ void checkStore() {
         mismatch.ca->hash = hashString(HashAlgorithm::SHA256, "different");
         rejected([&] { store->registerValidPath(mismatch); }, "incorrect content address accepted");
 
-        rejected([&] { store->buildPaths({}); }, "native Nix builds reported success");
+        store->buildPaths({});
         rejected([&] { store->addIndirectRoot("/tmp/nix9-root"); }, "permanent roots reported success");
         GCResults results;
         rejected([&] { store->collectGarbage(GCOptions{}, results); }, "GC reported success");

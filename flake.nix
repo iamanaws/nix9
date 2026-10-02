@@ -82,6 +82,22 @@
             test -s "$out/amd64/lib/libc.a"
             test -s "$out/sys/include/libc.h"
           '';
+      nativeTools = pkgs.runCommand "9front-native-tools" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+          "$TMPDIR/tools.tar" amd64/bin/6c amd64/bin/6l
+        tar -xf "$TMPDIR/tools.tar"
+        mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
+        cp amd64/bin/6c amd64/bin/6l "$out/bin/"
+        cp -r ${sysroot}/sys/include "$out/sys/"
+        cp -r ${sysroot}/amd64/include "$out/amd64/"
+        cp ${libc}/lib/libc.a "$out/amd64/lib/"
+      '';
       nixUtilTests =
         pkgs.runCommand "nix-util-tests"
           {
@@ -99,6 +115,7 @@
                 ./tests/libutil.py
                 ./tests/nix_store.py
                 ./tests/nix_eval.py
+                ./tests/nix_build.py
                 ./tests/cxx.py
                 ./tests/libutil_compression.py
                 ./tests/libutil_keys.py
@@ -106,7 +123,8 @@
               ]
             }/libutil.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-eval.elf "$out"
+              ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-eval.elf \
+              ${./pkgs/hello-c-cross} ${nativeTools} "$out"
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit
@@ -347,6 +365,7 @@
         ape-cross = apeCross;
         ape-tests = apeTests;
         inherit lua;
+        native-tools = nativeTools;
         nix-util = nixUtil;
         nix-util-tests = nixUtilTests;
         lua-package = luaPackage;

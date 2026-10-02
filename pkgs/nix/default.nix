@@ -74,6 +74,7 @@ runCommand "nix-util-${version}-9front-probe"
       -isystem ${dependencies.digests}/include
       -isystem ${compression}/include
       -I "$sources/include" -I "$sources/unix/include"
+      -I "$sources/../libstore/unix/include" -I "$sources/../libstore"
       -I "$sources/../libstore/include" -I "$sources/../libmain/include"
       -I "$sources/../libcmd/include" -I "$sources/../nix"
       -I "$sources/widecharwidth" -I "$PWD/build/include"
@@ -84,16 +85,19 @@ runCommand "nix-util-${version}-9front-probe"
       current-process english environment-variables error executable-path exit experimental-features \
       file-content-address file-descriptor file-system fs-sink git hash hilite json-utils logging memory-source-accessor \
       mounted-source-accessor nar-accessor nar-listing pos-table position posix-source-accessor processes serialise \
-      signature/local-keys source-accessor source-path strings suggestions tarfile terminal thread-pool union-source-accessor url users util xml-writer \
+      signature/local-keys signature/signer source-accessor source-path strings suggestions tarfile terminal thread-pool union-source-accessor url users util xml-writer \
       unix/environment-variables unix/file-descriptor unix/file-path \
-      unix/file-system-at unix/file-system unix/processes unix/signals unix/users unix/xdg-dirs; do
+      unix/file-system-at unix/file-system unix/muxable-pipe unix/processes unix/signals unix/users unix/xdg-dirs; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
         -c "$sources/$source.cc" -o "build/nix-''${source//\//_}.o"
     done
     for source in \
-      build/derivation-builder build-result common-protocol content-address derivation-options derivations \
+      build/build-log build/derivation-builder build/derivation-building-goal build/derivation-check \
+      build/derivation-env-desugar build/derivation-goal build/derivation-resolution-goal \
+      build/derivation-trampoline-goal build/drv-output-substitution-goal build/entry-points build/goal \
+      build/substitution-goal build/worker unix/build/child unix/build/hook-instance build-result common-protocol content-address derivation-options derivations \
       derived-path derived-path-map downstream-placeholder export-import globals indirect-root-store keys \
-      local-fs-store local-store log-store misc names nar-info nar-info-disk-cache outputs-spec parsed-derivations \
+      local-fs-store local-store log-store machines misc names nar-info nar-info-disk-cache outputs-spec parsed-derivations \
       path path-info path-references path-with-outputs pathlocks posix-fs-canonicalise profiles realisation references sqlite store-api store-dir-config \
       store-reference store-registration unix/pathlocks worker-protocol; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
@@ -101,6 +105,8 @@ runCommand "nix-util-${version}-9front-probe"
     done
     ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
       -c ${./store-platform.cc} -o build/store-platform.o
+    ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
+      -c ${./build-platform.cc} -o build/store-builder.o
     libraryObjects=(build/*.o)
     for source in ${../../tests/libutil}/*.cpp; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \

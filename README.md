@@ -5,8 +5,8 @@ Build programs for 9front with Nix, using
 Go and C examples cross-compile on Linux and pass tests inside 9front.
 
 This is experimental. Packages cross-compile on Linux. On 9front, `nix-store`
-adds and queries paths, and `nix-eval` evaluates expressions. Native Nix builds
-remain future work.
+builds simple derivations and manages store paths; `nix-eval` evaluates expressions
+and instantiates derivations.
 See [test coverage](docs/validation.md) and [limitations](docs/feasibility.md).
 
 ## Quick start

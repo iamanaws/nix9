@@ -2,9 +2,10 @@
 
 Packages cross-compile on Linux. An experimental native `nix-store` adds files
 and directories and queries metadata on 9front. `nix-eval` evaluates expressions
-and local imports as JSON, including derivation paths matching host Nix. It uses
-upstream’s no-GC mode for short-lived runs; flakes, network fetchers and native
-Nix builds remain unported. Native compiler builds are available inside 9front.
+as JSON and instantiates derivations. Native builds use upstream Nix’s scheduler
+with a 9front process backend. They currently support one input-addressed output
+named `out`, without sandboxing or a diverted store. The evaluator uses upstream’s
+no-GC mode for short-lived runs; flakes and network fetchers remain unported.
 
 Our patched [goken9cc](../pkgs/goken9cc) rebuilds C runtimes and libraries on
 Linux; APE uses GCC for preprocessing. The VM supplies remaining sources,
@@ -22,7 +23,7 @@ libraries. Boehm GC, S3 support, and Linux seccomp can be disabled.
 | C++ | Nix archive, streaming, hashing, compression, URL parsing, and signing code runs on 9front with cc9. The full `libutil` library and `nix` CLI remain unported. The build omits libarchive disk APIs; coroutine stacks and libsodium allocations lack guard pages. |
 | ABI | cc9 uses the SysV ABI. Our existing Plan 9 and APE archives cannot be linked into it; Nix dependencies need separate builds. |
 | Filesystem | The [NAR probe](../tests/nar.py) round-tripped Nix 2.34.8 archives byte-for-byte, including links and control characters in names. Regular files and directories also survived extraction and re-archiving. Links and unsupported names stay in archives; extraction rejects them before writing. Native symlink resolution is still missing. |
-| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. It permits one client at a time, using [native locks](../pkgs/cc9-libs/plan9-lock.c) and rollback journals. Builds, GC, repair, WAL and multiuser mode remain unsupported; power-loss recovery is untested. |
+| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. It permits one client at a time, using [native locks](../pkgs/cc9-libs/plan9-lock.c) and rollback journals. GC, repair, WAL and multiuser mode remain unsupported; power-loss recovery is untested. |
 | Processes and locks | Child processes support pipes, PATH, environments, wait and kill. Interrupt/hangup notes cancel at Nix interruption checks. Exclusive path locks pass contention, fork/exec and killed-holder tests; server crashes may leave markers. Generic file locks, credentials, process groups, signal threads and PTYs remain unsupported. |
 
 The [Nix build](../pkgs/nix) uses the pinned [cc9 runtime](../pkgs/cc9) and
@@ -36,6 +37,8 @@ nix build .#nix-util-tests -L
 
 ## Next step
 
-Instantiate and build a simple derivation natively. Symlinks, profiles and permanent GC roots remain open.
+Track the builder shell and basic utilities in the store too. The compiler,
+headers and libc are already explicit inputs. Symlinks, profiles and permanent
+GC roots remain open.
 
 [nix]: https://github.com/NixOS/nix/tree/f3f1c3c5b8ad91850e0f7c590cf177f7ab022024

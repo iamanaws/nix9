@@ -57,4 +57,9 @@ In the guest, activate it and compile native Plan 9 C:
 Use `pcc -o program source.c` for POSIX C through APE. The wrappers use the guest's
 tools with installed headers and rebuilt runtimes. `pcc` sets up a private
 namespace for APE's standard paths. `guest-development-tests` verifies builds
-with the image's headers and libraries hidden. Native Nix builds remain unsupported.
+with the image's headers and libraries hidden.
+
+Native Nix builds the [C example](../pkgs/hello-c-cross/native.nix) with source
+and `native-tools` imported into its store. The toolchain bundles the image's
+compiler and headers with rebuilt libc. `nix-util-tests` builds and runs the
+program with the image's compiler, headers and libraries hidden.

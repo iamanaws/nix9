@@ -654,7 +654,7 @@
  #include <nlohmann/json.hpp>
  
  #ifndef _WIN32
-@@ -89,8 +91,11 @@
+@@ -89,8 +91,14 @@
                                          .transform([](auto && s) { return std::filesystem::path(s); })
                                          .value_or(nixStateDir / DEFAULT_SOCKET_PATH)))
  {
@@ -664,10 +664,13 @@
 +#endif
 +#ifdef __plan9__
 +    useSQLiteWAL = false;
++    buildHook = Strings{};
++    useSubstitutes = false;
++    compressLog = false;
  #endif
      allowSymlinkedStore = getEnv("NIX_IGNORE_SYMLINK_STORE") == "1";
  
-@@ -603,7 +608,9 @@
+@@ -603,7 +611,9 @@
         [1]
         https://github.com/apple-oss-distributions/objc4/blob/01edf1705fbc3ff78a423cd21e03dfc21eb4d780/runtime/objc-initialize.mm#L614-L636
      */
@@ -859,3 +862,16 @@
  
  /**
   * Saves the signal mask, which is the signal mask that nix will restore
+--- a/src/libutil/unix/muxable-pipe.cc
++++ b/src/libutil/unix/muxable-pipe.cc
+@@ -8,6 +8,10 @@
+ 
+ void MuxablePipePollState::poll(std::optional<unsigned int> timeout)
+ {
++#ifdef __plan9__
++    // cc9 poll retries interrupted waits; return periodically to Nix's interruption checks.
++    if (!timeout || *timeout > 100) timeout = 100;
++#endif
+     if (::poll(pollStatus.data(), pollStatus.size(), timeout ? *timeout : -1) == -1) {
+         if (errno == EINTR)
+             return;

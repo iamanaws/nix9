@@ -7,37 +7,10 @@ extern "C" int cc9_errno_from_errstr_or(int);
 
 namespace nix {
 
-// Import and metadata operations use upstream implementations. Builds and GC
-// remain unavailable until their Unix dependencies have native replacements.
+// Operations without native implementations fail explicitly.
 [[noreturn]] static void unsupported(const char *operation)
 {
     throw Error("%s is not supported on 9front", operation);
-}
-
-void Store::buildPaths(const std::vector<DerivedPath> &, BuildMode, std::shared_ptr<Store>)
-{
-    unsupported("building");
-}
-
-std::vector<KeyedBuildResult>
-Store::buildPathsWithResults(const std::vector<DerivedPath> &, BuildMode, std::shared_ptr<Store>)
-{
-    unsupported("building");
-}
-
-BuildResult Store::buildDerivation(const StorePath &, const BasicDerivation &, BuildMode)
-{
-    unsupported("building");
-}
-
-void Store::ensurePath(const StorePath &path)
-{
-    if (!isValidPath(path)) unsupported("substitution");
-}
-
-void Store::repairPath(const StorePath &)
-{
-    unsupported("repair");
 }
 
 static AutoCloseFD ephemeralFile(const std::filesystem::path &path)

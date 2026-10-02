@@ -47,7 +47,6 @@ def check_nix_store(guest, fixtures):
         ("--query --bogus", "unknown flag"),
         ("--add /tmp/missing-cli-input", "does not exist"),
         ("--query --hash /nix/store/00000000000000000000000000000000-missing", "not valid"),
-        ("--realise " + paths[0], "not supported"),
         ("--gc", "not supported"),
         ("--serve", "not supported"),
         ("--log-format bar --init", "not supported"),
@@ -58,5 +57,6 @@ def check_nix_store(guest, fixtures):
 
     guest.command("ls /tmp/nix9-cli/nix/var/nix/temproots > /tmp/roots && test ! -s /tmp/roots")
     guest.command(f"{cli} --check-validity {' '.join(paths)}")
+    guest.command(f"{cli} --realise {paths[0]}", paths[0])
     return ["add", "query", "host store paths", "NAR round-trip", "reopen",
             "environment", "stdin", "error status", "temporary-root cleanup"]
