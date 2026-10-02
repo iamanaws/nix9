@@ -1,0 +1,12 @@
+#!/bin/rc
+lib=/amd64/lib/cc9
+cd /tmp || exit $status
+sed 's,@SRC@,/tmp/sqlite3.c,g; s,@OBJ@,/tmp/sqlite3.o,g; s,@SRCBASE@,sqlite3.c,g; s,-std=c\+\+23,-std=c11,g; s,-x c\+\+,-x c,g; s,-fcxx-exceptions,,g; s,-fexceptions,,g' $lib/cc1.template >sqlite.rsp
+echo ' -DSQLITE_OS_UNIX=1 -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION=1 -DSQLITE_MAX_MMAP_SIZE=0' >>sqlite.rsp
+clang @sqlite.rsp || exit $status
+sed 's,@SRC@,/tmp/probe.cpp,g; s,@OBJ@,/tmp/probe.o,g; s,@SRCBASE@,probe.cpp,g' $lib/cc1.template >probe.rsp
+clang @probe.rsp || exit $status
+echo '--mmap-output-file -o /tmp/sqlite-probe.elf --start-group /tmp/probe.o /tmp/sqlite3.o '$lib'/libcc9cxx.a '$lib'/libcc9m.a --end-group -T '$lib'/plan9.ld -static -nostdlib' >link.rsp
+ld.lld @link.rsp || exit $status
+elf2aout /tmp/sqlite-probe.elf /tmp/sqlite-probe || exit $status
+chmod +x /tmp/sqlite-probe

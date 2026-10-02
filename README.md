@@ -1,10 +1,12 @@
-# nix-9front
+# nix9
 
 Build programs for 9front with Nix, using
 [9front-in-a-box](https://github.com/majiru/9front-in-a-box) for the VM.
 Go and C examples cross-compile on Linux and pass tests inside 9front.
 
-This is experimental. Nix runs on Linux; a native Nix port is still future work.
+This is experimental. Packages cross-compile on Linux. On 9front, `nix-store`
+adds and queries paths, and `nix-eval` evaluates expressions. Native Nix builds
+remain future work.
 See [test coverage](docs/validation.md) and [limitations](docs/feasibility.md).
 
 ## Quick start

@@ -5,7 +5,7 @@ import sys
 import tempfile
 import threading
 
-from build_c import ArtifactServer
+from artifacts import ArtifactServer
 from guest import boot
 
 

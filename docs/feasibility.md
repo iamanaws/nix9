@@ -1,34 +1,41 @@
-# Toolchain status and next steps
+# Native Nix feasibility
 
-Nix runs on Linux and builds Go and C programs for 9front. It can also run
-builds inside a temporary guest. Native Nix remains unported.
+Packages cross-compile on Linux. An experimental native `nix-store` adds files
+and directories and queries metadata on 9front. `nix-eval` evaluates expressions
+and local imports as JSON, including derivation paths matching host Nix. It uses
+upstream’s no-GC mode for short-lived runs; flakes, network fetchers and native
+Nix builds remain unported. Native compiler builds are available inside 9front.
 
-## C toolchain status
+Our patched [goken9cc](../pkgs/goken9cc) rebuilds C runtimes and libraries on
+Linux; APE uses GCC for preprocessing. The VM supplies remaining sources,
+headers, and libraries. These builds do not establish C++ or full POSIX support.
 
-Cross builds use [goken9cc](../pkgs/goken9cc), patched for 9front's calling
-convention, archive format, and selected instructions. The build drops
-`_Noreturn` annotations. This compiler differs from the guest's compiler and
-is configured specifically for 9front.
+## Audit
 
-Native Plan 9 and APE runtimes, supporting libraries, and source generators
-build on Linux. APE uses GCC for preprocessing. The pinned VM still supplies
-sources, headers, and libraries that have not been rebuilt; it also runs tests.
-See [package definitions](../pkgs) for the exact build dependencies.
+Target: [Nix 2.34.8][nix], commit `f3f1c3c5b8ad91850e0f7c590cf177f7ab022024`.
+Its Meson files require C++23, Boost 1.87 or later, OpenSSL, libarchive,
+libsodium, Brotli, BLAKE3, curl 8.17 or later, SQLite, libgit2, JSON and TOML
+libraries. Boehm GC, S3 support, and Linux seccomp can be disabled.
 
-Tests cover selected ABI, POSIX, and library behavior. They do not establish
-support for every instruction, general POSIX packages, C++, or cgo. Lua uses
-32-bit integers and does not load dynamic C modules. Pinned inputs do not
-establish bitwise reproducibility of the VM disk.
+| Area | Evidence and remaining work |
+| --- | --- |
+| C++ | Nix archive, streaming, hashing, compression, URL parsing, and signing code runs on 9front with cc9. The full `libutil` library and `nix` CLI remain unported. The build omits libarchive disk APIs; coroutine stacks and libsodium allocations lack guard pages. |
+| ABI | cc9 uses the SysV ABI. Our existing Plan 9 and APE archives cannot be linked into it; Nix dependencies need separate builds. |
+| Filesystem | The [NAR probe](../tests/nar.py) round-tripped Nix 2.34.8 archives byte-for-byte, including links and control characters in names. Regular files and directories also survived extraction and re-archiving. Links and unsupported names stay in archives; extraction rejects them before writing. Native symlink resolution is still missing. |
+| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. It permits one client at a time, using [native locks](../pkgs/cc9-libs/plan9-lock.c) and rollback journals. Builds, GC, repair, WAL and multiuser mode remain unsupported; power-loss recovery is untested. |
+| Processes and locks | Child processes support pipes, PATH, environments, wait and kill. Interrupt/hangup notes cancel at Nix interruption checks. Exclusive path locks pass contention, fork/exec and killed-holder tests; server crashes may leave markers. Generic file locks, credentials, process groups, signal threads and PTYs remain unsupported. |
 
-## Next steps
+The [Nix build](../pkgs/nix) uses the pinned [cc9 runtime](../pkgs/cc9) and
+[target libraries](../pkgs/cc9-libs). Only cc9 startup is rebuilt from source;
+the remaining runtime uses release binaries. See [patch ownership](upstream.md).
+Builds run on Linux and tests in a disposable VM:
 
-Expand compiler and library coverage as packages need it, and build on the
-[guest installation layout](vm.md#install-packages) before adding profiles,
-rollback, or a native stdenv.
-The OpenBSD work provides a bootstrap pattern, but its system integration
-cannot be reused directly on Plan 9.
+```sh
+nix build .#nix-util-tests -L
+```
 
-Running Nix itself requires a C++ toolchain and its dependencies, plus support
-for process execution, threads, filesystem semantics, store management, and
-build isolation. Start with a pinned Nix version and audit those requirements.
-APE provides some POSIX interfaces, but does not establish native Nix support.
+## Next step
+
+Instantiate and build a simple derivation natively. Symlinks, profiles and permanent GC roots remain open.
+
+[nix]: https://github.com/NixOS/nix/tree/f3f1c3c5b8ad91850e0f7c590cf177f7ab022024

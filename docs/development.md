@@ -1,6 +1,7 @@
 # Develop packages
 
-Run from the checkout on Linux. Use `nix flake show` to list packages and apps,
+Packages cross-compile on Linux; package builds do not run a compiler in a VM.
+Run from the checkout. Use `nix flake show` to list packages and apps,
 then replace `PACKAGE` below with a target such as `lua`:
 
 ```sh
@@ -56,4 +57,4 @@ In the guest, activate it and compile native Plan 9 C:
 Use `pcc -o program source.c` for POSIX C through APE. The wrappers use the guest's
 tools with installed headers and rebuilt runtimes. `pcc` sets up a private
 namespace for APE's standard paths. `guest-development-tests` verifies builds
-with the image's headers and libraries hidden. Nix still runs on Linux.
+with the image's headers and libraries hidden. Native Nix builds remain unsupported.

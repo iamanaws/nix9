@@ -1,0 +1,11 @@
+--- a/src/nix/nix-store/nix-store.cc
++++ b/src/nix/nix-store/nix-store.cc
+@@ -1233,7 +1233,7 @@
+         if (!op)
+             throw UsageError("no operation specified");
+ 
+-        if (op != opDump && op != opRestore) /* !!! hack */
++        if (op != opDump && op != opRestore && op != opVersion) /* !!! hack */
+             store = openStore();
+ 
+         op(std::move(opFlags), std::move(opArgs));

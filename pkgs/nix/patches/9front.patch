@@ -1,0 +1,861 @@
+--- a/src/libutil/args.cc
++++ b/src/libutil/args.cc
+@@ -9,7 +9,7 @@
+ #include <fstream>
+ #include <string>
+ #include <regex>
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__plan9__)
+ #  include <glob.h>
+ #endif
+ 
+@@ -563,7 +563,7 @@
+ static void _completePath(AddCompletions & completions, std::string_view prefix, bool onlyDirs)
+ {
+     completions.setType(Completions::Type::Filenames);
+-#ifndef _WIN32 // TODO implement globbing completions on Windows
++#if !defined(_WIN32) && !defined(__plan9__) // TODO implement globbing completions on Windows
+     glob_t globbuf;
+     int flags = GLOB_NOESCAPE;
+ #  ifdef GLOB_ONLYDIR
+--- a/src/libutil/terminal.cc
++++ b/src/libutil/terminal.cc
+@@ -194,7 +194,9 @@
+ #ifndef _WIN32
+ std::string getPtsName(int fd)
+ {
+-#  ifdef __APPLE__
++#  if defined(__plan9__)
++    throw Error("pseudoterminals are not ported to 9front");
++#  elif defined(__APPLE__)
+     static std::mutex ptsnameMutex;
+     // macOS doesn't have ptsname_r, use mutex-protected ptsname
+     std::lock_guard<std::mutex> lock(ptsnameMutex);
+--- a/src/libutil/unix/signals.cc
++++ b/src/libutil/unix/signals.cc
+@@ -45,6 +45,8 @@
+ 
+ static Sync<InterruptCallbacks> _interruptCallbacks;
+ 
++
++#ifndef __plan9__
+ static void signalHandlerThread(sigset_t set)
+ {
+     while (true) {
+@@ -59,6 +61,8 @@
+         }
+     }
+ }
++
++#endif
+ 
+ void unix::triggerInterrupt()
+ {
+@@ -87,6 +91,21 @@
+     }
+ }
+ 
++#ifdef __plan9__
++void unix::startNoteHandler()
++{
++    // cc9 invokes these from its note trampoline. Never unwind or run
++    // interrupt callbacks here: noted(NCONT) must restore the normal stack.
++    static_assert(decltype(_isInterrupted)::is_always_lock_free);
++    struct sigaction act{};
++    sigemptyset(&act.sa_mask);
++    act.sa_handler = [](int) { _isInterrupted.store(true, std::memory_order_relaxed); };
++    for (int sig : {SIGINT, SIGHUP})
++        if (sigaction(sig, &act, nullptr))
++            throw SysError("installing note handler");
++}
++#endif
++
+ static sigset_t savedSignalMask;
+ static bool savedSignalMaskIsSet = false;
+ 
+@@ -100,6 +119,9 @@
+ 
+ void unix::startSignalHandlerThread()
+ {
++#ifdef __plan9__
++    throw Error("signal handler thread is not ported to 9front");
++#else
+     updateWindowSize();
+ 
+     saveSignalMask();
+@@ -115,6 +137,7 @@
+         throw SysError("blocking signals");
+ 
+     std::thread(signalHandlerThread, set).detach();
++#endif
+ }
+ 
+ void unix::restoreSignals()
+--- a/src/libutil/include/nix/util/file-descriptor.hh
++++ b/src/libutil/include/nix/util/file-descriptor.hh
+@@ -16,6 +16,8 @@
+ #ifdef _WIN32
+ #  define WIN32_LEAN_AND_MEAN
+ #  include <windows.h>
++#else
++#  include <unistd.h>
+ #endif
+ 
+ namespace nix {
+--- a/src/libutil/serialise.cc
++++ b/src/libutil/serialise.cc
+@@ -10,12 +10,17 @@
+ #include <memory>
+ 
+ #include <boost/coroutine2/coroutine.hpp>
+-#include <boost/coroutine2/protected_fixedsize_stack.hpp>
++#ifdef __plan9__
++#  include <boost/context/fixedsize_stack.hpp>
++#else
++#  include <boost/coroutine2/protected_fixedsize_stack.hpp>
++#endif
+ 
+ #ifdef _WIN32
+ #  include <fileapi.h>
+ #else
+ #  include <poll.h>
++#  include <sys/select.h>
+ #endif
+ 
+ namespace nix {
+@@ -312,6 +317,13 @@
+    which requires much more stack space. */
+ static constexpr size_t defaultCoroutineStackSize = 512 * 1024;
+ 
++#ifdef __plan9__
++// cc9 cannot protect guard pages. These experimental stacks have no overflow guard.
++using CoroutineStack = boost::context::fixedsize_stack;
++#else
++using CoroutineStack = boost::coroutines2::protected_fixedsize_stack;
++#endif
++
+ std::unique_ptr<FinishSink> sourceToSink(fun<void(Source &)> reader)
+ {
+     struct SourceToSink : FinishSink
+@@ -336,7 +348,7 @@
+ 
+             if (!coro) {
+                 coro = coro_t::push_type(
+-                    boost::coroutines2::protected_fixedsize_stack(defaultCoroutineStackSize),
++                    CoroutineStack(defaultCoroutineStackSize),
+                     [&](coro_t::pull_type & yield) {
+                         LambdaSource source([&](char * out, size_t out_len) {
+                             if (cur.empty()) {
+@@ -395,7 +407,7 @@
+             bool hasCoro = coro.has_value();
+             if (!hasCoro) {
+                 coro = coro_t::pull_type(
+-                    boost::coroutines2::protected_fixedsize_stack(defaultCoroutineStackSize),
++                    CoroutineStack(defaultCoroutineStackSize),
+                     [&](coro_t::push_type & yield) {
+                         LambdaSink sink([&](std::string_view data) {
+                             if (!data.empty()) {
+--- a/src/libutil/hilite.cc
++++ b/src/libutil/hilite.cc
+@@ -1,3 +1,5 @@
++#include <algorithm>
++#include <sys/types.h>
+ #include "nix/util/hilite.hh"
+ 
+ namespace nix {
+--- a/src/libutil/file-system.cc
++++ b/src/libutil/file-system.cc
+@@ -21,8 +21,10 @@
+ #include <sys/time.h>
+ #include <unistd.h>
+ 
+-#include <boost/iostreams/device/mapped_file.hpp>
+-#include <boost/filesystem/path.hpp>
++#ifndef __plan9__
++#  include <boost/iostreams/device/mapped_file.hpp>
++#  include <boost/filesystem/path.hpp>
++#endif
+ 
+ #ifdef __FreeBSD__
+ #  include <sys/param.h>
+@@ -271,6 +273,7 @@
+ 
+ void readFile(const std::filesystem::path & path, Sink & sink, bool memory_map)
+ {
++#ifndef __plan9__
+     // Memory-map the file for faster processing where possible.
+     if (memory_map) {
+         try {
+@@ -284,6 +287,11 @@
+         }
+         debug("memory-mapping failed for path: %s", PathFmt(path));
+     }
++
++#else
++    // cc9 emulates file mappings with copies. Use the streaming path instead.
++    (void) memory_map;
++#endif
+ 
+     // Stream the file instead if memory-mapping fails or is disabled.
+     auto fd = openFileReadonly(std::filesystem::path(path));
+@@ -672,6 +680,11 @@
+     if (std::filesystem::is_symlink(fromStatus) || std::filesystem::is_regular_file(fromStatus)) {
+         std::filesystem::copy(
+             from, to, std::filesystem::copy_options::copy_symlinks | std::filesystem::copy_options::overwrite_existing);
++#ifdef __plan9__
++        // cc9's filesystem copy does not preserve executable bits.
++        if (std::filesystem::is_regular_file(fromStatus))
++            chmod(to, static_cast<mode_t>(fromStatus.permissions()) & 0777);
++#endif
+     } else if (std::filesystem::is_directory(fromStatus)) {
+         std::filesystem::create_directory(to);
+         for (auto & entry : DirectoryIterator(from)) {
+--- a/src/libutil/unix/processes.cc
++++ b/src/libutil/unix/processes.cc
+@@ -114,6 +114,9 @@
+ 
+ void Pid::setSeparatePG(bool separatePG)
+ {
++#ifdef __plan9__
++    if (separatePG) throw Error("process groups are not ported to 9front");
++#endif
+     this->separatePG = separatePG;
+ }
+ 
+@@ -136,6 +139,9 @@
+ 
+ void killUser(uid_t uid)
+ {
++#ifdef __plan9__
++    throw Error("user-wide process termination is not ported to 9front");
++#endif
+     debug("killing all processes running under uid '%1%'", uid);
+ 
+     assert(uid != 0); /* just to be safe... */
+@@ -310,6 +316,10 @@
+ 
+ void runProgram2(const RunOptions & options)
+ {
++#ifdef __plan9__
++    if (options.uid || options.gid)
++        throw Error("changing process credentials is not ported to 9front");
++#endif
+     checkInterrupt();
+ 
+     assert(!(options.standardIn && options.input));
+@@ -366,7 +376,12 @@
+             restoreProcessContext();
+ 
+             if (options.lookupPath)
++#ifdef __plan9__
++                // cc9 execvp always searches /bin. Use Nix's PATH resolver.
++                execv(ExecutablePath::load().findPath(options.program).c_str(), stringsToCharPtrs(args_).data());
++#else
+                 execvp(options.program.c_str(), stringsToCharPtrs(args_).data());
++#endif
+             // This allows you to refer to a program with a pathname relative
+             // to the PATH variable.
+             else
+--- a/src/libutil/unix/environment-variables.cc
++++ b/src/libutil/unix/environment-variables.cc
+@@ -2,6 +2,9 @@
+ #include <cstring>
+ 
+ #include "nix/util/environment-variables.hh"
++#ifdef __plan9__
++#  include "nix/util/file-system.hh"
++#endif
+ 
+ extern char ** environ __attribute__((weak));
+ 
+@@ -20,6 +23,13 @@
+ OsStringMap getEnvOs()
+ {
+     OsStringMap env;
++#ifdef __plan9__
++    // cc9's environ is a startup snapshot; /env contains subsequent changes.
++    for (auto & entry : DirectoryIterator{"/env"}) {
++        auto key = entry.path().filename().string();
++        if (auto value = getEnv(key)) env.emplace(std::move(key), std::move(*value));
++    }
++#else
+     for (size_t i = 0; environ[i]; ++i) {
+         auto s = environ[i];
+         auto eq = strchr(s, '=');
+@@ -28,6 +38,7 @@
+             continue;
+         env.emplace(std::string(s, eq), std::string(eq + 1));
+     }
++#endif
+     return env;
+ }
+ 
+--- a/src/libutil/environment-variables.cc
++++ b/src/libutil/environment-variables.cc
+@@ -1,14 +1,31 @@
+ #include "nix/util/util.hh"
+ #include "nix/util/environment-variables.hh"
++#ifdef __plan9__
++#  include "nix/util/file-system.hh"
++#endif
+ 
+ namespace nix {
+ 
+ std::optional<std::string> getEnv(const std::string & key)
+ {
++#ifdef __plan9__
++    // cc9 getenv drops empty values and trailing newlines. Preserve both.
++    if (key.empty() || key == "." || key == ".." || key.find_first_of("/=\0", 0, 3) != key.npos)
++        return {};
++    try {
++        auto value = readFile(std::filesystem::path("/env") / key);
++        if (auto nul = value.find('\0'); nul != value.npos) value.resize(nul);
++        return value;
++    } catch (const SysError & e) {
++        if (e.errNo != ENOENT) throw;
++        return {};
++    }
++#else
+     char * value = getenv(key.c_str());
+     if (!value)
+         return {};
+     return std::string(value);
++#endif
+ }
+ 
+ std::optional<std::string> getEnvNonEmpty(const std::string & key)
+--- a/src/libstore/unix/pathlocks.cc
++++ b/src/libstore/unix/pathlocks.cc
+@@ -11,6 +11,12 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sys/file.h>
++
++#ifdef __plan9__
++extern "C" long n9_create(const char *, int, unsigned long);
++extern "C" int cc9_errno_from_errstr_or(int);
++extern "C" const char * __n9_errstr_last(int *);
++#endif
+ 
+ namespace nix {
+ 
+@@ -73,6 +79,52 @@
+ bool PathLocks::lockPaths(const std::set<std::filesystem::path> & paths, const std::string & waitMsg, bool wait)
+ {
+     assert(fds.empty());
++#ifdef __plan9__
++    // Exclusive path locks only: cc9 does not implement flock. OEXCL creates
++    // the marker atomically; ORCLOSE removes it on the last descriptor close.
++    // Forked children retain the lock until close/exec. Never unlink a held
++    // marker, and never reclaim a marker left by a server crash automatically.
++    try {
++        bool announced = false;
++        for (auto & path : paths) {
++            auto lockPath = path;
++            lockPath += ".lock";
++            while (true) {
++                checkInterrupt();
++                // ORDWR | OCEXEC | ORCLOSE | OEXCL (native 9front flags).
++                AutoCloseFD fd(n9_create(lockPath.c_str(), 2 | 32 | 64 | 0x1000, 0600));
++                if (fd) {
++                    fds.emplace_back(fd.get(), lockPath);
++                    fd.release();
++                    break;
++                }
++                int error = cc9_errno_from_errstr_or(EIO);
++                std::string message = __n9_errstr_last(nullptr);
++                auto reason = message.substr(0, message.find(':'));
++                // cc9 also matches "exists" inside filenames. Only a real
++                // file-exists error means contention; other errors must fail.
++                if (error == EEXIST && reason != "file already exists" && reason != "file exists")
++                    error = EIO;
++                if (error != EEXIST)
++                    throw SysError(error, "creating path lock %1%: %2%", PathFmt(lockPath), message);
++                if (!wait) {
++                    unlock();
++                    return false;
++                }
++                if (!announced && !waitMsg.empty()) {
++                    printError(waitMsg);
++                    announced = true;
++                }
++                usleep(100000);
++            }
++        }
++        return true;
++    } catch (...) {
++        // Also needed when lockPaths is called by a constructor that throws.
++        unlock();
++        throw;
++    }
++#else
+ 
+     /* Note that `fds' is built incrementally so that the destructor
+        will only release those locks that we have already acquired. */
+@@ -128,13 +180,16 @@
+     }
+ 
+     return true;
++#endif
+ }
+ 
+ void PathLocks::unlock()
+ {
+     for (auto & i : fds) {
++#ifndef __plan9__
+         if (deletePaths)
+             deleteLockFile(i.second, i.first);
++#endif
+ 
+         if (close(i.first) == -1)
+             printError("error (ignored): cannot close lock file on %1%", PathFmt(i.second));
+--- a/src/libstore/sqlite.cc
++++ b/src/libstore/sqlite.cc
+@@ -1,10 +1,12 @@
+ #include "nix/store/sqlite.hh"
+-#include "nix/store/globals.hh"
++#include "nix/util/environment-variables.hh"
+ #include "nix/util/util.hh"
+ #include "nix/util/url.hh"
+ #include "nix/util/signals.hh"
+ 
+ #ifdef __linux__
++#  include "nix/util/file-descriptor.hh"
++#  include <fcntl.h>
+ #  include <sys/vfs.h>
+ #endif
+ 
+@@ -89,7 +91,13 @@
+     // useSQLiteWAL also indicates what virtual file system we need.  Using
+     // `unix-dotfile` is needed on NFS file systems and on Windows' Subsystem
+     // for Linux (WSL) where useSQLiteWAL should be false by default.
++#ifdef __plan9__
++    if (settings.useWAL)
++        throw Error("SQLite WAL mode is not supported on 9front");
++    const char * vfs = "unix-plan9";
++#else
+     const char * vfs = settings.useWAL ? 0 : "unix-dotfile";
++#endif
+     bool immutable = settings.mode == SQLiteOpenMode::Immutable;
+     int flags = immutable ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE;
+     if (settings.mode == SQLiteOpenMode::Normal)
+@@ -125,7 +133,11 @@
+ void SQLite::isCache()
+ {
+     exec("pragma synchronous = off");
++#ifdef __plan9__
++    exec("pragma main.journal_mode = truncate");
++#else
+     exec("pragma main.journal_mode = wal");
++#endif
+ }
+ 
+ void SQLite::exec(const std::string & stmt)
+--- a/src/libstore/local-store.cc
++++ b/src/libstore/local-store.cc
+@@ -126,6 +126,12 @@
+     , tempRootsDir(config->stateDir.get() / "temproots")
+     , fnTempRoots(tempRootsDir / std::to_string(getpid()))
+ {
++#ifdef __plan9__
++    if (config->readOnly)
++        throw Error("read-only LocalStore is not supported on 9front");
++    if (!config->getLocalSettings().buildUsersGroup.get().empty())
++        throw Error("build users are not supported on 9front");
++#endif
+     auto state(_state->lock());
+     state->stmts = std::make_unique<State::Stmts>();
+ 
+@@ -227,6 +233,12 @@
+     } catch (SystemError & e) { /* don't care about errors */
+     }
+ 
++#ifdef __plan9__
++    // Until shared locks are available, keep exclusive access for this
++    // connection's lifetime. Refuse contention instead of deadlocking clients.
++    if (!globalLock.lockPaths({dbDir / "big-lock"}, "", false))
++        throw Error("the 9front store is already open by another client");
++#else
+     /* Acquire the big fat lock in shared mode to make sure that no
+        schema upgrade is in progress. */
+     if (!config->readOnly) {
+@@ -249,6 +261,8 @@
+         lockFile(globalLock.get(), ltRead, true);
+     }
+ 
++#endif
++
+     /* Check the current database schema and if necessary do an
+        upgrade.  */
+     int curSchema = getSchema();
+@@ -282,6 +296,7 @@
+                 "which is no longer supported. To convert to the new format,\n"
+                 "please upgrade Nix to version 1.11 first.");
+ 
++#ifndef __plan9__
+         if (!lockFile(globalLock.get(), ltWrite, false)) {
+             printInfo("waiting for exclusive access to the Nix store...");
+             lockFile(
+@@ -289,6 +304,8 @@
+             lockFile(globalLock.get(), ltWrite, true);
+         }
+ 
++#endif
++
+         /* Get the schema version again, because another process may
+            have performed the upgrade already. */
+         curSchema = getSchema();
+@@ -320,7 +337,9 @@
+ 
+         writeFile(schemaPath, fmt("%1%", nixSchemaVersion), 0666, FsSync::Yes);
+ 
++#ifndef __plan9__
+         lockFile(globalLock.get(), ltRead, true);
++#endif
+     }
+ 
+     else
+@@ -437,7 +456,9 @@
+         auto fdTempRoots(_fdTempRoots.lock());
+         if (*fdTempRoots) {
+             fdTempRoots->close();
++#ifndef __plan9__
+             tryUnlink(fnTempRoots);
++#endif
+         }
+     } catch (...) {
+         ignoreExceptionInDestructor();
+@@ -899,7 +920,11 @@
+        the validity, at the expense of some speed of the path
+        registering operation. */
+     if (config->getLocalSettings().syncBeforeRegistering)
++#ifdef __plan9__
++        throw Error("sync-before-registering is not supported on 9front");
++#else
+         sync();
++#endif
+ #endif
+ 
+     return retrySQLite<void>([&]() {
+@@ -988,6 +1013,9 @@
+ 
+ void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairFlag repair, CheckSigsFlag checkSigs)
+ {
++#ifdef __plan9__
++    if (repair) throw Error("store repair is not supported on 9front");
++#endif
+     if (checkSigs && pathInfoIsUntrusted(info))
+         throw Error("cannot add path '%s' because it lacks a signature by a trusted key", printStorePath(info.path));
+ 
+@@ -1021,6 +1049,9 @@
+             if (repair || !isValidPath(info.path)) {
+ 
+                 deletePath(realPath);
++#ifdef __plan9__
++                AutoDelete incomplete(realPath);
++#endif
+ 
+                 /* While restoring the path from the NAR, compute the hash
+                 of the NAR. */
+@@ -1095,6 +1126,9 @@
+                 }
+ 
+                 registerValidPath(info);
++#ifdef __plan9__
++                incomplete.cancel();
++#endif
+             }
+ 
+             outputLock.setDeletion(true);
+@@ -1114,6 +1148,9 @@
+     const StorePathSet & references,
+     RepairFlag repair)
+ {
++#ifdef __plan9__
++    if (repair) throw Error("store repair is not supported on 9front");
++#endif
+     /* For computing the store path. */
+     auto hashSink = std::make_unique<HashSink>(hashAlgo);
+     TeeSource source{source0, *hashSink};
+@@ -1215,6 +1252,9 @@
+         if (repair || !isValidPath(dstPath)) {
+ 
+             deletePath(realPath);
++#ifdef __plan9__
++            AutoDelete incomplete(realPath);
++#endif
+ 
+             autoGC();
+ 
+@@ -1234,7 +1274,13 @@
+                 }
+             } else {
+                 /* Move the temporary path we restored above. */
++#ifdef __plan9__
++                // 9front cannot rename across directories. The output lock
++                // and delayed registration keep a partial copy invalid.
++                copyFile(tempPath, realPath, true);
++#else
+                 moveFile(tempPath.string(), realPath);
++#endif
+             }
+ 
+             /* For computing the nar hash. In recursive SHA-256 mode, this
+@@ -1259,6 +1305,9 @@
+             auto info = ValidPathInfo::makeFromCA(*this, name, std::move(desc), narHash.hash);
+             info.narSize = narHash.numBytesDigested;
+             registerValidPath(info);
++#ifdef __plan9__
++            incomplete.cancel();
++#endif
+         }
+ 
+         outputLock.setDeletion(true);
+@@ -1269,6 +1318,7 @@
+ 
+ /* Create a temporary directory in the store that won't be
+    garbage-collected until the returned FD is closed. */
++#ifndef __plan9__
+ std::pair<std::filesystem::path, AutoCloseFD> LocalStore::createTempDirInStore()
+ {
+     std::filesystem::path tmpDirFn;
+@@ -1288,6 +1338,8 @@
+     } while (!pathExists(tmpDirFn.string()) || !lockedByUs);
+     return {tmpDirFn, std::move(tmpDirFd)};
+ }
++
++#endif
+ 
+ void LocalStore::invalidatePathChecked(const StorePath & path)
+ {
+--- a/src/libstore/include/nix/store/local-store.hh
++++ b/src/libstore/include/nix/store/local-store.hh
+@@ -184,7 +184,11 @@
+     /**
+      * Lock file used for upgrading.
+      */
++#ifdef __plan9__
++    PathLocks globalLock;
++#else
+     AutoCloseFD globalLock;
++#endif
+ 
+     struct State
+     {
+--- a/src/libstore/globals.cc
++++ b/src/libstore/globals.cc
+@@ -17,7 +17,9 @@
+ #include <mutex>
+ #include <thread>
+ 
++#ifndef __plan9__
+ #include <curl/curl.h>
++#endif
+ #include <nlohmann/json.hpp>
+ 
+ #ifndef _WIN32
+@@ -89,8 +91,11 @@
+                                         .transform([](auto && s) { return std::filesystem::path(s); })
+                                         .value_or(nixStateDir / DEFAULT_SOCKET_PATH)))
+ {
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__plan9__)
+     buildUsersGroup = isRootUser() ? "nixbld" : "";
++#endif
++#ifdef __plan9__
++    useSQLiteWAL = false;
+ #endif
+     allowSymlinkedStore = getEnv("NIX_IGNORE_SYMLINK_STORE") == "1";
+ 
+@@ -603,7 +608,9 @@
+        [1]
+        https://github.com/apple-oss-distributions/objc4/blob/01edf1705fbc3ff78a423cd21e03dfc21eb4d780/runtime/objc-initialize.mm#L614-L636
+     */
++#ifndef __plan9__
+     curl_global_init(CURL_GLOBAL_ALL);
++#endif
+ #ifdef __APPLE__
+     /* On macOS, don't use the per-session TMPDIR (as set e.g. by
+        sshd). This breaks build users because they don't have access
+--- a/src/libstore/store-registration.cc
++++ b/src/libstore/store-registration.cc
+@@ -33,8 +33,10 @@
+                 auto stateDir = getOr(params, "state", settings.nixStateDir.string());
+                 if (access(stateDir.c_str(), R_OK | W_OK) == 0)
+                     return make_ref<LocalStore::Config>(params);
++#ifndef __plan9__
+                 else if (pathExists(settings.nixDaemonSocketFile))
+                     return make_ref<UDSRemoteStore::Config>(params);
++#endif
+ #ifdef __linux__
+                 else if (
+                     !pathExists(stateDir) && params.empty() && !isRootUser() && !getEnv("NIX_STORE_DIR").has_value()
+--- a/src/libstore/misc.cc
++++ b/src/libstore/misc.cc
+@@ -104,7 +104,11 @@
+     Activity act(*logger, lvlDebug, actUnknown, "querying info about missing paths");
+ 
+     // FIXME: make async.
++#ifdef __plan9__
++    ThreadPool pool(1);
++#else
+     ThreadPool pool(fileTransferSettings.httpConnections);
++#endif
+ 
+     struct State
+     {
+--- a/src/libutil/unix/users.cc
++++ b/src/libutil/unix/users.cc
+@@ -33,6 +33,10 @@
+     static std::filesystem::path homeDir = []() {
+         std::optional<std::string> unownedUserHomeDir = {};
+         auto homeDir = getEnv("HOME");
++#ifdef __plan9__
++        if (!homeDir)
++            homeDir = getEnv("home");
++#endif
+         if (homeDir) {
+             // Only use $HOME if doesn't exist or is owned by the current user.
+             try {
+--- a/src/libmain/include/nix/main/common-args.hh
++++ b/src/libmain/include/nix/main/common-args.hh
+@@ -1,5 +1,9 @@
+ #pragma once
+ ///@file
++
++#ifndef _WIN32
++#  include <unistd.h>
++#endif
+ 
+ #include "nix/util/args.hh"
+ #include "nix/util/repair-flag.hh"
+--- a/src/libmain/shared.cc
++++ b/src/libmain/shared.cc
+@@ -27,13 +27,13 @@
+ #  include <features.h>
+ #endif
+ 
+-#include <openssl/crypto.h>
+-
+ #include "nix/util/exit.hh"
+ #include "nix/util/strings.hh"
+ 
+ #include "main-config-private.hh"
+-#include "nix/expr/config.hh"
++#ifndef __plan9__
++#  include "nix/expr/config.hh"
++#endif
+ 
+ namespace nix {
+ 
+@@ -159,7 +159,11 @@
+ 
+     initLibStore(loadConfig);
+ 
+-#ifndef _WIN32
++#ifdef __plan9__
++    unix::startNoteHandler();
++#endif
++
++#if !defined(_WIN32) && !defined(__plan9__)
+     unix::startSignalHandlerThread();
+ 
+     /* Reset SIGCHLD to its default. */
+@@ -204,7 +208,7 @@
+         throw SysError("handling SIGTRAP");
+ #endif
+ 
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__plan9__)
+     /* Register a SIGSEGV handler to detect stack overflows.
+        Why not initLibExpr()? initGC() is essentially that, but
+        detectStackOverflow is not an instance of the init function concept, as
+@@ -349,6 +353,7 @@
+ 
+ RunPager::RunPager()
+ {
++#ifndef __plan9__ // Write directly to the native terminal; no Unix pager.
+     if (!isatty(STDOUT_FILENO))
+         return;
+     char * pager = getenv("NIX_PAGER");
+@@ -384,6 +389,7 @@
+     if (dup2(toPager.writeSide.get(), STDOUT_FILENO) == -1)
+         throw SysError("dupping standard output");
+ #endif
++#endif
+ }
+ 
+ RunPager::~RunPager()
+--- a/src/libmain/plugin.cc
++++ b/src/libmain/plugin.cc
+@@ -1,4 +1,4 @@
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__plan9__)
+ #  include <dlfcn.h>
+ #endif
+ 
+@@ -92,7 +92,7 @@
+             checkInterrupt();
+             /* handle is purposefully leaked as there may be state in the
+                DSO needed by the action of the plugin. */
+-#ifndef _WIN32 // TODO implement via DLL loading on Windows
++#if !defined(_WIN32) && !defined(__plan9__) // TODO implement via DLL loading on Windows
+             void * handle = dlopen(file.c_str(), RTLD_LAZY | RTLD_LOCAL);
+             if (!handle)
+                 throw Error("could not dynamically open plugin file %s: %s", PathFmt(file), dlerror());
+--- a/src/libmain/loggers.cc
++++ b/src/libmain/loggers.cc
+@@ -30,6 +30,11 @@
+         return makeSimpleLogger(true);
+     case LogFormat::internalJSON:
+         return makeJSONLogger(getStandardError());
++#ifdef __plan9__
++    case LogFormat::bar:
++    case LogFormat::barWithLogs:
++        throw Error("progress bars are not supported on 9front");
++#else
+     case LogFormat::bar:
+         return makeProgressBar();
+     case LogFormat::barWithLogs: {
+@@ -37,6 +42,7 @@
+         logger->setPrintBuildLogs(true);
+         return logger;
+     }
++#endif
+     default:
+         unreachable();
+     }
+--- a/src/nix/nix-store/nix-store.cc
++++ b/src/nix/nix-store/nix-store.cc
+@@ -878,6 +878,9 @@
+ /* Serve the nix store in a way usable by a restricted ssh user. */
+ static void opServe(Strings opFlags, Strings opArgs)
+ {
++#ifdef __plan9__
++    throw Error("the serve protocol is not supported on 9front");
++#else
+     bool writeAllowed = false;
+     for (auto & i : opFlags)
+         if (i == "--write")
+@@ -1088,6 +1091,7 @@
+ 
+         out.flush();
+     }
++#endif
+ }
+ 
+ static void opGenerateBinaryCacheKey(Strings opFlags, Strings opArgs)
+--- a/src/libutil/unix/include/nix/util/signals-impl.hh
++++ b/src/libutil/unix/include/nix/util/signals-impl.hh
+@@ -48,6 +48,11 @@
+  * See saveSignalMask().
+  */
+ void startSignalHandlerThread();
++
++#ifdef __plan9__
++/** Cooperative cancellation on interrupt/hangup notes, without a helper thread. */
++void startNoteHandler();
++#endif
+ 
+ /**
+  * Saves the signal mask, which is the signal mask that nix will restore

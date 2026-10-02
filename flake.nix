@@ -56,6 +56,7 @@
         '';
       };
       python = pkgs.python3.withPackages (p: [ p.pexpect ]);
+      nixUtil = pkgs.callPackage ./pkgs/nix { };
       testSupport =
         files:
         pkgs.lib.fileset.toSource {
@@ -71,7 +72,7 @@
             ${python}/bin/python ${
               testSupport [
                 ./tests/export_tree.py
-                ./tests/build_c.py
+                ./tests/artifacts.py
               ]
             }/export_tree.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 \
@@ -81,18 +82,31 @@
             test -s "$out/amd64/lib/libc.a"
             test -s "$out/sys/include/libc.h"
           '';
-      helloC =
-        pkgs.runCommand "hello-c-native-9front-amd64"
+      nixUtilTests =
+        pkgs.runCommand "nix-util-tests"
           {
+            SODIUM_LIBRARY = "${pkgs.libsodium}/lib/libsodium.so";
             requiredSystemFeatures = [ "kvm" ];
-            nativeBuildInputs = [ pkgs.go ];
+            nativeBuildInputs = [
+              pkgs.nix
+              pkgs.brotli
+              pkgs.zstd
+            ];
           }
           ''
-            ${python}/bin/python ${testSupport [ ./tests/build_c.py ]}/build_c.py \
-              ${pkgs.qemu}/bin/qemu-system-x86_64 \
-              ${vm}/9front.qcow2 ${./pkgs/hello-c-native} "$out"
-            export HOME="$TMPDIR" GOCACHE="$TMPDIR/go-cache" GOPROXY=off GOTOOLCHAIN=local
-            go run ${./tests/format.go} "$out/bin/hello-c"
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/libutil.py
+                ./tests/nix_store.py
+                ./tests/nix_eval.py
+                ./tests/cxx.py
+                ./tests/libutil_compression.py
+                ./tests/libutil_keys.py
+                ./tests/artifacts.py
+              ]
+            }/libutil.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-eval.elf "$out"
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit
@@ -132,7 +146,7 @@
             ${python}/bin/python ${
               testSupport [
                 ./tests/export_tree.py
-                ./tests/build_c.py
+                ./tests/artifacts.py
               ]
             }/export_tree.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
@@ -156,7 +170,7 @@
         ${python}/bin/python ${
           testSupport [
             ./tests/export_tree.py
-            ./tests/build_c.py
+            ./tests/artifacts.py
           ]
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
@@ -240,7 +254,7 @@
             }/guest_development.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${guestDevelopment} ${guestDevelopment.guestPrefix} ${development.guestPrefix} \
-              ${./pkgs/hello-c-native/main.c} ${./tests/c-abi} ${./tests/ape/main.c} \
+              ${./pkgs/hello-c-cross/main.c} ${./tests/c-abi} ${./tests/ape/main.c} \
               ${./tests/guest-development/bsd.c} "$out"
           '';
       packageTests = pkgs.runCommand "package-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
@@ -309,15 +323,6 @@
             'Hello from Nix on plan9/amd64!' "$@"
         '';
       };
-      smokeC = pkgs.writeShellApplication {
-        name = "smoke-test-c";
-        text = ''
-          exec ${python}/bin/python ${testSupport [ ./tests/smoke.py ]}/smoke.py \
-            ${pkgs.qemu}/bin/qemu-system-x86_64 \
-            ${vm}/9front.qcow2 ${helloC}/bin/hello-c \
-            'Hello from Nix-built C on 9front/amd64!' "$@"
-        '';
-      };
       smokeCross = pkgs.writeShellApplication {
         name = "smoke-test-c-cross";
         text = ''
@@ -335,7 +340,6 @@
       packages.${system} = {
         default = hello;
         hello-plan9 = hello;
-        hello-c-native = helloC;
         hello-c-cross = helloCross;
         inherit sha1sum;
         sha1sum-tests = sha1sumTests;
@@ -343,6 +347,8 @@
         ape-cross = apeCross;
         ape-tests = apeTests;
         inherit lua;
+        nix-util = nixUtil;
+        nix-util-tests = nixUtilTests;
         lua-package = luaPackage;
         sha1sum-package = sha1sumPackage;
         package-tests = packageTests;
@@ -366,7 +372,6 @@
         setup-vm = setup;
         run-vm = run;
         smoke-test = smoke;
-        smoke-test-c = smokeC;
         smoke-test-c-cross = smokeCross;
       };
       apps.${system} =
@@ -380,7 +385,6 @@
             setup-vm = setup;
             run-vm = run;
             smoke-test = smoke;
-            smoke-test-c = smokeC;
             smoke-test-c-cross = smokeCross;
           };
       checks.${system}.hello-format =

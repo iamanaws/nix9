@@ -7,7 +7,7 @@ The current suites passed on 2026-10-01 on Linux with KVM, using 9front release
 - Compiler tests compare native, cross-compiled, and mixed objects, covering
   arguments, callbacks, structures, floating point, and varargs.
 - Guest tests exercise installation, module lookup, file I/O, errors, and processes.
-  Baseline guest builds use the image's libraries; cross and development builds
+  Native compiler baselines use the image's libraries; cross and development builds
   use rebuilt libraries where configured.
 - Library tests use known vectors and independent Python results for checksums,
   compression, and arithmetic. Generator checks compare output with the guest.
@@ -20,4 +20,4 @@ snapshot changes. File transfers use host loopback without forwarded guest
 ports. The builds and tests work with the Nix sandbox enabled.
 
 See [development](development.md) for commands and saved results, and
-[toolchain limitations](feasibility.md#c-toolchain-status) for scope.
+[toolchain limitations](feasibility.md) for scope.

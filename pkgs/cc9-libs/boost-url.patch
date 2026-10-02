@@ -1,0 +1,28 @@
+--- a/libs/url/src/authority_view.cpp
++++ b/libs/url/src/authority_view.cpp
+@@ -208,9 +208,10 @@ encoded_host_address() const noexcept
+     case urls::host_type::ipv6:
+     case urls::host_type::ipvfuture:
+     {
++        // IPv6 zone IDs can contain percent escapes.
+         BOOST_ASSERT(
+             u_.decoded_[id_host] ==
+-                s.size());
++                pct_string_view(s).decoded_size());
+         BOOST_ASSERT(s.size() >= 2);
+         BOOST_ASSERT(s.front() == '[');
+         BOOST_ASSERT(s.back() == ']');
+--- a/libs/url/src/url_view_base.cpp
++++ b/libs/url/src/url_view_base.cpp
+@@ -345,9 +345,10 @@ encoded_host_address() const noexcept
+     case urls::host_type::ipv6:
+     case urls::host_type::ipvfuture:
+     {
++        // IPv6 zone IDs can contain percent escapes.
+         BOOST_ASSERT(
+             pi_->decoded_[id_host] ==
+-                s.size());
++                pct_string_view(s).decoded_size());
+         BOOST_ASSERT(s.size() >= 2);
+         BOOST_ASSERT(s.front() == '[');
+         BOOST_ASSERT(s.back() == ']');

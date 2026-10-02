@@ -1,0 +1,11 @@
+--- a/src/libstore/local-store.cc
++++ b/src/libstore/local-store.cc
+@@ -947,7 +947,7 @@
+                         printStorePath(cycle.path),
+                         printStorePath(cycle.parent));
+                 },
+-                [](auto &) { /* Success, continue */ }},
++                [](const auto &) { /* Success, continue */ }},
+             topoSortResult);
+ 
+         txn.commit();

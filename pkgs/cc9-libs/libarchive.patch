@@ -1,0 +1,25 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -148,8 +148,8 @@
+     # Place the functions and data into separate sections, allowing the linker
+     # to garbage collect the unused ones.
+     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
+-    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+-    SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections")
++    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --gc-sections")
++    SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --gc-sections")
+     # Printing the discarded section is "too much", so enable on demand.
+     #SET(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -Wl,--print-gc-sections")
+     #SET(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -Wl,--print-gc-sections")
+--- a/libarchive/CMakeLists.txt
++++ b/libarchive/CMakeLists.txt
+@@ -260,6 +260,9 @@
+   ENDIF(WIN32 AND MSVC AND MSVC_USE_STATIC_CRT)
+ ENDIF(BUILD_SHARED_LIBS)
+ 
++# cc9 lacks fchdir. Build the streaming APIs without disk traversal/extraction.
++LIST(FILTER libarchive_SOURCES EXCLUDE REGEX "^archive_(read_disk|write_disk|read_extract).*\\.c$")
++
+ # archive_static is a static library
+ ADD_LIBRARY(archive_static STATIC ${libarchive_SOURCES} ${include_HEADERS})
+ TARGET_INCLUDE_DIRECTORIES(archive_static PUBLIC .)

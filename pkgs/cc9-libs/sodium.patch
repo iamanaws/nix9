@@ -1,0 +1,21 @@
+--- a/src/libsodium/randombytes/sysrandom/randombytes_sysrandom.c
++++ b/src/libsodium/randombytes/sysrandom/randombytes_sysrandom.c
+@@ -186,7 +186,7 @@ randombytes_sysrandom_random_dev_open(void)
+ /* LCOV_EXCL_START */
+     struct stat        st;
+     static const char *devices[] = {
+-#  ifndef USE_BLOCKING_RANDOM
++#  if !defined(USE_BLOCKING_RANDOM) && !defined(__plan9__)
+         "/dev/urandom",
+ #  endif
+         "/dev/random", NULL
+@@ -209,6 +209,9 @@ randombytes_sysrandom_random_dev_open(void)
+             if (fstat(fd, &st) == 0 &&
+ #  ifdef __COMPCERT__
+                 1
++#  elif defined(__plan9__)
++                /* cc9 reports 9front devices as regular files. */
++                S_ISREG(st.st_mode)
+ #  elif defined(S_ISNAM)
+                 (S_ISNAM(st.st_mode) || S_ISCHR(st.st_mode))
+ #  else

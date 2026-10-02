@@ -1,0 +1,47 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -39460,6 +39460,7 @@
+   sqlite3_vfs *pVfs;                  /* The VFS that created this unixFile */
+   unixInodeInfo *pInode;              /* Info about locks on this inode */
+   int h;                              /* The file descriptor */
++  int plan9LockFd;                    /* Native lock fd + 1, or zero */
+   unsigned char eFileLock;            /* The type of lock held on this fd */
+   unsigned short int ctrlFlags;       /* Behavioral bits.  UNIXFILE_* flags */
+   int lastErrno;                      /* The unix errno from last I/O error */
+@@ -41650,6 +41651,8 @@
+ ** client may hold RESERVED. Or, if the caller holds no lock, then it
+ ** is assumed another client holds RESERVED if the lock-file exists.
+ */
++#include "plan9-lock.c"
++
+ static int dotlockCheckReservedLock(sqlite3_file *id, int *pResOut) {
+   unixFile *pFile = (unixFile*)id;
+   SimulateIOError( return SQLITE_IOERR_CHECKRESERVEDLOCK; );
+@@ -45070,6 +45073,8 @@
+   nolockCheckReservedLock,  /* xCheckReservedLock method */
+   0                         /* xShmMap method */
+ )
++IOMETHODS(plan9IoFinder, plan9IoMethods, 1, plan9Close, plan9Lock,
++          plan9Unlock, plan9CheckReservedLock, 0)
+ IOMETHODS(
+   dotlockIoFinder,          /* Finder function name */
+   dotlockIoMethods,         /* sqlite3_io_methods object name */
+@@ -45390,6 +45395,10 @@
+   }
+ #endif
+ 
++  else if( pLockingStyle == &plan9IoMethods ){
++    pNew->lockingContext = sqlite3_mprintf("%s.p9lock", zFilename);
++    if( !pNew->lockingContext ) rc = SQLITE_NOMEM_BKPT;
++  }
+   else if( pLockingStyle == &dotlockIoMethods ){
+     /* Dotfile locking uses the file path so it needs to be included in
+     ** the dotlockLockingContext
+@@ -47708,6 +47717,7 @@
+     UNIXVFS("unix",          posixIoFinder ),
+ #endif
+     UNIXVFS("unix-none",     nolockIoFinder ),
++    UNIXVFS("unix-plan9",    plan9IoFinder ),
+     UNIXVFS("unix-dotfile",  dotlockIoFinder ),
+     UNIXVFS("unix-excl",     posixIoFinder ),
+ #if OS_VXWORKS
