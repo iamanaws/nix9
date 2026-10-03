@@ -1,6 +1,6 @@
 """Exercise upstream Nix's libutil on 9front, using host Nix as the oracle.
 
-Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_EVAL_ELF HELLO_SOURCE NATIVE_TOOLS OUTPUT
+Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_EVAL_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
 """
 
 import base64
@@ -18,7 +18,7 @@ from libutil_compression import check_compression
 from libutil_keys import key_fixtures, check_keys
 
 
-qemu, disk, cc9, executable, nix_store, nix_eval, hello, tools, output = sys.argv[1:]
+qemu, disk, cc9, executable, nix_store, nix_eval, hello, abi, packages, tools, output = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     tree = root / "tree"
@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory() as directory:
     files = {"probe.elf": executable, "nix-store.elf": nix_store, "nix-eval.elf": nix_eval}
     files.update(key_fixtures(root))
     files.update(eval_fixtures(root))
-    build_files, build_paths = build_fixtures(root, Path(hello), Path(tools))
+    build_files, build_paths = build_fixtures(root, Path(hello), Path(abi), Path(packages), Path(tools))
     files.update(build_files)
     for name, data in fixtures.items():
         path = root / f"{name}.nar"
@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory() as directory:
         "processes": ["pipes", "exit status", "PATH", "environment", "working directory",
                       "close-on-exec", "wait", "kill", "interrupt/hangup", "cancellation cleanup"],
         "sqlite": ["store schema", "bindings", "transactions", "foreign keys", "busy retry",
-                   "killed-writer recovery", "40 competing commits", "file replacement",
+                   "killed-writer recovery", "400 competing commits", "file replacement",
                    "immutable reads", "rollback journal cache"],
         "local_store": ["registration", "metadata", "references", "closure", "rollback",
                         "reopen", "exclusive access", "killed-client recovery", "temporary roots",

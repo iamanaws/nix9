@@ -37,15 +37,15 @@ class SerialLog:
 
 
 @contextlib.contextmanager
-def boot(qemu, disk):
+def boot(qemu, disk, *, snapshot=True):
     child = pexpect.spawn(
         qemu,
         [
             "-enable-kvm", "-m", "2G", "-smp", "2",
             "-display", "none", "-monitor", "none", "-serial", "stdio",
-            "-snapshot", "-drive", f"file={disk},format=qcow2,if=virtio",
+            "-drive", f"file={disk},format=qcow2,if=virtio",
             "-nic", "user",
-        ],
+        ] + (["-snapshot"] if snapshot else []),
         encoding="utf-8",
         codec_errors="replace",
         timeout=120,

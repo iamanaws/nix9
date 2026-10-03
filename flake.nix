@@ -90,13 +90,24 @@
           ]
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-          "$TMPDIR/tools.tar" amd64/bin/6c amd64/bin/6l
+          "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
+          amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
-        cp amd64/bin/6c amd64/bin/6l "$out/bin/"
+        cp amd64/bin/* "$out/bin/"
+        cp rc/lib/rcmain "$out/rcmain"
         cp -r ${sysroot}/sys/include "$out/sys/"
         cp -r ${sysroot}/amd64/include "$out/amd64/"
         cp ${libc}/lib/libc.a "$out/amd64/lib/"
+      '';
+      nativePackages = pkgs.runCommand "native-package-inputs" { } ''
+        mkdir "$out"
+        cp -r ${secSource} "$out/libsec"
+        cp ${./pkgs/libsec/native.nix} "$out/libsec.nix"
+        cp ${./pkgs/sha1sum/native.nix} "$out/sha1sum.nix"
+        cp ${./lib/mk-derivation.nix} "$out/mk-derivation.nix"
+        cp ${sha1sum.source} "$out/sha1sum.c"
+        cp ${sha1sum}/bin/sha1sum "$out/cross"
       '';
       nixUtilTests =
         pkgs.runCommand "nix-util-tests"
@@ -116,6 +127,8 @@
                 ./tests/nix_store.py
                 ./tests/nix_eval.py
                 ./tests/nix_build.py
+                ./tests/c_abi.py
+                ./tests/sha1sum.py
                 ./tests/cxx.py
                 ./tests/libutil_compression.py
                 ./tests/libutil_keys.py
@@ -124,7 +137,10 @@
             }/libutil.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-eval.elf \
-              ${./pkgs/hello-c-cross} ${nativeTools} "$out"
+              ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
+            ${python}/bin/python ${testSupport [ ./tests/native_install.py ]}/native_install.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nixPackage} ${nixPackage.guestPrefix} "$out"
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit
@@ -237,6 +253,18 @@
         package = sha1sum;
       };
       mkGuestEnvironment = import ./lib/mk-guest-environment.nix { inherit pkgs; };
+      nativeNix = pkgs.callPackage ./pkgs/nix/package.nix {
+        inherit
+          nixUtil
+          nativeTools
+          secSource
+          sha1sum
+          ;
+      };
+      nixPackage = mkGuestPackage {
+        name = "nix-${nixUtil.version}";
+        package = nativeNix;
+      };
       guestEnvironment = mkGuestEnvironment {
         name = "default";
         packages = [
@@ -353,6 +381,7 @@
     in
     {
       lib.mkPlan9Program = mkPlan9Program;
+      lib.mkDerivation = import ./lib/mk-derivation.nix;
       lib.mkGuestPackage = mkGuestPackage;
       lib.mkGuestEnvironment = mkGuestEnvironment;
       packages.${system} = {
@@ -373,6 +402,8 @@
         package-tests = packageTests;
         guest-environment = guestEnvironment;
         guest-development = guestDevelopment;
+        nix = nativeNix;
+        nix-package = nixPackage;
         guest-development-tests = developmentTests;
         inherit libbz2;
         inherit libbsd;

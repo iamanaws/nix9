@@ -1,0 +1,70 @@
+"""Install native Nix and reuse a guest-built package after a clean reboot."""
+
+import functools
+import http.server
+import json
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+
+from guest import boot
+
+
+qemu, image, archive, prefix, output = sys.argv[1:]
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    disk = root / "persistent.qcow2"
+    subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
+                    "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
+    shutil.copyfile(archive, root / "package.tar")
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with boot(qemu, disk, snapshot=False) as guest:
+                guest.child.timeout = 300
+                guest.command(f"hget -o /tmp/package.tar http://10.0.2.2:{server.server_port}/package.tar")
+                guest.command("cd / && tar xf /tmp/package.tar")
+                guest.command(f". {prefix}/activate")
+                guest.command("nix-eval --expr '6 * 7'", "42")
+                result = guest.command(
+                    f"nix-eval --instantiate --expr '(import {prefix}/share/nix9).sha1sum'")
+                paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum\.drv$", result)
+                if len(paths) != 1:
+                    raise RuntimeError(f"missing installed derivation: {result}")
+                drv = paths[0]
+                result = guest.command(f"nix-store --realise {drv}")
+                paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum$", result)
+                if len(paths) != 1:
+                    raise RuntimeError(f"missing installed output: {result}")
+                package = paths[0]
+                guest.command(f"echo -n abc | {package}/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
+                guest.command(f"nix-store --verify-path {drv} {package}")
+                guest.command("rm /tmp/package.tar")
+        finally:
+            server.shutdown()
+            thread.join()
+    # A second QEMU process uses the same overlay, without any host file server.
+    with boot(qemu, disk, snapshot=False) as guest:
+        guest.command(f". {prefix}/activate")
+        guest.command(f"nix-store --check-validity {drv} {package}")
+        result = guest.command(f"nix-store --realise {drv}", package)
+        if re.search(r"(?m)^building '", result):
+            raise RuntimeError(f"persisted package was rebuilt: {result}")
+        guest.command(f"nix-store --verify-path {drv} {package}")
+        guest.command(f"echo -n abc | {package}/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
+
+Path(output, "native-install.json").write_text(json.dumps({
+    "prefix": prefix,
+    "derivation": drv,
+    "output": package,
+    "installation": "passed",
+    "native-build": "passed",
+    "reuse-after-reboot": "passed",
+}, indent=2) + "\n")
+print("PASS: installed native Nix builds and reuses sha1sum after reboot")

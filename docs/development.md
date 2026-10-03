@@ -59,7 +59,16 @@ tools with installed headers and rebuilt runtimes. `pcc` sets up a private
 namespace for APE's standard paths. `guest-development-tests` verifies builds
 with the image's headers and libraries hidden.
 
-Native Nix builds the [C example](../pkgs/hello-c-cross/native.nix) with source
-and `native-tools` imported into its store. The toolchain bundles the image's
-compiler and headers with rebuilt libc. `nix-util-tests` builds and runs the
-program with the image's compiler, headers and libraries hidden.
+For native Nix, install `nix-package` with the same VM instructions, then run:
+
+```sh
+. /usr/local/pkg/nix-2.34.8/activate
+cd /usr/local/pkg/nix-2.34.8/share/nix9
+drv=`{nix-eval --instantiate --expr '(import ./.).sha1sum'}
+result=`{nix-store --realise $drv}
+echo -n abc | $result/bin/sha1sum
+```
+
+The store persists at `/usr/local/nix/store`; activate the environment again after login.
+Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
+and bootstrap tools. `nix-util-tests` checks isolated builds and reuse after reboot.

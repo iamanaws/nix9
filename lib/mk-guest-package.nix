@@ -13,6 +13,7 @@ pkgs.runCommand "${name}-package.tar" { passthru = { inherit guestPrefix; }; } '
   path=(${guestPrefix}/bin $path)
   if(~ $#PATH 0) PATH=/bin
   PATH=${guestPrefix}/bin^:^$PATH
+  ${package.guestActivation or ""}
   status='''
   EOF
   tar --format=ustar --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner \

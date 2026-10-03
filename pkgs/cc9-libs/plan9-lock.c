@@ -1,6 +1,7 @@
 /* Experimental rollback-journal locking for the pinned hjfs guest.
  * All lock levels exclude other connections, as with unix-dotfile.
- * OEXCL makes acquisition atomic; ORCLOSE removes the marker at final close,
+ * A kernel service lock serializes marker creation: hjfs can otherwise create
+ * duplicate names concurrently. ORCLOSE removes markers at final close,
  * including process death. Do not mix this VFS with other lock modes.
  * Forked children can retain the descriptor; power loss can leave the marker.
  * Included by sqlite3.c so the ordinary Unix I/O methods remain unchanged.
@@ -41,20 +42,29 @@ static int plan9Lock(sqlite3_file *id, int level){
   if( !p->plan9LockFd ){
     /* ORDWR | OCEXEC | ORCLOSE | OEXCL. Use native flags, not cc9's
      * POSIX open wrapper, which does not expose remove-on-close. */
-    long fd = n9_create((const char *)p->lockingContext, 2|32|64|0x1000, 0600);
+    /* Keep the same gate as Nix path locks. Only creation is serialized;
+     * unrelated databases can still hold their own locks concurrently. */
+    long gate = n9_create("#s/nix9-lock-create", 1|32|64|0x1000, 0600);
+    long fd = gate < 0 ? -1 : n9_create((const char *)p->lockingContext, 2|32|64|0x1000, 0600);
     if( fd < 0 ){
       int err = cc9_errno_from_errstr_or(EIO);
       const char *message = __n9_errstr_last(0);
+      int exists = (!strncmp(message, "file already exists", 19) &&
+                    (!message[19] || message[19] == ':')) ||
+                   (!strncmp(message, "file exists", 11) &&
+                    (!message[11] || message[11] == ':'));
+      if( gate >= 0 ) n9_close((int)gate);
       /* Match the error reason, not "exists" inside a filename. */
       if( err == EEXIST ){
-        if( (!strncmp(message, "file already exists", 19) &&
-             (!message[19] || message[19] == ':')) ||
-            (!strncmp(message, "file exists", 11) &&
-             (!message[11] || message[11] == ':')) ) return SQLITE_BUSY;
+        if( exists ) return SQLITE_BUSY;
         err = EIO;
       }
       storeLastErrno(p, err);
       return SQLITE_IOERR_LOCK;
+    }
+    if( n9_close((int)gate) < 0 ){
+      n9_close((int)fd);
+      return SQLITE_IOERR_UNLOCK;
     }
     int rc = plan9Refresh(p);
     if( rc != SQLITE_OK ){

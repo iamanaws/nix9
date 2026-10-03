@@ -12,11 +12,15 @@ let
     url = "https://raw.githubusercontent.com/Alino/agent9/3022c5609caa189aeb556d7d3828f471efd05f62/cc9/runtime/crt0.c";
     hash = "sha256:dc7c521794bfa2b7a07720e40b5a18a1e1a527d27e31414e995904bce9c733fc";
   };
+  elf2aout = fetchurl {
+    url = "https://raw.githubusercontent.com/Alino/agent9/3022c5609caa189aeb556d7d3828f471efd05f62/cc9/host/elf2aout.py";
+    hash = "sha256:0f1f502769c8c2d273649ddfed5b713c86ebe1f38017b66368f14004437fa8a5";
+  };
 in
 runCommand "cc9-runtime-0.2.2"
   {
     passthru = {
-      inherit archive;
+      inherit archive elf2aout;
       setup = ./setup.sh;
       cmake = ./toolchain.cmake;
     };

@@ -158,6 +158,7 @@ static void raceWriters() {
     using namespace nix;
     Pipe ready, start;
     ready.create(); start.create();
+    constexpr int commits = 200;
     Pid children[2];
     for (auto &child : children) {
         child = startProcess([&] {
@@ -168,7 +169,7 @@ static void raceWriters() {
                 writeFull(ready.writeSide.get(), "r");
                 char byte;
                 readFull(start.readSide.get(), &byte, 1);
-                for (int i = 0; i < 20; ++i) {
+                for (int i = 0; i < commits; ++i) {
                     retrySQLite<void>([&] {
                         SQLiteTxn txn(db);
                         SQLiteStmt update(db, "UPDATE ValidPaths SET narSize=narSize+1 WHERE id=1");
@@ -186,8 +187,10 @@ static void raceWriters() {
     writeFull(start.writeSide.get(), "rr");
     for (auto &child : children) require(statusOk(child.wait()), "competing writer failed");
     auto db = openDB();
-    require(number(db, "SELECT narSize FROM ValidPaths WHERE id=1") == 141,
-            "competing writers lost committed updates");
+    auto count = number(db, "SELECT narSize FROM ValidPaths WHERE id=1");
+    if (count != 101 + 2 * commits)
+        throw std::runtime_error("competing writers: expected " + std::to_string(101 + 2 * commits)
+                                 + ", got " + std::to_string(count));
     require(text(db, "PRAGMA integrity_check") == "ok", "race corrupted database");
 }
 

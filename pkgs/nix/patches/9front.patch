@@ -339,13 +339,13 @@
  
  namespace nix {
  
-@@ -73,6 +79,52 @@
+@@ -73,6 +79,54 @@
  bool PathLocks::lockPaths(const std::set<std::filesystem::path> & paths, const std::string & waitMsg, bool wait)
  {
      assert(fds.empty());
 +#ifdef __plan9__
-+    // Exclusive path locks only: cc9 does not implement flock. OEXCL creates
-+    // the marker atomically; ORCLOSE removes it on the last descriptor close.
++    // Exclusive path locks only: cc9 does not implement flock. A kernel
++    // service gate prevents hjfs duplicate creates; ORCLOSE cleans up markers.
 +    // Forked children retain the lock until close/exec. Never unlink a held
 +    // marker, and never reclaim a marker left by a server crash automatically.
 +    try {
@@ -356,7 +356,8 @@
 +            while (true) {
 +                checkInterrupt();
 +                // ORDWR | OCEXEC | ORCLOSE | OEXCL (native 9front flags).
-+                AutoCloseFD fd(n9_create(lockPath.c_str(), 2 | 32 | 64 | 0x1000, 0600));
++                AutoCloseFD gate(n9_create("#s/nix9-lock-create", 1 | 32 | 64 | 0x1000, 0600));
++                AutoCloseFD fd(gate ? n9_create(lockPath.c_str(), 2 | 32 | 64 | 0x1000, 0600) : -1);
 +                if (fd) {
 +                    fds.emplace_back(fd.get(), lockPath);
 +                    fd.release();
@@ -364,6 +365,7 @@
 +                }
 +                int error = cc9_errno_from_errstr_or(EIO);
 +                std::string message = __n9_errstr_last(nullptr);
++                gate.close();
 +                auto reason = message.substr(0, message.find(':'));
 +                // cc9 also matches "exists" inside filenames. Only a real
 +                // file-exists error means contention; other errors must fail.
@@ -392,7 +394,7 @@
  
      /* Note that `fds' is built incrementally so that the destructor
         will only release those locks that we have already acquired. */
-@@ -128,13 +180,16 @@
+@@ -128,13 +182,16 @@
      }
  
      return true;

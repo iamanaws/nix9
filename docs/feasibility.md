@@ -23,7 +23,7 @@ libraries. Boehm GC, S3 support, and Linux seccomp can be disabled.
 | C++ | Nix archive, streaming, hashing, compression, URL parsing, and signing code runs on 9front with cc9. The full `libutil` library and `nix` CLI remain unported. The build omits libarchive disk APIs; coroutine stacks and libsodium allocations lack guard pages. |
 | ABI | cc9 uses the SysV ABI. Our existing Plan 9 and APE archives cannot be linked into it; Nix dependencies need separate builds. |
 | Filesystem | The [NAR probe](../tests/nar.py) round-tripped Nix 2.34.8 archives byte-for-byte, including links and control characters in names. Regular files and directories also survived extraction and re-archiving. Links and unsupported names stay in archives; extraction rejects them before writing. Native symlink resolution is still missing. |
-| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. It permits one client at a time, using [native locks](../pkgs/cc9-libs/plan9-lock.c) and rollback journals. GC, repair, WAL and multiuser mode remain unsupported; power-loss recovery is untested. |
+| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. It permits one client at a time, using [native locks](../pkgs/cc9-libs/plan9-lock.c) within one kernel service namespace and rollback journals. GC, profiles, permanent roots, repair, WAL and multiuser mode remain unsupported; power-loss recovery is untested. |
 | Processes and locks | Child processes support pipes, PATH, environments, wait and kill. Interrupt/hangup notes cancel at Nix interruption checks. Exclusive path locks pass contention, fork/exec and killed-holder tests; server crashes may leave markers. Generic file locks, credentials, process groups, signal threads and PTYs remain unsupported. |
 
 The [Nix build](../pkgs/nix) uses the pinned [cc9 runtime](../pkgs/cc9) and
@@ -34,11 +34,5 @@ Builds run on Linux and tests in a disposable VM:
 ```sh
 nix build .#nix-util-tests -L
 ```
-
-## Next step
-
-Track the builder shell and basic utilities in the store too. The compiler,
-headers and libc are already explicit inputs. Symlinks, profiles and permanent
-GC roots remain open.
 
 [nix]: https://github.com/NixOS/nix/tree/f3f1c3c5b8ad91850e0f7c590cf177f7ab022024

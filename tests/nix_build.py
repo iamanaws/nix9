@@ -5,12 +5,26 @@ import re
 import shutil
 import subprocess
 
+from c_abi import EXPECTED as ABI_EXPECTED
+from sha1sum import FIXTURES as SUM_FIXTURES, check_sha1sum
+
 STORE = "local?store=/tmp/n9/store&state=/tmp/n9/state&log=/tmp/n9/log"
 
 
-def build_fixtures(root, hello, tools):
+def build_fixtures(root, hello, abi, packages, tools):
     shutil.copytree(tools, root / "native-tools")
     (root / "native-tools.nar").write_bytes(subprocess.check_output(["nix-store", "--dump", str(tools)]))
+    shutil.copytree(abi, root / "abi")
+    (root / "abi.nar").write_bytes(subprocess.check_output(["nix-store", "--dump", str(abi)]))
+    shutil.copytree(packages, root / "packages")
+    (root / "packages.nar").write_bytes(subprocess.check_output(["nix-store", "--dump", str(packages)]))
+    sums = root / "sums"
+    sums.mkdir()
+    shutil.copyfile(packages / "cross", sums / "cross")
+    (sums / "cross").chmod(0o755)
+    for name, data in SUM_FIXTURES.items():
+        (sums / name).write_bytes(data)
+    (root / "sums.nar").write_bytes(subprocess.check_output(["nix-store", "--dump", str(sums)]))
     for name in ("main.c", "native.nix"):
         shutil.copyfile(hello / name, root / name)
     path = root / "build-cases.nix"
@@ -22,9 +36,18 @@ def build_fixtures(root, hello, tools):
         } // extra);
         good = mk "native-input"
           "/bin/echo ran >> /tmp/n9-count; /bin/echo native > $out" {};
+        mkDerivation = import ./packages/mk-derivation.nix { tools = ./native-tools; };
+        abi = import ./abi/native.nix { inherit mkDerivation; };
+        libsec = import ./packages/libsec.nix {
+          inherit mkDerivation; src = ./packages/libsec;
+        };
       in {
-        inherit good;
-        hello = import ./native.nix { tools = ./native-tools; };
+        inherit good abi libsec;
+        sha1sum = import ./packages/sha1sum.nix {
+          inherit mkDerivation libsec; src = ./packages/sha1sum.c;
+        };
+        library = abi.library;
+        hello = import ./native.nix { inherit mkDerivation; };
         parent = mk "native-parent"
           "/bin/echo builder-log; /bin/cat $input > $out; /bin/echo $input >> $out"
           { input = good; };
@@ -51,11 +74,14 @@ def build_fixtures(root, hello, tools):
     content.write_text("native\n" + expected["good"]["out"] + "\n")
     nar = root / "build-parent.nar"
     nar.write_bytes(subprocess.check_output(["nix-store", "--dump", str(content)]))
-    return {name: root / name for name in (path.name, nar.name, "main.c", "native.nix", "native-tools.nar")}, expected
+    return {name: root / name for name in (path.name, nar.name, "main.c", "native.nix", "abi.nar", "packages.nar", "sums.nar", "native-tools.nar")}, expected
 
 
 def check_nix_build(guest, expected):
     guest.command("/tmp/nix-store --restore /tmp/native-tools < /tmp/native-tools.nar")
+    guest.command("/tmp/nix-store --restore /tmp/abi < /tmp/abi.nar")
+    guest.command("/tmp/nix-store --restore /tmp/packages < /tmp/packages.nar")
+    guest.command("/tmp/nix-store --restore /tmp/sums < /tmp/sums.nar")
     guest.command(f"buildstore='{STORE}'")
     evaluate = "/tmp/nix-eval --store $buildstore --instantiate"
     store = "/tmp/nix-store --store $buildstore"
@@ -68,12 +94,21 @@ def check_nix_build(guest, expected):
     for name in ("main.c", "native-tools"):
         if not re.search(r"(?m)^/tmp/n9/store/[a-z0-9]{32}-" + re.escape(name) + "$", inputs):
             raise RuntimeError(f"missing derivation input {name}:\n{inputs}")
-    guest.command("rm -rf /tmp/main.c /tmp/native-tools")
+    abi, library = expected["abi"], expected["library"]
+    guest.command(f"{store} --query --references {abi['drv']}", library["drv"])
+    inputs = guest.command(f"{store} --query --references {library['drv']}")
+    for name in ("callee.c", "abi.h", "native-tools"):
+        if not re.search(r"(?m)^/tmp/n9/store/[a-z0-9]{32}-" + re.escape(name) + "$", inputs):
+            raise RuntimeError(f"missing library input {name}:\n{inputs}")
+    sums, libsec = expected["sha1sum"], expected["libsec"]
+    guest.command(f"{store} --query --references {sums['drv']}", libsec["drv"])
+    guest.command("rm -rf /tmp/main.c /tmp/abi /tmp/packages /tmp/native-tools")
     guest.command("mkdir /tmp/n9-empty")
-    hidden = ("/sys/include", "/amd64/include", "/amd64/lib")
+    hidden = ("/sys/include", "/amd64/include", "/amd64/lib", "/rc/lib")
     for directory in hidden:
         guest.command(f"bind /tmp/n9-empty {directory}")
-    for tool in ("6c", "6l"):
+    hidden_tools = ("6a", "6c", "6l", "ar", "awk", "cp", "mpc", "rc", "mkdir")
+    for tool in hidden_tools:
         guest.command(f"bind /dev/null /amd64/bin/{tool}")
         guest.command(f"test ! -s /amd64/bin/{tool}")
     guest.command("test ! -e /amd64/lib/libc.a && test ! -e /sys/include/libc.h")
@@ -84,7 +119,27 @@ def check_nix_build(guest, expected):
             raise RuntimeError(f"missing native C result: {line}")
     guest.command(f"{store} --verify-path {hello['out']}")
 
-    for tool in ("6c", "6l"):
+    guest.command(f"test ! -e {library['out']} && test ! -e {abi['out']}")
+    guest.command(f"{store} --realise {abi['drv']}", abi["out"])
+    output = guest.command(f"{abi['out']}/bin/abi-tests alpha 23", ABI_EXPECTED[-1])
+    for line in ABI_EXPECTED:
+        if line not in output.splitlines():
+            raise RuntimeError(f"missing native library result: {line}")
+    guest.command(f"{store} --check-validity {library['out']}")
+    guest.command(f"{store} --verify-path {abi['out']} {library['out']}")
+    output = guest.command(f"{store} --realise {abi['drv']}", abi["out"])
+    if re.search(r"(?m)^building '", output):
+        raise RuntimeError(f"native library or consumer was rebuilt:\n{output}")
+
+    guest.command(f"test ! -e {libsec['out']} && test ! -e {sums['out']}")
+    guest.command(f"{store} --realise {sums['drv']}", sums["out"])
+    check_sha1sum(guest, {"native": f"{sums['out']}/bin/sha1sum", "cross": "/tmp/sums/cross"}, "/tmp/sums")
+    guest.command(f"{store} --verify-path {sums['out']} {libsec['out']}")
+    output = guest.command(f"{store} --realise {sums['drv']}", sums["out"])
+    if re.search(r"(?m)^building '", output):
+        raise RuntimeError(f"libsec or sha1sum was rebuilt:\n{output}")
+
+    for tool in hidden_tools:
         guest.command(f"unmount /dev/null /amd64/bin/{tool}")
     for directory in hidden:
         guest.command(f"unmount /tmp/n9-empty {directory}")
@@ -126,5 +181,5 @@ def check_nix_build(guest, expected):
     guest.command(f"test ! -e {cancel['out']} && test ! -e {cancel['out']}.lock")
     guest.command("test ! -e /tmp/n9-late")
     guest.command(f"{store} --verify-path {parent['out']} {good['out']}")
-    return ["host derivation paths", "native builders", "C compilation with store toolchain and sources", "dependencies", "references", "logs",
+    return ["host derivation paths", "native builders", "C compilation with store toolchain, shell and sources", "separate C library and consumer", "libsec and sha1sum (23 native/cross cases)", "dependencies", "references", "logs",
             "reuse", "failed-output cleanup", "unsupported modes", "cancellation and child cleanup"]
