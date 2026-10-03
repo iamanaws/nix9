@@ -3,8 +3,9 @@
 Packages cross-compile on Linux. An experimental native `nix-store` adds files
 and directories and queries metadata on 9front. `nix-instantiate` evaluates expressions
 as JSON and instantiates derivations. Native builds use upstream Nix’s scheduler
-with a 9front process backend. They support input-addressed outputs, including
-partial rebuilds, without sandboxing or a diverted store. The evaluator uses upstream’s
+with a 9front process backend. They support input-addressed outputs and flat or
+recursive fixed outputs, without sandboxing or a diverted store. Partial rebuilds
+preserve valid outputs; fixed-output hash mismatches are discarded. The evaluator uses upstream’s
 no-GC mode for short-lived runs; flakes and network fetchers remain unported.
 
 Our patched [goken9cc](../pkgs/goken9cc) rebuilds C runtimes and libraries on

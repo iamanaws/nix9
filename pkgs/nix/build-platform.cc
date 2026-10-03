@@ -9,6 +9,8 @@
 #include "nix/util/environment-variables.hh"
 #include "nix/util/current-process.hh"
 #include "nix/util/file-system.hh"
+#include "nix/util/source-path.hh"
+#include "nix/util/posix-source-accessor.hh"
 #include "nix/util/signals.hh"
 #include "build/derivation-check.hh"
 #include <fcntl.h>
@@ -53,9 +55,13 @@ public:
         if (buildMode != bmNormal)
             throw Error("only normal builds are supported on 9front");
         for (auto &[name, output] : drv.outputs) {
-            auto addressed = std::get_if<DerivationOutput::InputAddressed>(&output.raw);
-            if (!addressed) throw Error("9front builds require input-addressed outputs");
-            outputPaths.emplace(name, addressed->path);
+            if (auto fixed = std::get_if<DerivationOutput::CAFixed>(&output.raw)) {
+                if (fixed->ca.method != ContentAddressMethod::Raw::Flat &&
+                    fixed->ca.method != ContentAddressMethod::Raw::NixArchive)
+                    throw Error("9front fixed-output builds require flat or recursive hashing");
+            } else if (!std::holds_alternative<DerivationOutput::InputAddressed>(output.raw))
+                throw Error("9front builds require input-addressed or fixed outputs");
+            outputPaths.emplace(name, *output.path(store, drv.name, name));
         }
         if (store.storeDir != store.config->realStoreDir.get())
             throw Error("building in a diverted store is not supported on 9front");
@@ -177,6 +183,19 @@ public:
                 ValidPathInfo info(path, {store, hash});
                 info.narSize = size;
                 info.references = std::move(found);
+                if (auto fixed = std::get_if<DerivationOutput::CAFixed>(&drv.outputs.at(name).raw)) {
+                    auto method = fixed->ca.method.getFileIngestionMethod();
+                    if (method == FileIngestionMethod::Flat) {
+                        auto st = lstat(physical);
+                        if (!S_ISREG(st.st_mode) || (st.st_mode & S_IXUSR))
+                            throw BuildError(BuildResult::Failure::OutputRejected,
+                                "flat fixed-output builds require a non-executable regular file");
+                    }
+                    auto content = hashPath(
+                        {getFSSourceAccessor(), CanonPath(physical.string())},
+                        static_cast<FileSerialisationMethod>(method), fixed->ca.hash.algo);
+                    info.ca = ContentAddress{fixed->ca.method, content.hash};
+                }
                 info.deriver = drvPath;
                 info.ultimate = true;
                 infos.emplace(name, info);

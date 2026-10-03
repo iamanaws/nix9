@@ -1,6 +1,7 @@
 """Build derivations with native Nix and compare their paths with host Nix."""
 
 import json
+import hashlib
 import re
 import shutil
 import subprocess
@@ -27,6 +28,13 @@ def build_fixtures(root, hello, abi, packages, tools):
     (root / "sums.nar").write_bytes(subprocess.check_output(["nix-store", "--dump", str(sums)]))
     for name in ("main.c", "native.nix"):
         shutil.copyfile(hello / name, root / name)
+    tree = root / "fixed-tree"
+    (tree / "bin").mkdir(parents=True)
+    (tree / "empty").mkdir()
+    (tree / "bin/tool").write_bytes(b"fixed\n")
+    (tree / "bin/tool").chmod(0o755)
+    tree_nar = subprocess.check_output(["nix-store", "--dump", str(tree)])
+    (root / "fixed-tree.nar").write_bytes(tree_nar)
     path = root / "build-cases.nix"
     path.write_text(r'''
       let
@@ -50,8 +58,39 @@ def build_fixtures(root, hello, abi, packages, tools):
           /bin/echo ${builtins.placeholder "out"} >> $dev
           /bin/test ! -e /tmp/n9-multiple-fail
         '' { outputs = [ "out" "dev" ]; devPlaceholder = builtins.placeholder "dev"; };
+        fixed = name: script: extra: mk name script ({
+          outputHashMode = "flat"; outputHashAlgo = "sha256";
+          outputHash = builtins.hashString "sha256" "fixed\n";
+        } // extra);
+        fixedFlat = fixed "fixed-flat"
+          "/bin/echo ran >> /tmp/n9-fixed-count; /bin/echo fixed > $out" {};
       in {
-        inherit good abi libsec multiple;
+        inherit good abi libsec multiple fixedFlat;
+        fixedReuse = fixed "fixed-flat" "exit unexpected-rebuild" {};
+        fixedSHA512 = fixed "fixed-sha512" "/bin/echo fixed > $out" {
+          outputHashAlgo = "sha512"; outputHash = builtins.hashString "sha512" "fixed\n";
+        };
+        fixedTree = fixed "fixed-tree" ''
+          /bin/mkdir -p $out/bin $out/empty
+          /bin/echo fixed > $out/bin/tool
+          /bin/chmod +x $out/bin/tool
+        '' { outputHashMode = "recursive"; outputHash = "@TREE_HASH@"; };
+        fixedBad = fixed "fixed-bad" "/bin/echo wrong > $out" {};
+        fixedBadTree = fixed "fixed-bad-tree" "/bin/mkdir $out" {
+          outputHashMode = "recursive"; outputHash = "@TREE_HASH@";
+        };
+        fixedDirectory = fixed "fixed-directory" "/bin/mkdir $out" {};
+        fixedExecutable = fixed "fixed-executable"
+          "/bin/echo fixed > $out; /bin/chmod +x $out" {};
+        fixedRefs = fixed "fixed-refs" "/bin/echo $input > $out" {
+          input = good; outputHash = builtins.hashString "sha256" "${good}\n";
+        };
+        fixedRetry = fixed "fixed-retry" ''
+          /bin/echo ran >> /tmp/n9-fixed-retry-count
+          if (/bin/test -e /tmp/n9-fixed-retry) /bin/echo fixed > $out
+          if not /bin/echo wrong > $out
+        '' {};
+        fixedConsumer = mk "fixed-consumer" "/bin/cat $input > $out" { input = fixedFlat; };
         sha1sum = import ./packages/sha1sum.nix {
           inherit mkDerivation libsec; src = ./packages/sha1sum.c;
         };
@@ -86,7 +125,7 @@ def build_fixtures(root, hello, abi, packages, tools):
           /bin/echo leaked > /tmp/n9-late
         '' { outputs = [ "out" "dev" ]; };
       }
-    ''')
+    '''.replace('@TREE_HASH@', hashlib.sha256(tree_nar).hexdigest()))
     expected = json.loads(subprocess.check_output([
         "nix-instantiate", "--store", "dummy://?store=/tmp/n9/store", "--eval", "--strict", "--json",
         "--expr", 'builtins.mapAttrs (_: d: { drv = d.drvPath; out = d.outPath; '
@@ -97,7 +136,7 @@ def build_fixtures(root, hello, abi, packages, tools):
     content.write_text("native\n" + expected["good"]["out"] + "\n")
     nar = root / "build-parent.nar"
     nar.write_bytes(subprocess.check_output(["nix-store", "--dump", str(content)]))
-    return {name: root / name for name in (path.name, nar.name, "main.c", "native.nix", "abi.nar", "packages.nar", "sums.nar", "native-tools.nar")}, expected
+    return {name: root / name for name in (path.name, nar.name, "main.c", "native.nix", "abi.nar", "packages.nar", "sums.nar", "native-tools.nar", "fixed-tree.nar")}, expected
 
 
 def check_nix_build(guest, expected):
@@ -180,6 +219,12 @@ def check_nix_build(guest, expected):
     guest.command("test `{cat /tmp/n9-count | wc -l} -eq 1")
 
     for name, option, message in (
+        ("fixedBad", "", "hash mismatch"),
+        ("fixedBadTree", "", "hash mismatch"),
+        ("fixedDirectory", "", "non-executable regular file"),
+        ("fixedExecutable", "", "non-executable regular file"),
+        ("fixedRefs", "", "must not reference store paths"),
+        ("fixedRetry", "", "hash mismatch"),
         ("failed", "", "failed"),
         ("missing", "", "did not produce"),
         ("references", "", "not allowed"),
@@ -217,9 +262,10 @@ def check_nix_build(guest, expected):
         guest.command(f"test ! -e {path} && test ! -e {path}.lock")
     guest.command("test ! -e /tmp/n9-late")
     guest.command(f"{store} --verify-path {parent['out']} {good['out']}")
+    check_fixed_outputs(guest, store, expected)
     check_multiple_outputs(guest, store, expected)
     return ["host derivation paths", "native builders", "C compilation with store toolchain, shell and sources", "separate C library and consumer", "libsec and sha1sum (23 native/cross cases)", "dependencies", "references", "logs",
-            "reuse", "multiple outputs, references and partial rebuilds", "failed-output cleanup", "unsupported modes", "cancellation and child cleanup"]
+            "reuse", "fixed-output hashing, reuse and failed-output cleanup", "multiple outputs, references and partial rebuilds", "failed-output cleanup", "unsupported modes", "cancellation and child cleanup"]
 
 
 def check_multiple_outputs(guest, store, expected):
@@ -278,3 +324,22 @@ def check_multiple_outputs(guest, store, expected):
     guest.command(f"rm {roots}/out")
     guest.command(f"{store} --gc")
     guest.command(f"test ! -e {out} && test ! -e {dev}")
+
+
+def check_fixed_outputs(guest, store, expected):
+    guest.command("echo retry > /tmp/n9-fixed-retry")
+    for name in ("fixedRetry", "fixedConsumer", "fixedSHA512", "fixedTree"):
+        paths = expected[name]
+        guest.command(f"{store} --realise {paths['drv']}", paths["out"])
+        guest.command(f"{store} --verify-path {paths['out']}")
+    guest.command("test `{cat /tmp/n9-fixed-retry-count | wc -l} -eq 2")
+    flat, tree = expected["fixedFlat"], expected["fixedTree"]
+    guest.command(f"cat {flat['out']}", "fixed")
+    guest.command(f"{store} --query --references {flat['out']} > /tmp/fixed-refs")
+    guest.command("test ! -s /tmp/fixed-refs")
+    guest.command(f"/tmp/nix-store --dump {tree['out']} > /tmp/fixed-result.nar")
+    guest.command("cmp /tmp/fixed-result.nar /tmp/fixed-tree.nar")
+    # A different derivation with the same name and hash must reuse the output.
+    for name in ("fixedFlat", "fixedReuse"):
+        guest.command(f"{store} --realise {expected[name]['drv']}", flat["out"])
+    guest.command("test `{cat /tmp/n9-fixed-count | wc -l} -eq 1")
