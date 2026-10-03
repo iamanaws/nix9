@@ -11,6 +11,7 @@
 #include <iterator>
 
 void checkSQLite();
+void checkAllocations();
 void checkStore();
 void checkHashes(const char *input, const char *expected);
 void checkProcesses(const char *executable);
@@ -114,6 +115,11 @@ int main(int argc, char **argv) {
         nix::initLibUtil();
         if (argc == 2 && std::string_view(argv[1]) == "store") {
             checkStore();
+            return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "allocations") {
+            checkAllocations();
+            std::cout << "aligned allocations PASS\n";
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "sqlite") {

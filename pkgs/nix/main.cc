@@ -4,6 +4,9 @@
 #include "nix/util/exit.hh"
 
 #include <iostream>
+#ifdef NIX_INSTANTIATE
+#include "nix/expr/eval-gc.hh"
+#endif
 
 namespace nix {
 
@@ -13,8 +16,18 @@ RegisterLegacyCommand::Commands & RegisterLegacyCommand::commands()
     return commands;
 }
 
-void showManPage(const std::string &)
+void showManPage(const std::string &name)
 {
+    if (name == "nix-instantiate") {
+        std::cout << "Usage: nix-instantiate [OPTIONS] [FILES...]\n"
+                     "  --eval --strict --json Evaluate an expression as JSON\n"
+                     "  --expr EXPR            Read an expression from the command line\n"
+                     "  --attr NAME            Select an attribute\n"
+                     "  --arg NAME EXPR        Pass a function argument\n"
+                     "  --add-root PATH        Retain instantiated derivations\n"
+                     "Without --eval, instantiate derivations and print their paths.\n";
+        throw Exit();
+    }
     std::cout << "Usage: nix-store [--store URI] OPERATION [ARGS...]\n"
                  "  --realise PATH...      Build or realise store paths\n"
                  "  --add PATH...          Copy files or directories into the store\n"
@@ -34,6 +47,11 @@ int main(int argc, char ** argv)
 {
     return nix::handleExceptions(argv[0], [&] {
         nix::initNix();
+#ifdef NIX_INSTANTIATE
+        nix::initGC();
+        nix::RegisterLegacyCommand::commands().at("nix-instantiate")(argc, argv);
+#else
         nix::RegisterLegacyCommand::commands().at("nix-store")(argc, argv);
+#endif
     });
 }

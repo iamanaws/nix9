@@ -41,8 +41,17 @@ def build_fixtures(root, hello, abi, packages, tools):
         libsec = import ./packages/libsec.nix {
           inherit mkDerivation; src = ./packages/libsec;
         };
+        multiple = mk "native-multiple" ''
+          /bin/echo ran >> /tmp/n9-multiple-count
+          /bin/echo $out > $out
+          if (/bin/test -e /tmp/n9-multiple-change) /bin/echo changed > $out
+          /bin/echo $out > $dev
+          /bin/echo $devPlaceholder >> $dev
+          /bin/echo ${builtins.placeholder "out"} >> $dev
+          /bin/test ! -e /tmp/n9-multiple-fail
+        '' { outputs = [ "out" "dev" ]; devPlaceholder = builtins.placeholder "dev"; };
       in {
-        inherit good abi libsec;
+        inherit good abi libsec multiple;
         sha1sum = import ./packages/sha1sum.nix {
           inherit mkDerivation libsec; src = ./packages/sha1sum.c;
         };
@@ -55,20 +64,34 @@ def build_fixtures(root, hello, abi, packages, tools):
         missing = mk "native-empty" "/bin/echo no-output" {};
         references = mk "native-refs" "/bin/echo $input > $out"
           { input = good; allowedReferences = []; };
-        multiple = mk "native-multiple" "/bin/echo unexpected > $out"
+        devConsumer = mk "native-dev-consumer" "/bin/cat $input > $out"
+          { input = multiple.dev; };
+        onlyDev = mk "native-only-dev" "/bin/echo headers > $dev" { outputs = [ "dev" ]; };
+        missingDev = mk "native-missing-dev" "/bin/echo partial > $out"
+          { outputs = [ "out" "dev" ]; };
+        failedMultiple = mk "native-failed-multiple"
+          "/bin/echo partial > $out; /bin/echo partial > $dev; exit failed"
+          { outputs = [ "out" "dev" ]; };
+        multipleRefs = mk "native-multiple-refs"
+          "/bin/echo data > $out; /bin/echo $out > $dev"
+          { outputs = [ "out" "dev" ]; allowedReferences = []; };
+        cycle = mk "native-output-cycle" "/bin/echo $dev > $out; /bin/echo $out > $dev"
           { outputs = [ "out" "dev" ]; };
         sandbox = mk "native-sandbox" "/bin/echo unexpected > $out" {};
         cancel = mk "native-cancel" ''
           /bin/echo partial > $out
+          /bin/echo partial > $dev
           /bin/echo $pid > /tmp/n9-builder-pid
           @{/bin/rc -c '/bin/echo $pid > /tmp/n9-sleeper-pid; exec /bin/sleep 30'}
           /bin/echo leaked > /tmp/n9-late
-        '' {};
+        '' { outputs = [ "out" "dev" ]; };
       }
     ''')
     expected = json.loads(subprocess.check_output([
         "nix-instantiate", "--store", "dummy://?store=/tmp/n9/store", "--eval", "--strict", "--json",
-        "--expr", 'builtins.mapAttrs (_: d: { drv = d.drvPath; out = d.outPath; }) (import ' + str(path) + ')',
+        "--expr", 'builtins.mapAttrs (_: d: { drv = d.drvPath; out = d.outPath; '
+        'outputs = builtins.listToAttrs (map (name: { inherit name; value = d.${name}.outPath; }) (d.outputs or ["out"])); '
+        '}) (import ' + str(path) + ')',
     ], text=True))
     content = root / "build-parent-content"
     content.write_text("native\n" + expected["good"]["out"] + "\n")
@@ -83,10 +106,11 @@ def check_nix_build(guest, expected):
     guest.command("/tmp/nix-store --restore /tmp/packages < /tmp/packages.nar")
     guest.command("/tmp/nix-store --restore /tmp/sums < /tmp/sums.nar")
     guest.command(f"buildstore='{STORE}'")
-    evaluate = "/tmp/nix-eval --store $buildstore --instantiate"
+    evaluate = "$instantiate --store $buildstore"
     store = "/tmp/nix-store --store $buildstore"
     for name, paths in expected.items():
-        guest.command(f"{evaluate} --expr '(import /tmp/build-cases.nix).{name}'", paths["drv"])
+        selected = paths["drv"] + ("!dev" if name == "onlyDev" else "")
+        guest.command(f"{evaluate} --expr '(import /tmp/build-cases.nix).{name}'", selected)
         guest.command(f"{store} --check-validity {paths['drv']}")
 
     hello = expected["hello"]
@@ -159,14 +183,21 @@ def check_nix_build(guest, expected):
         ("failed", "", "failed"),
         ("missing", "", "did not produce"),
         ("references", "", "not allowed"),
-        ("multiple", "", "one input-addressed output"),
+        ("missingDev", "", "did not produce 'dev'"),
+        ("failedMultiple", "", "failed"),
+        ("multipleRefs", "", "not allowed"),
+        ("cycle", "", "cycle"),
         ("sandbox", "--option sandbox true", "sandboxed builds are not supported"),
     ):
         paths = expected[name]
         output = guest.command(f"{store} {option} --realise {paths['drv']}; echo BUILD-STATUS:$status")
         if not re.search(r"(?m)^BUILD-STATUS:.*cc9exit=[1-9][0-9]*$", output) or message not in output:
             raise RuntimeError(f"expected build failure ({name}):\n{output}")
-        guest.command(f"test ! -e {paths['out']} && test ! -e {paths['out']}.lock")
+        for path in paths["outputs"].values():
+            guest.command(f"test ! -e {path} && test ! -e {path}.lock")
+            output = guest.command(f"{store} --check-validity {path}; echo VALID-STATUS:$status")
+            if not re.search(r"(?m)^VALID-STATUS:.*cc9exit=1$", output):
+                raise RuntimeError(f"failed build registered an output:\n{output}")
     guest.command(f"{store} --verify-path {parent['out']} {good['out']}")
     cancel = expected["cancel"]
     guest.command(f"{{exec {store} --realise {cancel['drv']}}} "
@@ -182,8 +213,68 @@ def check_nix_build(guest, expected):
     guest.command("wait $job; grep 'interrupted by the user' /tmp/n9-cancel-log")
     guest.command("test ! -e /proc/^`{cat /tmp/n9-builder-pid}")
     guest.command("test ! -e /proc/^`{cat /tmp/n9-sleeper-pid}")
-    guest.command(f"test ! -e {cancel['out']} && test ! -e {cancel['out']}.lock")
+    for path in cancel["outputs"].values():
+        guest.command(f"test ! -e {path} && test ! -e {path}.lock")
     guest.command("test ! -e /tmp/n9-late")
     guest.command(f"{store} --verify-path {parent['out']} {good['out']}")
+    check_multiple_outputs(guest, store, expected)
     return ["host derivation paths", "native builders", "C compilation with store toolchain, shell and sources", "separate C library and consumer", "libsec and sha1sum (23 native/cross cases)", "dependencies", "references", "logs",
-            "reuse", "failed-output cleanup", "unsupported modes", "cancellation and child cleanup"]
+            "reuse", "multiple outputs, references and partial rebuilds", "failed-output cleanup", "unsupported modes", "cancellation and child cleanup"]
+
+
+def check_multiple_outputs(guest, store, expected):
+    single = expected["onlyDev"]
+    guest.command(f"{store} --realise {single['drv']}", single["out"])
+    guest.command(f"cat {single['out']}", "headers")
+    multi, consumer = expected["multiple"], expected["devConsumer"]
+    out, dev = multi["outputs"]["out"], multi["outputs"]["dev"]
+    # The dependency selects dev; building it must register both outputs.
+    guest.command(f"{store} --realise {consumer['drv']}", consumer["out"])
+    guest.command(f"{store} --check-validity {out} {dev}")
+    guest.command(f"{store} --query --references {dev}", out)
+    guest.command(f"{store} --query --references {dev}", dev)
+    guest.command(f"cat {dev}", out)
+    guest.command(f"cat {dev}", dev)
+    for path in (out, dev, consumer["out"]):
+        guest.command(f"{store} --verify-path {path}")
+    guest.command(f"{store} --realise '{multi['drv']}!dev'", dev)
+    guest.command("test `{cat /tmp/n9-multiple-count | wc -l} -eq 1")
+    guest.command(f"/tmp/nix-store --dump {out} > /tmp/n9-multiple-out.nar")
+    guest.command(f"/tmp/nix-store --dump {dev} > /tmp/n9-multiple-dev.nar")
+    roots = "/tmp/n9/state/gcroots"
+    guest.command(f"{store} --realise {dev} --add-root {roots}/dev")
+    guest.command(f"{store} --gc")
+    guest.command(f"{store} --check-validity {out} {dev}")
+    guest.command(f"{store} --realise {out} --add-root {roots}/out")
+    guest.command(f"rm {roots}/dev")
+    guest.command(f"{store} --gc")
+    guest.command(f"test -e {out} && test ! -e {dev}")
+
+    # Failed and successful partial rebuilds must not change the retained out.
+    guest.command("echo change > /tmp/n9-multiple-change; echo fail > /tmp/n9-multiple-fail")
+    output = guest.command(f"{store} --realise '{multi['drv']}!dev'; echo BUILD-STATUS:$status")
+    if not re.search(r"(?m)^BUILD-STATUS:.*cc9exit=[1-9][0-9]*$", output):
+        raise RuntimeError(f"expected partial build failure:\n{output}")
+    guest.command(f"test ! -e {dev}")
+    guest.command(f"{store} --verify-path {out}")
+    guest.command(f"/tmp/nix-store --dump {out} > /tmp/n9-retained.nar && cmp /tmp/n9-retained.nar /tmp/n9-multiple-out.nar")
+    guest.command("rm /tmp/n9-multiple-fail")
+    guest.command(f"{store} --realise '{multi['drv']}!dev'", dev)
+    guest.command(f"{store} --verify-path {out} {dev}")
+    guest.command(f"/tmp/nix-store --dump {out} > /tmp/n9-retained.nar && cmp /tmp/n9-retained.nar /tmp/n9-multiple-out.nar")
+    guest.command(f"/tmp/nix-store --dump {dev} > /tmp/n9-rebuilt.nar && cmp /tmp/n9-rebuilt.nar /tmp/n9-multiple-dev.nar")
+    guest.command(f"{store} --query --references {dev}", out)
+    guest.command(f"{store} --realise '{multi['drv']}!dev'", dev)
+    guest.command("test `{cat /tmp/n9-multiple-count | wc -l} -eq 3")
+    for path in (out, dev, multi["drv"]):
+        guest.command(f"{store} --check-validity {path}")
+    # Only the two outputs and their retained derivation should remain: no
+    # redirected outputs, failed results, temporary files or path locks.
+    listing = guest.command("echo /tmp/n9/store/*")
+    entries = {path for line in listing.splitlines() if line.startswith("/tmp/n9/store/")
+               for path in line.split()}
+    if entries - {"/tmp/n9/store/.links"} != {out, dev, multi["drv"]}:
+        raise RuntimeError(f"partial rebuild left unexpected store entries:\n{listing}")
+    guest.command(f"rm {roots}/out")
+    guest.command(f"{store} --gc")
+    guest.command(f"test ! -e {out} && test ! -e {dev}")

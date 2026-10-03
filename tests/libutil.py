@@ -1,6 +1,6 @@
 """Exercise upstream Nix's libutil on 9front, using host Nix as the oracle.
 
-Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_EVAL_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
+Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_INSTANTIATE_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
 """
 
 import base64
@@ -18,7 +18,7 @@ from libutil_compression import check_compression
 from libutil_keys import key_fixtures, check_keys
 
 
-qemu, disk, cc9, executable, nix_store, nix_eval, hello, abi, packages, tools, output = sys.argv[1:]
+qemu, disk, cc9, executable, nix_store, nix_instantiate, hello, abi, packages, tools, output = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     tree = root / "tree"
@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory() as directory:
         "padding": fixtures["file"][:21] + b"x" + fixtures["file"][22:],
         "traversal": fixtures["tree"].replace(b"binary", b"../bad"),
     })
-    files = {"probe.elf": executable, "nix-store.elf": nix_store, "nix-eval.elf": nix_eval}
+    files = {"probe.elf": executable, "nix-store.elf": nix_store, "nix-instantiate.elf": nix_instantiate}
     files.update(key_fixtures(root))
     files.update(eval_fixtures(root))
     build_files, build_paths = build_fixtures(root, Path(hello), Path(abi), Path(packages), Path(tools))
@@ -79,6 +79,7 @@ with tempfile.TemporaryDirectory() as directory:
     files.update({"hash-input": hash_input, "hash-cases": manifest})
     with cc9_guest(qemu, disk, cc9, files) as guest:
         guest.command("elf2aout /tmp/probe.elf /tmp/libutil-probe && chmod +x /tmp/libutil-probe")
+        guest.command("/tmp/libutil-probe allocations", "aligned allocations PASS")
         cli = check_nix_store(guest, fixtures)
         evaluator = check_nix_eval(guest)
         native_builds = check_nix_build(guest, build_paths)
@@ -104,6 +105,7 @@ with tempfile.TemporaryDirectory() as directory:
     Path(output).mkdir()
     (Path(output) / "results.json").write_text(json.dumps({
         "nix": "2.34.8", "valid_archives": 3, "rejected_archives": 5,
+        "allocations": ["aligned free", "aligned realloc", "over-aligned shared objects"],
         "coroutines": ["streaming", "finish", "cancellation", "exceptions"],
         "hash_algorithms": algorithms, "hash_cases": len(cases),
         "compression": compression,

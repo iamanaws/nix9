@@ -65,7 +65,8 @@ For native Nix, install `nix-package` with the same VM instructions, then run:
 . /usr/local/pkg/nix-2.34.8/activate
 cd /usr/local/pkg/nix-2.34.8/share/nix9
 roots=/usr/local/nix/state/gcroots
-drv=`{nix-eval --instantiate --add-root $roots/build --expr '(import ./.).sha1sum'}
+nix-instantiate --add-root $roots/build --attr sha1sum
+drv=`{cat $roots/build}
 nix-store --realise $drv --add-root $roots/package && rm $roots/build
 result=`{cat $roots/package}
 echo -n abc | $result/bin/sha1sum

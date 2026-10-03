@@ -1,10 +1,10 @@
 # Native Nix feasibility
 
 Packages cross-compile on Linux. An experimental native `nix-store` adds files
-and directories and queries metadata on 9front. `nix-eval` evaluates expressions
+and directories and queries metadata on 9front. `nix-instantiate` evaluates expressions
 as JSON and instantiates derivations. Native builds use upstream Nix’s scheduler
-with a 9front process backend. They currently support one input-addressed output
-named `out`, without sandboxing or a diverted store. The evaluator uses upstream’s
+with a 9front process backend. They support input-addressed outputs, including
+partial rebuilds, without sandboxing or a diverted store. The evaluator uses upstream’s
 no-GC mode for short-lived runs; flakes and network fetchers remain unported.
 
 Our patched [goken9cc](../pkgs/goken9cc) rebuilds C runtimes and libraries on
@@ -27,7 +27,7 @@ libraries. Boehm GC, S3 support, and Linux seccomp can be disabled.
 | Processes and locks | Child processes support pipes, PATH, environments, wait and kill. Interrupt/hangup notes cancel at Nix interruption checks. Exclusive path locks pass contention, fork/exec and killed-holder tests; server crashes may leave markers. Generic file locks, credentials, process groups, signal threads and PTYs remain unsupported. |
 
 The [Nix build](../pkgs/nix) uses the pinned [cc9 runtime](../pkgs/cc9) and
-[target libraries](../pkgs/cc9-libs). Only cc9 startup is rebuilt from source;
+[target libraries](../pkgs/cc9-libs). cc9 startup and core C runtime are rebuilt from source;
 the remaining runtime uses release binaries. See [patch ownership](upstream.md).
 Builds run on Linux and tests in a disposable VM:
 

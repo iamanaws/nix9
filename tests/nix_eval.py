@@ -53,18 +53,16 @@ def eval_fixtures(root):
 
 
 def check_nix_eval(guest):
-    guest.command("elf2aout /tmp/nix-eval.elf /tmp/nix-eval && chmod +x /tmp/nix-eval")
-    cli = "/tmp/nix-eval --store /tmp/nix9-eval-store"
-    guest.command("/tmp/nix-eval --help", "Evaluate a Nix expression and print strict JSON.")
+    guest.command("elf2aout /tmp/nix-instantiate.elf /tmp/nix-instantiate && chmod +x /tmp/nix-instantiate")
+    guest.command("instantiate=/tmp/nix-instantiate")
+    cli = "$instantiate --store /tmp/nix9-eval-store --eval --strict --json"
+    guest.command("/tmp/nix-instantiate --help", "Usage: nix-instantiate [OPTIONS] [FILES...]")
     guest.command(f"{cli} --expr '1 + 2'", "3")
     guest.command(f"{cli} /tmp/eval-cases.nix > /tmp/eval-result.json")
     guest.command("cmp /tmp/eval-result.json /tmp/eval-expected.json")
     for args, message in (
-        ("", "Usage:"),
-        ("--add-root /tmp/eval-root --expr '42'", "--add-root requires --instantiate"),
-        ("--instantiate --add-root", "--add-root requires a path"),
-        ("--instantiate --add-root '' --expr '42'", "--add-root requires a path"),
-        ("--instantiate --add-root /tmp/eval-root --expr '42'", "expected a derivation"),
+        ("--unknown", "unrecognised flag"),
+        ("--arg", "requires"),
         ("--expr 'let x = ; in x'", "syntax error"),
         ("--expr '1 + true'", "Boolean"),
         ("--expr 'throw \"expected failure\"'", "expected failure"),
@@ -76,6 +74,24 @@ def check_nix_eval(guest):
         if not re.search(r"(?m)^EVAL-STATUS:.*cc9exit=1$", output) or message not in output:
             raise RuntimeError(f"expected evaluator failure ({message}): {args}\n{output}")
     guest.command(f"{cli} --expr '(import /tmp/eval-module.nix 21).answer'", "42")
-    guest.command("NIX_REMOTE=/tmp/nix9-eval-store /tmp/nix-eval --expr '7 * 6'", "42")
+    guest.command("NIX_REMOTE=/tmp/nix9-eval-store $instantiate --eval --expr '7 * 6'", "42")
+    guest.command("$instantiate --version", "nix-instantiate (Nix) 2.34.8")
+    guest.command(f"{cli} --attr imported.answer /tmp/eval-cases.nix", "42")
+    guest.command(f"{cli} --arg x 21 --expr '{{x}}: x * 2'", "42")
+    guest.command(f"{cli} --argstr x hello --expr '{{x}}: x'", '"hello"')
+    guest.command(f"echo '6 * 7' | {cli} -", "42")
+    guest.command(f"{cli} -I 'module=/tmp/eval-module.nix' --expr '(import <module> 21).answer'", "42")
+    guest.command("mkdir /tmp/eval-default && echo '6 * 7' > /tmp/eval-default/default.nix")
+    guest.command(f"cd /tmp/eval-default && {cli}", "42")
+    guest.command("cd /tmp")
+    for args in (
+        "flake:missing",
+        "-I 'r=flake:missing' --expr '<r>'",
+        "--override-flake missing other --expr '42'",
+    ):
+        output = guest.command(f"{cli} --extra-experimental-features flakes {args}; echo EVAL-STATUS:$status")
+        if "flakes are not supported on 9front" not in output or not re.search(r"(?m)^EVAL-STATUS:.*cc9exit=1$", output):
+            raise RuntimeError(f"expected unsupported flake error: {output}")
     return ["host JSON comparison", "language", "builtins", "local imports", "derivation paths",
-            "strict errors", "unsupported fetching", "store environment"]
+            "strict errors", "unsupported fetching and flakes", "store environment",
+            "upstream arguments, attribute selection, stdin and lookup paths"]

@@ -990,3 +990,96 @@
 +#endif
 +
  } // namespace nix
+--- a/src/libcmd/common-eval-args.cc
++++ b/src/libcmd/common-eval-args.cc
+@@ -7,10 +7,14 @@
+ #include "nix/expr/eval.hh"
+ #include "nix/fetchers/fetchers.hh"
+ #include "nix/fetchers/registry.hh"
++#ifndef __plan9__
+ #include "nix/flake/flakeref.hh"
+ #include "nix/flake/settings.hh"
++#endif
+ #include "nix/store/store-open.hh"
++#ifndef __plan9__
+ #include "nix/cmd/command.hh"
++#endif
+ #include "nix/fetchers/tarball.hh"
+ #include "nix/fetchers/fetch-to-store.hh"
+ #include "nix/cmd/compatibility-settings.hh"
+@@ -28,9 +32,12 @@
+     {
+         {
+             "flake",
+-            [](EvalState & state, std::string_view rest) {
++            [](EvalState & state, std::string_view rest) -> SourcePath {
+                 experimentalFeatureSettings.require(Xp::Flakes);
+                 // FIXME `parseFlakeRef` should take a `std::string_view`.
++#ifdef __plan9__
++                throw Error("flakes are not supported on 9front");
++#else
+                 auto flakeRef = parseFlakeRef(fetchSettings, std::string{rest}, {}, true, false);
+                 debug("fetching flake search path element '%s''", rest);
+                 auto [accessor, lockedRef] =
+@@ -43,6 +50,7 @@
+                     lockedRef.input.getName());
+                 state.allowPath(storePath);
+                 return state.storePath(storePath);
++#endif
+             },
+         },
+     },
+@@ -50,9 +58,11 @@
+ 
+ static GlobalConfig::Register rEvalSettings(&evalSettings);
+ 
++#ifndef __plan9__
+ flake::Settings flakeSettings;
+ 
+ static GlobalConfig::Register rFlakeSettings(&flakeSettings);
++#endif
+ 
+ CompatibilitySettings compatibilitySettings{};
+ 
+@@ -127,16 +137,22 @@
+         .category = category,
+         .labels = {"original-ref", "resolved-ref"},
+         .handler = {[&](std::string _from, std::string _to) {
++#ifdef __plan9__
++            throw Error("flakes are not supported on 9front");
++#else
+             auto from = parseFlakeRef(fetchSettings, _from, std::filesystem::current_path().string());
+             auto to = parseFlakeRef(fetchSettings, _to, std::filesystem::current_path().string());
+             fetchers::Attrs extraAttrs;
+             if (to.subdir != "")
+                 extraAttrs["dir"] = to.subdir;
+             fetchers::overrideRegistry(from.input, to.input, extraAttrs);
+-        }},
++#endif
++        }},
++#ifndef __plan9__
+         .completer = {[&](AddCompletions & completions, size_t, std::string_view prefix) {
+             completeFlakeRef(completions, openStore(), prefix);
+         }},
++#endif
+     });
+ 
+     addFlag({
+@@ -187,6 +203,9 @@
+ 
+     else if (hasPrefix(s, "flake:")) {
+         experimentalFeatureSettings.require(Xp::Flakes);
++#ifdef __plan9__
++        throw Error("flakes are not supported on 9front");
++#else
+         auto flakeRef = parseFlakeRef(fetchSettings, std::string(s.substr(6)), {}, true, false);
+         auto [accessor, lockedRef] =
+             flakeRef.resolve(fetchSettings, *state.store).lazyFetch(fetchSettings, *state.store);
+@@ -194,6 +213,7 @@
+             state.fetchSettings, *state.store, SourcePath(accessor), FetchMode::Copy, lockedRef.input.getName());
+         state.allowPath(storePath);
+         return state.storePath(storePath);
++#endif
+     }
+ 
+     else if (s.size() > 2 && s.at(0) == '<' && s.at(s.size() - 1) == '>') {

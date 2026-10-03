@@ -31,16 +31,16 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"hget -o /tmp/package.tar http://10.0.2.2:{server.server_port}/package.tar")
                 guest.command("cd / && tar xf /tmp/package.tar")
                 guest.command(f". {prefix}/activate")
-                guest.command("nix-eval --expr '6 * 7'", "42")
+                guest.command("nix-instantiate --eval --expr '6 * 7'", "42")
                 drv_root = "/usr/local/nix/state/gcroots/sha1sum-drv"
-                result = guest.command(
-                    f"nix-eval --instantiate --add-root {drv_root} "
-                    f"--expr '(import {prefix}/share/nix9).sha1sum'")
+                guest.command(
+                    f"nix-instantiate --add-root {drv_root} "
+                    f"--expr '(import {prefix}/share/nix9).sha1sum'", drv_root)
+                result = guest.command(f"cat {drv_root}")
                 paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum\.drv$", result)
                 if len(paths) != 1:
                     raise RuntimeError(f"missing installed derivation: {result}")
                 drv = paths[0]
-                guest.command(f"cat {drv_root}", drv)
                 guest.command("nix-store --gc")
                 guest.command(f"nix-store --check-validity {drv}")
                 permanent = "/usr/local/nix/state/gcroots/sha1sum"

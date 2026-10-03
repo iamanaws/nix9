@@ -136,7 +136,7 @@
               ]
             }/libutil.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-eval.elf \
+              ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
               ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
             ${python}/bin/python ${testSupport [ ./tests/native_install.py ]}/native_install.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \

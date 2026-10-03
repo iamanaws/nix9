@@ -12,6 +12,10 @@ let
     url = "https://raw.githubusercontent.com/Alino/agent9/3022c5609caa189aeb556d7d3828f471efd05f62/cc9/runtime/crt0.c";
     hash = "sha256:dc7c521794bfa2b7a07720e40b5a18a1e1a527d27e31414e995904bce9c733fc";
   };
+  libc = fetchurl {
+    url = "https://raw.githubusercontent.com/Alino/agent9/3022c5609caa189aeb556d7d3828f471efd05f62/cc9/runtime/n9libc.c";
+    hash = "sha256:80c2b2b5020c7af5e8e31a41feff25088a2f9d0284a59a3267128073bdd7ebf0";
+  };
   elf2aout = fetchurl {
     url = "https://raw.githubusercontent.com/Alino/agent9/3022c5609caa189aeb556d7d3828f471efd05f62/cc9/host/elf2aout.py";
     hash = "sha256:0f1f502769c8c2d273649ddfed5b713c86ebe1f38017b66368f14004437fa8a5";
@@ -29,11 +33,17 @@ runCommand "cc9-runtime-0.2.2"
     tar -xzf ${archive} amd64/lib/cc9
     cp -R amd64/lib/cc9 "$out"
     cp ${crt0} crt0.c
-    chmod u+w crt0.c
+    cp ${libc} n9libc.c
+    chmod u+w crt0.c n9libc.c
     patch -p1 < ${./exit-status.patch}
+    patch -p1 < ${./aligned-allocation.patch}
     runtime="$out"
     source ${./setup.sh}
-    # Preserve numeric exit codes when main returns. Other runtime code is prebuilt.
+    # Rebuild only the runtime units with local fixes.
     ${llvmPackages.clang-unwrapped}/bin/clang "''${cc9Flags[@]}" -std=c11 \
       -fexceptions -funwind-tables -femulated-tls -c crt0.c -o "$out/crt0.o"
+    ${llvmPackages.clang-unwrapped}/bin/clang "''${cc9Flags[@]}" -O2 -fno-builtin \
+      -fexceptions -funwind-tables -femulated-tls -c n9libc.c -o n9libc.o
+    chmod u+w "$out/libcc9cxx.a"
+    ${llvmPackages.llvm}/bin/llvm-ar rcs "$out/libcc9cxx.a" n9libc.o
   ''

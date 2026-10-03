@@ -11,7 +11,8 @@ The suites run on Linux with KVM, using 9front release 11952. `flake.lock` pins 
 - Library tests use known vectors and independent Python results for checksums,
   compression, and arithmetic. Generator checks compare output with the guest.
 - Build checks cover executable format and archive handling. Native Nix tests
-  cover derivation paths, dependency builds, output reuse, cancellation cleanup, permanent roots and garbage collection.
+  cover derivation paths, dependency builds, multiple outputs and partial rebuilds,
+  cancellation cleanup, permanent roots and garbage collection.
   Guest development tests build native and POSIX C, including Lua, with the
   image's headers and libraries hidden.
 

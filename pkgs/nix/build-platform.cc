@@ -3,6 +3,9 @@
 #include "nix/store/local-settings.hh"
 #include "nix/store/posix-fs-canonicalise.hh"
 #include "nix/store/path-references.hh"
+#include "nix/store/references.hh"
+#include "nix/util/archive.hh"
+#include "nix/util/util.hh"
 #include "nix/util/environment-variables.hh"
 #include "nix/util/current-process.hh"
 #include "nix/util/file-system.hh"
@@ -21,8 +24,10 @@ class Plan9Builder : public DerivationBuilder, private DerivationBuilderParams {
     std::unique_ptr<DerivationBuilderCallbacks> callbacks;
     Pid pid;
     AutoCloseFD noteGroup;
-    std::unique_ptr<AutoDelete> temp, output;
-    std::optional<StorePath> outPath;
+    std::unique_ptr<AutoDelete> temp;
+    std::map<std::string, std::unique_ptr<AutoDelete>> cleanupOutputs;
+    OutputPathMap outputPaths, scratchOutputs;
+    StringMap inputRewrites, outputRewrites;
 public:
     Plan9Builder(LocalStore &store, std::unique_ptr<DerivationBuilderCallbacks> callbacks,
                  DerivationBuilderParams params)
@@ -45,9 +50,13 @@ public:
         return true;
     }
     std::optional<Descriptor> startBuild() override {
-        if (buildMode != bmNormal || drv.outputs.size() != 1 || !drv.outputs.contains("out") ||
-            !std::holds_alternative<DerivationOutput::InputAddressed>(drv.outputs.at("out").raw))
-            throw Error("9front builds currently require one input-addressed output named 'out'");
+        if (buildMode != bmNormal)
+            throw Error("only normal builds are supported on 9front");
+        for (auto &[name, output] : drv.outputs) {
+            auto addressed = std::get_if<DerivationOutput::InputAddressed>(&output.raw);
+            if (!addressed) throw Error("9front builds require input-addressed outputs");
+            outputPaths.emplace(name, addressed->path);
+        }
         if (store.storeDir != store.config->realStoreDir.get())
             throw Error("building in a diverted store is not supported on 9front");
         if (store.config->getLocalSettings().sandboxMode != smDisabled)
@@ -55,13 +64,27 @@ public:
         if (!drvOptions.impureEnvVars.empty() || !drvOptions.impureHostDeps.empty() ||
             !drvOptions.additionalSandboxProfile.empty() || !drvOptions.unsafeDiscardReferences.empty())
             throw Error("unsupported 9front builder options");
-        outPath = std::get<DerivationOutput::InputAddressed>(drv.outputs.at("out").raw).path;
-        auto physical = store.toRealPath(*outPath);
-        if (store.isValidPath(*outPath)) throw Error("refusing to replace a valid build output");
-        deletePath(physical);
-        output = std::make_unique<AutoDelete>(physical);
         auto directory = createTempDir("/tmp", "nix-build");
         temp = std::make_unique<AutoDelete>(directory);
+        for (auto &[name, path] : outputPaths) {
+            auto scratch = path;
+            if (store.isValidPath(path)) {
+                // Like upstream's unsandboxed builder, redirect retained outputs
+                // and rewrite their hashes back in the newly produced outputs.
+                scratch = store.makeStorePath(
+                    "rewrite:" + std::string(drvPath.to_string()) + ":" + std::string(path.to_string()),
+                    Hash(HashAlgorithm::SHA256), path.name());
+                inputRewrites[std::string(path.hashPart())] = std::string(scratch.hashPart());
+                outputRewrites[std::string(scratch.hashPart())] = std::string(path.hashPart());
+            }
+            if (store.isValidPath(scratch)) throw Error("refusing to replace a valid build output");
+            inputRewrites[hashPlaceholder(name)] = store.printStorePath(scratch);
+            store.addTempRoot(scratch);
+            auto physical = store.toRealPath(scratch);
+            deletePath(physical);
+            cleanupOutputs.emplace(name, std::make_unique<AutoDelete>(physical));
+            scratchOutputs.emplace(name, scratch);
+        }
         StringMap env{{"PATH", "/path-not-set"}, {"HOME", "/homeless-shelter"},
                       {"NIX_STORE", store.storeDir}, {"NIX_BUILD_TOP", directory.string()},
                       {"TMPDIR", directory.string()}, {"TMP", directory.string()},
@@ -69,8 +92,9 @@ public:
         for (auto &[name, value] : desugaredEnv.variables)
             env[name] = value.prependBuildDirectory ? (directory / value.value).string() : value.value;
         for (auto &[name, value] : desugaredEnv.extraFiles)
-            writeFile(directory / name, value);
-        env["out"] = store.printStorePath(*outPath);
+            writeFile(directory / name, rewriteStrings(value, inputRewrites));
+        for (auto &[name, path] : scratchOutputs)
+            env[name] = store.printStorePath(path);
         callbacks->openLogFile();
         Pipe log, ready, go;
         log.create();
@@ -92,8 +116,10 @@ public:
             AutoCloseFD input(open("/dev/null", O_RDONLY));
             if (!input || dup2(input.get(), 0) == -1 || chdir(directory.c_str()) == -1)
                 throw SysError("preparing builder process");
+            for (auto &[name, value] : env) value = rewriteStrings(value, inputRewrites);
             replaceEnv(env);
-            Strings args(drv.args.begin(), drv.args.end());
+            Strings args;
+            for (auto &arg : drv.args) args.push_back(rewriteStrings(arg, inputRewrites));
             args.push_front(drv.builder);
             restoreProcessContext();
             execv(drv.builder.c_str(), stringsToCharPtrs(args).data());
@@ -118,25 +144,52 @@ public:
         callbacks->closeLogFile();
         if (!statusOk(status))
             throw BuilderFailureError{BuildResult::Failure::PermanentFailure, status, ""};
-        auto physical = store.toRealPath(*outPath);
-        if (!pathExists(physical)) throw BuildError(BuildResult::Failure::OutputRejected, "builder did not produce 'out'");
-        canonicalisePathMetaData(physical, {});
         auto references = inputPaths;
-        references.insert(*outPath);
-        HashSink sink(HashAlgorithm::SHA256);
-        auto found = scanForReferences(sink, physical, references);
-        auto [hash, size] = sink.finish();
-        ValidPathInfo info(*outPath, {store, hash});
-        info.narSize = size;
-        info.references = std::move(found);
-        info.deriver = drvPath;
-        info.ultimate = true;
-        checkOutputs(store, drvPath, drv.outputs, drvOptions.outputChecks, {{"out", info}});
-        store.signPathInfo(info);
+        for (auto &[name, path] : outputPaths) references.insert(path);
+        std::map<std::string, ValidPathInfo> infos;
+        ValidPathInfos registrations;
         SingleDrvOutputs result;
-        result.emplace("out", Realisation{{.outPath = *outPath}, DrvOutput{initialOutputs.at("out").outputHash, "out"}});
-        store.registerValidPath(info);
-        output->cancel();
+        for (auto &[name, path] : outputPaths) {
+            auto scratch = scratchOutputs.at(name);
+            if (scratch != path) {
+                // Never replace the contents or metadata of an already valid output.
+                infos.emplace(name, *store.queryPathInfo(path));
+            } else {
+                auto physical = store.toRealPath(path);
+                if (!pathExists(physical))
+                    throw BuildError(BuildResult::Failure::OutputRejected, "builder did not produce '%s'", name);
+                if (!outputRewrites.empty()) {
+                    auto source = sinkToSource([&](Sink &sink) {
+                        RewritingSink rewriting(outputRewrites, sink);
+                        dumpPath(physical, rewriting);
+                        rewriting.flush();
+                    });
+                    auto rewritten = physical.string() + ".tmp";
+                    AutoDelete cleanup(rewritten);
+                    restorePath(rewritten, *source);
+                    deletePath(physical);
+                    std::filesystem::rename(rewritten, physical);
+                }
+                canonicalisePathMetaData(physical, {});
+                HashSink sink(HashAlgorithm::SHA256);
+                auto found = scanForReferences(sink, physical, references);
+                auto [hash, size] = sink.finish();
+                ValidPathInfo info(path, {store, hash});
+                info.narSize = size;
+                info.references = std::move(found);
+                info.deriver = drvPath;
+                info.ultimate = true;
+                infos.emplace(name, info);
+                store.signPathInfo(info);
+                registrations.emplace(path, std::move(info));
+            }
+            result.emplace(name, Realisation{{.outPath = path}, DrvOutput{initialOutputs.at(name).outputHash, name}});
+        }
+        checkOutputs(store, drvPath, drv.outputs, drvOptions.outputChecks, infos);
+        // All outputs and their references become valid in one transaction.
+        store.registerValidPaths(registrations);
+        for (auto &[name, path] : outputPaths)
+            if (scratchOutputs.at(name) == path) cleanupOutputs.at(name)->cancel();
         return result;
     }
 };

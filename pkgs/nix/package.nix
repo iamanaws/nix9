@@ -14,7 +14,7 @@ runCommand "nix-${nixUtil.version}-9front"
   }
   ''
     mkdir -p "$out/bin" "$out/share/nix9/pkgs"
-    for command in nix-store nix-eval; do
+    for command in nix-store nix-instantiate; do
       ${python3}/bin/python ${nixUtil.cc9.elf2aout} ${nixUtil}/$command.elf "$out/bin/$command"
       chmod +x "$out/bin/$command"
     done
