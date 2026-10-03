@@ -64,11 +64,17 @@ For native Nix, install `nix-package` with the same VM instructions, then run:
 ```sh
 . /usr/local/pkg/nix-2.34.8/activate
 cd /usr/local/pkg/nix-2.34.8/share/nix9
-drv=`{nix-eval --instantiate --expr '(import ./.).sha1sum'}
-result=`{nix-store --realise $drv}
+roots=/usr/local/nix/state/gcroots
+drv=`{nix-eval --instantiate --add-root $roots/build --expr '(import ./.).sha1sum'}
+nix-store --realise $drv --add-root $roots/package && rm $roots/build
+result=`{cat $roots/package}
 echo -n abc | $result/bin/sha1sum
 ```
 
 The store persists at `/usr/local/nix/store`; activate the environment again after login.
+The example retains the derivation until its output has a permanent root.
+Roots are files containing store paths, not symlinks. Remove a root file to release
+it, then run `nix-store --gc` to collect unused paths. Running programs outside a
+Nix build need an explicit root; collection cannot run alongside a build.
 Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
 and bootstrap tools. `nix-util-tests` checks isolated builds and reuse after reboot.

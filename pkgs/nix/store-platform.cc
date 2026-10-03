@@ -1,6 +1,7 @@
 #include "nix/store/build-result.hh"
 #include "nix/store/local-store.hh"
 #include "nix/store/local-settings.hh"
+#include "nix/util/signals.hh"
 
 extern "C" long n9_create(const char *, int, unsigned long);
 extern "C" int cc9_errno_from_errstr_or(int);
@@ -23,8 +24,9 @@ static AutoCloseFD ephemeralFile(const std::filesystem::path &path)
 
 void LocalStore::addTempRoot(const StorePath &path)
 {
-    // The store's lifetime lock excludes other clients; GC is disabled. Keep
-    // upstream's NUL-separated records, with native close/kill/exec cleanup.
+    // Share the in-process GC lock; the lifetime store lock excludes clients
+    // in other processes. Native close/kill/exec removes the root file.
+    auto gcLock = _fdGCLock.lock();
     auto fd = _fdTempRoots.lock();
     if (!*fd) *fd = ephemeralFile(fnTempRoots);
     writeFull(fd->get(), printStorePath(path) + '\0');
@@ -32,6 +34,7 @@ void LocalStore::addTempRoot(const StorePath &path)
 
 std::pair<std::filesystem::path, AutoCloseFD> LocalStore::createTempDirInStore()
 {
+    auto gcLock = _fdGCLock.lock();
     auto path = createTempDir(config->realStoreDir.get(), "tmp", 0700);
     AutoDelete cleanup(path);
     auto fd = ephemeralFile(path / ".lock");
@@ -39,19 +42,92 @@ std::pair<std::filesystem::path, AutoCloseFD> LocalStore::createTempDirInStore()
     return {path, std::move(fd)};
 }
 
+std::filesystem::path IndirectRootStore::addPermRoot(
+    const StorePath &path, const std::filesystem::path &root)
+{
+    auto &store = dynamic_cast<LocalStore &>(*this);
+    auto rootsDir = canonPath(store.config->stateDir.get() / "gcroots");
+    auto target = canonPath(root);
+    if (!isInDir(target, rootsDir))
+        throw Error("9front permanent roots must be files below %s", PathFmt(rootsDir));
+    addTempRoot(path);
+    if (!isValidPath(path))
+        throw InvalidPath("cannot root invalid path '%s'", printStorePath(path));
+    createDirs(target.parent_path());
+    // Do not truncate an existing root. A failed write leaves a malformed root,
+    // which stops collection until repaired or removed.
+    auto contents = printStorePath(path) + '\n';
+    if (pathExists(target)) {
+        if (readFile(target) != contents)
+            throw Error("root %s already exists; remove it before replacing it", PathFmt(target));
+    } else {
+        AutoCloseFD fd(n9_create(target.c_str(), 1 | 32 | 0x1000, 0600));
+        if (!fd) throw SysError(cc9_errno_from_errstr_or(EIO), "creating root %s", PathFmt(target));
+        writeFull(fd.get(), contents);
+    }
+    return target;
+}
+
 void LocalStore::addIndirectRoot(const std::filesystem::path &)
 {
-    unsupported("GC roots");
+    unsupported("indirect GC roots");
 }
 
-Roots LocalStore::findRoots(bool)
+void LocalStore::findRoots(const std::filesystem::path &path,
+                          std::filesystem::file_type type, Roots &roots)
 {
-    unsupported("GC roots");
+    if (type == std::filesystem::file_type::directory) {
+        for (auto &entry : DirectoryIterator{path}) {
+            checkInterrupt();
+            findRoots(entry.path(), entry.symlink_status().type(), roots);
+        }
+    } else if (type == std::filesystem::file_type::regular) {
+        auto contents = readFile(path);
+        if (contents.empty() || contents.back() != '\n')
+            throw Error("malformed GC root %s", PathFmt(path));
+        contents.pop_back();
+        auto storePath = parseStorePath(contents);
+        if (isValidPath(storePath)) roots[storePath].insert(path.string());
+    } else {
+        throw Error("unsupported GC root %s", PathFmt(path));
+    }
 }
 
-void LocalStore::collectGarbage(const GCOptions &, GCResults &)
+void LocalStore::findRootsNoTemp(Roots &roots, bool censor)
 {
-    unsupported("garbage collection");
+    if (config->useRootsDaemon) unsupported("GC roots daemon");
+    // Running programs need an explicit root; /proc discovery is not ported.
+    findRoots(config->stateDir.get() / "gcroots", std::filesystem::file_type::directory, roots);
+    if (censor)
+        for (auto &[path, names] : roots) names = {"{censored}"};
+}
+
+void LocalStore::findTempRoots(Roots &roots, bool censor)
+{
+    auto fd = _fdTempRoots.lock();
+    // The lifetime store lock excludes other live clients. Retain any leftover
+    // files conservatively: power-loss recovery is not implemented.
+    for (auto &entry : DirectoryIterator{tempRootsDir}) {
+        auto contents = readFile(entry.path());
+        size_t pos = 0;
+        while (pos < contents.size()) {
+            auto end = contents.find('\0', pos);
+            if (end == std::string::npos)
+                throw Error("malformed temporary roots file %s", PathFmt(entry.path()));
+            roots[parseStorePath(contents.substr(pos, end - pos))].insert(
+                censor ? "{censored}" : "{temp:" + entry.path().filename().string() + "}");
+            pos = end + 1;
+        }
+    }
+}
+
+Roots LocalStore::findRoots(bool censor)
+{
+    auto gcLock = _fdGCLock.lock();
+    Roots roots;
+    findRootsNoTemp(roots, censor);
+    findTempRoots(roots, censor);
+    return roots;
 }
 
 void LocalStore::autoGC(bool)

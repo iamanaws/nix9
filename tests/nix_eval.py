@@ -61,6 +61,10 @@ def check_nix_eval(guest):
     guest.command("cmp /tmp/eval-result.json /tmp/eval-expected.json")
     for args, message in (
         ("", "Usage:"),
+        ("--add-root /tmp/eval-root --expr '42'", "--add-root requires --instantiate"),
+        ("--instantiate --add-root", "--add-root requires a path"),
+        ("--instantiate --add-root '' --expr '42'", "--add-root requires a path"),
+        ("--instantiate --add-root /tmp/eval-root --expr '42'", "expected a derivation"),
         ("--expr 'let x = ; in x'", "syntax error"),
         ("--expr '1 + true'", "Boolean"),
         ("--expr 'throw \"expected failure\"'", "expected failure"),

@@ -47,7 +47,6 @@ def check_nix_store(guest, fixtures):
         ("--query --bogus", "unknown flag"),
         ("--add /tmp/missing-cli-input", "does not exist"),
         ("--query --hash /nix/store/00000000000000000000000000000000-missing", "not valid"),
-        ("--gc", "not supported"),
         ("--serve", "not supported"),
         ("--log-format bar --init", "not supported"),
     ):

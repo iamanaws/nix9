@@ -24,7 +24,7 @@ void showManPage(const std::string &)
                  "  --check-validity PATH  Check store registration\n"
                  "  --version              Print the Nix version\n"
                  "Use --store /tmp/nix9 for a writable store in the guest.\n"
-                 "Experimental 9front port: local builds are limited; GC and symlinks are unsupported.\n";
+                 "Experimental 9front port: local builds are limited; indirect roots and symlinks are unsupported.\n";
     throw Exit();
 }
 

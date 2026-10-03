@@ -32,17 +32,25 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("cd / && tar xf /tmp/package.tar")
                 guest.command(f". {prefix}/activate")
                 guest.command("nix-eval --expr '6 * 7'", "42")
+                drv_root = "/usr/local/nix/state/gcroots/sha1sum-drv"
                 result = guest.command(
-                    f"nix-eval --instantiate --expr '(import {prefix}/share/nix9).sha1sum'")
+                    f"nix-eval --instantiate --add-root {drv_root} "
+                    f"--expr '(import {prefix}/share/nix9).sha1sum'")
                 paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum\.drv$", result)
                 if len(paths) != 1:
                     raise RuntimeError(f"missing installed derivation: {result}")
                 drv = paths[0]
-                result = guest.command(f"nix-store --realise {drv}")
+                guest.command(f"cat {drv_root}", drv)
+                guest.command("nix-store --gc")
+                guest.command(f"nix-store --check-validity {drv}")
+                permanent = "/usr/local/nix/state/gcroots/sha1sum"
+                guest.command(f"nix-store --realise {drv} --add-root {permanent}", permanent)
+                result = guest.command(f"cat {permanent}")
                 paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum$", result)
                 if len(paths) != 1:
                     raise RuntimeError(f"missing installed output: {result}")
                 package = paths[0]
+                guest.command(f"rm {drv_root}")
                 guest.command(f"echo -n abc | {package}/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
                 guest.command(f"nix-store --verify-path {drv} {package}")
                 guest.command("rm /tmp/package.tar")
@@ -52,12 +60,23 @@ with tempfile.TemporaryDirectory() as directory:
     # A second QEMU process uses the same overlay, without any host file server.
     with boot(qemu, disk, snapshot=False) as guest:
         guest.command(f". {prefix}/activate")
+        guest.command(f"cat {permanent}", package)
+        guest.command("echo disposable > /tmp/gc-unused")
+        result = guest.command("nix-store --add /tmp/gc-unused")
+        unused = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-gc-unused$", result)
+        if len(unused) != 1:
+            raise RuntimeError(f"missing unrooted store path: {result}")
+        guest.command("nix-store --gc")
+        guest.command(f"test ! -e {unused[0]}")
         guest.command(f"nix-store --check-validity {drv} {package}")
         result = guest.command(f"nix-store --realise {drv}", package)
         if re.search(r"(?m)^building '", result):
             raise RuntimeError(f"persisted package was rebuilt: {result}")
         guest.command(f"nix-store --verify-path {drv} {package}")
         guest.command(f"echo -n abc | {package}/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
+        guest.command(f"rm {permanent}")
+        guest.command("nix-store --gc")
+        guest.command(f"test ! -e {package} && test ! -e {drv}")
 
 Path(output, "native-install.json").write_text(json.dumps({
     "prefix": prefix,
@@ -65,6 +84,8 @@ Path(output, "native-install.json").write_text(json.dumps({
     "output": package,
     "installation": "passed",
     "native-build": "passed",
+    "gc-before-build": "passed",
     "reuse-after-reboot": "passed",
+    "permanent-roots-and-gc": "passed",
 }, indent=2) + "\n")
 print("PASS: installed native Nix builds and reuses sha1sum after reboot")

@@ -1,0 +1,12 @@
+--- a/src/libstore/gc.cc
++++ b/src/libstore/gc.cc
+@@ -555,6 +555,9 @@
+             }
+         }
+ 
++        if (!shouldDelete)
++            return;
++
+         printInfo("deleting '%1%'", path);
+ 
+         results.paths.insert(path);

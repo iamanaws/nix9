@@ -39,6 +39,83 @@ static nix::ValidPathInfo file(nix::LocalStore &store, const std::string &name,
     return info;
 }
 
+static void checkGC() {
+    using namespace nix;
+    StorePathSet kept;
+    std::filesystem::path permanent;
+    {
+        auto store = openStore();
+        auto dependency = file(*store, "gc-dependency");
+        auto package = file(*store, "gc-package", {dependency.path});
+        auto dead = file(*store, "gc-unused");
+        auto deadUser = file(*store, "gc-unused-user", {dead.path});
+        store->registerValidPaths({{dependency.path, dependency}, {package.path, package},
+                                  {dead.path, dead}, {deadUser.path, deadUser}});
+        kept = {dependency.path, package.path};
+        permanent = store->config->stateDir.get() / "gcroots" / "package";
+        store->addPermRoot(package.path, permanent);
+        store->addPermRoot(package.path, permanent); // Idempotent.
+        rejected([&] { store->addPermRoot(dead.path, permanent); }, "root was overwritten");
+        rejected([&] { store->addPermRoot(package.path, "/tmp/outside-root"); }, "outside root accepted");
+        require(readFile(permanent) == store->printStorePath(package.path) + '\n', "root contents changed");
+    }
+    {
+        auto store = openStore();
+        require(store->findRoots(false).size() == 1, "permanent root did not survive reopening");
+        auto temporary = file(*store, "gc-temporary");
+        store->registerValidPath(temporary);
+        store->addTempRoot(temporary.path);
+        auto directory = createTempDir(store->config->realStoreDir.get(), "tmp", 0700);
+        writeFile(directory / ".lock", "");
+        writeFile(directory / "work", "active import");
+        auto unknown = store->config->realStoreDir.get() / "unfinished";
+        writeFile(unknown, "incomplete import");
+        GCOptions options;
+        options.action = GCOptions::gcReturnLive;
+        GCResults live;
+        store->collectGarbage(options, live);
+        require(live.paths.size() == 3, "GC live closure omitted a permanent or temporary root");
+        for (auto &path : kept)
+            require(live.paths.count(store->printStorePath(path)), "GC lost rooted dependency");
+        options.action = GCOptions::gcReturnDead;
+        GCResults dead;
+        store->collectGarbage(options, dead);
+        require(dead.paths.size() == 2, "GC dead closure changed");
+        require(pathExists(unknown) && pathExists(directory / "work"), "GC query deleted files");
+
+        options.action = GCOptions::gcDeleteSpecific;
+        options.pathsToDelete = kept;
+        GCResults results;
+        rejected([&] { store->collectGarbage(options, results); }, "GC deleted rooted path");
+        options = GCOptions{};
+        auto malformed = permanent.parent_path() / "broken";
+        writeFile(malformed, "incomplete");
+        rejected([&] { store->collectGarbage(options, results); }, "GC ignored malformed root");
+        require(store->queryAllValidPaths().size() == 5, "failed GC deleted valid paths");
+        deletePath(malformed);
+        store->collectGarbage(options, results);
+        auto expected = kept;
+        expected.insert(temporary.path);
+        require(store->queryAllValidPaths() == expected, "GC kept garbage or lost live paths");
+        require(pathExists(directory / "work") && !pathExists(unknown), "GC mishandled temporary directories");
+        for (auto &path : dead.paths)
+            require(!pathExists(store->toRealPath(store->parseStorePath(path))), "GC left deleted contents");
+        deletePath(directory / ".lock");
+        store->collectGarbage(options, results);
+        require(!pathExists(directory), "GC kept released temporary directory");
+    }
+    {
+        auto store = openStore();
+        GCResults results;
+        store->collectGarbage(GCOptions{}, results);
+        require(store->queryAllValidPaths() == kept, "temporary root survived client close");
+        deletePath(permanent);
+        store->collectGarbage(GCOptions{}, results);
+        require(store->queryAllValidPaths().empty(), "removed root still retained closure");
+    }
+    deletePath(root);
+}
+
 void checkStore() {
     using namespace nix;
     initLibStore(false);
@@ -97,9 +174,7 @@ void checkStore() {
         rejected([&] { store->registerValidPath(mismatch); }, "incorrect content address accepted");
 
         store->buildPaths({});
-        rejected([&] { store->addIndirectRoot("/tmp/nix9-root"); }, "permanent roots reported success");
-        GCResults results;
-        rejected([&] { store->collectGarbage(GCOptions{}, results); }, "GC reported success");
+        rejected([&] { store->addIndirectRoot("/tmp/nix9-root"); }, "indirect roots reported success");
     }
     require(!std::filesystem::exists(rootsFile), "closing store left temporary roots");
     {
@@ -139,6 +214,7 @@ void checkStore() {
                 "committed registration lost after killing client");
     }
     deletePath(root);
+    checkGC();
     checkImports();
     std::cout << "libstore LocalStore PASS\n";
 }

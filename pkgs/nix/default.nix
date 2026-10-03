@@ -49,6 +49,7 @@ runCommand "nix-util-${version}-9front-probe"
     patch -p1 < ${./patches/store-cache.patch}
     patch -p1 < ${./patches/store-cycles.patch}
     patch -p1 < ${./patches/version-without-store.patch}
+    patch -p1 < ${./patches/gc-query.patch}
     patch -p1 < ${./patches/9front.patch}
     cd ..
     runtime=${cc9}
@@ -96,7 +97,7 @@ runCommand "nix-util-${version}-9front-probe"
       build/derivation-env-desugar build/derivation-goal build/derivation-resolution-goal \
       build/derivation-trampoline-goal build/drv-output-substitution-goal build/entry-points build/goal \
       build/substitution-goal build/worker unix/build/child unix/build/hook-instance build-result common-protocol content-address derivation-options derivations \
-      derived-path derived-path-map downstream-placeholder export-import globals indirect-root-store keys \
+      derived-path derived-path-map downstream-placeholder export-import gc globals keys \
       local-fs-store local-store log-store machines misc names nar-info nar-info-disk-cache outputs-spec parsed-derivations \
       path path-info path-references path-with-outputs pathlocks posix-fs-canonicalise profiles realisation references sqlite store-api store-dir-config \
       store-reference store-registration unix/pathlocks worker-protocol; do

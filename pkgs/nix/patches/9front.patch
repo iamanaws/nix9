@@ -877,3 +877,116 @@
      if (::poll(pollStatus.data(), pollStatus.size(), timeout ? *timeout : -1) == -1) {
          if (errno == EINTR)
              return;
+--- a/src/libstore/gc.cc
++++ b/src/libstore/gc.cc
+@@ -5,7 +5,9 @@
+ #include "nix/store/path.hh"
+ #include "nix/util/configuration.hh"
+ #include "nix/util/finally.hh"
++#ifndef __plan9__
+ #include "nix/util/unix-domain-socket.hh"
++#endif
+ #include "nix/util/signals.hh"
+ #include "nix/util/serialise.hh"
+ #include "nix/util/util.hh"
+@@ -25,7 +27,7 @@
+ #if HAVE_STATVFS
+ #  include <sys/statvfs.h>
+ #endif
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__plan9__)
+ #  include <poll.h>
+ #  include <sys/socket.h>
+ #  include <sys/un.h>
+@@ -35,6 +37,7 @@
+ 
+ namespace nix {
+ 
++#ifndef __plan9__
+ static std::string gcSocketPath = "gc-socket/socket";
+ static std::string gcRootsDir = "gcroots";
+ 
+@@ -347,11 +350,18 @@
+     }
+ }
+ 
++#endif
++
+ struct GCLimitReached
+ {};
+ 
+ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
+ {
++#ifdef __plan9__
++    // The lifetime store lock excludes other clients. Serialize this client's
++    // root registration and temporary directory creation with collection.
++    auto gcLock = _fdGCLock.lock();
++#endif
+     const auto & gcSettings = config->getLocalSettings().getGCSettings();
+ 
+     bool shouldDelete = options.action == GCOptions::gcDeleteDead || options.action == GCOptions::gcDeleteSpecific;
+@@ -387,6 +397,7 @@
+     if (shouldDelete)
+         deletePath(reservedPath);
+ 
++#ifndef __plan9__
+     /* Acquire the global GC root. Note: we don't use fdGCLock
+        here because then in auto-gc mode, another thread could
+        downgrade our exclusive lock. */
+@@ -513,6 +524,8 @@
+ 
+ #endif
+ 
++#endif
++
+     /* Find the roots.  Since we've grabbed the GC lock, the set of
+        permanent roots cannot increase now. */
+     printInfo("finding garbage collector roots...");
+@@ -548,11 +561,18 @@
+            by another process. We need to be sure that we can acquire an
+            exclusive lock before deleting them. */
+         if (baseName.find("tmp-", 0) == 0) {
++#ifdef __plan9__
++            if (pathExists(realPath / ".lock")) {
++                debug("skipping locked tempdir %s", PathFmt(realPath));
++                return;
++            }
++#else
+             auto tmpDirFd = openDirectory(realPath);
+             if (!tmpDirFd || !lockFile(tmpDirFd.get(), ltWrite, false)) {
+                 debug("skipping locked tempdir %s", PathFmt(realPath));
+                 return;
+             }
++#endif
+         }
+ 
+         if (!shouldDelete)
+@@ -754,6 +774,7 @@
+         return;
+     }
+ 
++#ifndef __plan9__
+     /* Unlink all files in /nix/store/.links that have a link count of 1,
+        which indicates that there are no other links and so they can be
+        safely deleted.  FIXME: race condition with optimisePath(): we
+@@ -806,10 +827,13 @@
+         printInfo("note: hard linking is currently saving %s", renderSize(unsharedSize - actualSize - overhead));
+     }
+ 
++#endif
++
+     /* While we're at it, vacuum the database. */
+     // if (options.action == GCOptions::gcDeleteDead) vacuumDB();
+ }
+ 
++#ifndef __plan9__
+ void LocalStore::autoGC(bool sync)
+ {
+ #if HAVE_STATVFS
+@@ -896,4 +920,6 @@
+ #endif
+ }
+ 
++#endif
++
+ } // namespace nix
