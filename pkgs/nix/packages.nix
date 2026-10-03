@@ -6,7 +6,8 @@ let
   };
 in
 {
-  inherit libsec;
+  inherit libsec mkDerivation;
+  fetchurl = import ./pkgs/fetchurl.nix { inherit mkDerivation; };
   sha1sum = import ./pkgs/sha1sum.nix {
     inherit mkDerivation libsec;
     src = ./sha1sum.c;

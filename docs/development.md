@@ -78,4 +78,7 @@ Roots are files containing store paths, not symlinks. Remove a root file to rele
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root; collection cannot run alongside a build.
 Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
-and bootstrap tools. `nix-util-tests` checks isolated builds and reuse after reboot.
+and bootstrap tools. The installed package set also exposes
+`fetchurl { url = "…"; hash = "sha256-…"; }` for native source downloads through
+9front’s `webfs`; networking must be configured in the guest.
+`nix-util-tests` checks fetching, isolated builds and reuse after reboot.

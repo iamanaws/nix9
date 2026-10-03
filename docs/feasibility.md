@@ -6,7 +6,8 @@ as JSON and instantiates derivations. Native builds use upstream Nix’s schedul
 with a 9front process backend. They support input-addressed outputs and flat or
 recursive fixed outputs, without sandboxing or a diverted store. Partial rebuilds
 preserve valid outputs; fixed-output hash mismatches are discarded. The evaluator uses upstream’s
-no-GC mode for short-lived runs; flakes and network fetchers remain unported.
+no-GC mode for short-lived runs. Native `fetchurl` uses 9front’s `webfs` and verifies
+the content hash; flakes and evaluator network fetchers remain unported.
 
 Our patched [goken9cc](../pkgs/goken9cc) rebuilds C runtimes and libraries on
 Linux; APE uses GCC for preprocessing. The VM supplies remaining sources,

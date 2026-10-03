@@ -19,8 +19,11 @@ def main():
         url = f"http://10.0.2.2:{server.server_port}/{output.name}"
         try:
             with boot(qemu, disk) as guest:
-                members = " ".join("'" + path.replace("'", "''") + "'" for path in paths)
-                guest.command("cd / && tar cf /tmp/export.tar " + members)
+                guest.command("members=()")
+                for path in paths:
+                    quoted = "'" + path.replace("'", "''") + "'"
+                    guest.command(f"members=($members {quoted})")
+                guest.command("cd / && tar cf /tmp/export.tar $members")
                 guest.command(
                     "size=`{ls -l /tmp/export.tar | awk '{print $6}'}; "
                     f"hget -r 'Content-Length: '^$size -P {url} </tmp/export.tar"

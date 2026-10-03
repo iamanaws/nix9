@@ -24,5 +24,6 @@ runCommand "nix-${nixUtil.version}-9front"
     cp ${../../lib/mk-derivation.nix} "$out/share/nix9/mk-derivation.nix"
     cp ${../libsec/native.nix} "$out/share/nix9/pkgs/libsec.nix"
     cp ${../sha1sum/native.nix} "$out/share/nix9/pkgs/sha1sum.nix"
+    cp ${../fetchurl/native.nix} "$out/share/nix9/pkgs/fetchurl.nix"
     cp ${./packages.nix} "$out/share/nix9/default.nix"
   ''

@@ -12,6 +12,7 @@ import tempfile
 import threading
 
 from guest import boot
+from native_fetch import fetch_fixtures, check_fetch
 
 
 qemu, image, archive, prefix, output = sys.argv[1:]
@@ -21,6 +22,7 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
                     "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
     shutil.copyfile(archive, root / "package.tar")
+    fetch_fixtures(root)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
     with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -32,6 +34,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("cd / && tar xf /tmp/package.tar")
                 guest.command(f". {prefix}/activate")
                 guest.command("nix-instantiate --eval --expr '6 * 7'", "42")
+                fetching = check_fetch(guest, prefix, server.server_port)
                 drv_root = "/usr/local/nix/state/gcroots/sha1sum-drv"
                 guest.command(
                     f"nix-instantiate --add-root {drv_root} "
@@ -83,6 +86,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "derivation": drv,
     "output": package,
     "installation": "passed",
+    "fetching": fetching,
     "native-build": "passed",
     "gc-before-build": "passed",
     "reuse-after-reboot": "passed",

@@ -91,7 +91,7 @@
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
-          amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test rc/lib/rcmain
+          amd64/bin/cat amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
         cp amd64/bin/* "$out/bin/"
@@ -138,7 +138,13 @@
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
               ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
-            ${python}/bin/python ${testSupport [ ./tests/native_install.py ]}/native_install.py \
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_install.py
+                ./tests/native_fetch.py
+                ./tests/fetch.nix
+              ]
+            }/native_install.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${nixPackage} ${nixPackage.guestPrefix} "$out"
           '';
