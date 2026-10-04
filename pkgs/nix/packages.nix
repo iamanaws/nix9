@@ -5,13 +5,26 @@ let
     src = ./libsec-source;
   };
   fetchurl = import ./pkgs/fetchurl.nix { inherit mkDerivation; };
+  upstream = import ./pkgs/lua-source.nix;
+  liblua = import ./pkgs/liblua.nix {
+    inherit mkDerivation fetchurl upstream;
+    config = ./pkgs/lua-ape-config.h;
+  };
 in
 {
-  inherit libsec mkDerivation fetchurl;
+  inherit
+    libsec
+    liblua
+    mkDerivation
+    fetchurl
+    ;
   lua = import ./pkgs/lua.nix {
-    inherit mkDerivation fetchurl;
-    upstream = import ./pkgs/lua-source.nix;
-    config = ./pkgs/lua-ape-config.h;
+    inherit
+      mkDerivation
+      fetchurl
+      upstream
+      liblua
+      ;
   };
   sha1sum = import ./pkgs/sha1sum.nix {
     inherit mkDerivation libsec;

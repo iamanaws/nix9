@@ -31,6 +31,43 @@ static std::string text(nix::SQLite &db, const char *sql) {
     return row.getStr(0);
 }
 
+// Test-only fault injection into the disposable guest's real store database.
+void crashSQLite(const char *database) {
+    using namespace nix;
+    SQLite db(database, {.mode=SQLiteOpenMode::NoCreate, .useWAL=false});
+    require(text(db, "PRAGMA journal_mode") == "delete", "expected rollback journal");
+    require(number(db, "SELECT count(*) FROM ValidPaths") > 0 &&
+            number(db, "SELECT count(*) FROM Refs") > 0, "empty recovery fixture");
+    auto before = readFile(database);
+    writeFile("/tmp/nix9-db-before", before);
+    SQLiteTxn txn(db);
+    db.exec("UPDATE ValidPaths SET narSize=narSize+1; DELETE FROM Refs");
+    require(sqlite3_db_cacheflush(db) == SQLITE_OK, "flushing uncommitted pages failed");
+    require(readFile(database) != before, "uncommitted pages never reached the database");
+    require(std::filesystem::file_size(std::string(database) + "-journal") > 512,
+            "missing recovery journal");
+    writeFile("/tmp/nix9-db-ready", "ready\n");
+    // The host kills the VM here, without running SQLite's destructors.
+    while (true) usleep(100000);
+}
+
+void recoverSQLite(const char *database) {
+    using namespace nix;
+    {
+        SQLite db(database, {.mode=SQLiteOpenMode::NoCreate, .useWAL=false});
+        require(text(db, "PRAGMA integrity_check") == "ok", "recovered database is corrupt");
+        SQLiteStmt check(db, "PRAGMA foreign_key_check");
+        require(!check.use().next(), "recovered references violate foreign keys");
+    }
+    require(readFile(database) == readFile("/tmp/nix9-db-before"),
+            "rollback did not restore the original database bytes");
+    require(!std::filesystem::exists(std::string(database) + "-journal"),
+            "recovery left a hot journal");
+    require(!std::filesystem::exists(std::string(database) + ".p9lock"),
+            "recovery left a database lock");
+    std::cout << "SQLite reboot recovery PASS\n";
+}
+
 static void checkSchema() {
     using namespace nix;
     for (auto mode : {SQLiteOpenMode::NoCreate, SQLiteOpenMode::Immutable}) {

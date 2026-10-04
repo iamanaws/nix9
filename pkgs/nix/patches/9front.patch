@@ -688,7 +688,7 @@
 +#ifdef __plan9__
 +    useSQLiteWAL = false;
 +    buildHook = Strings{};
-+    useSubstitutes = false;
++    substituters = std::vector<StoreReference>{};
 +    compressLog = false;
  #endif
      allowSymlinkedStore = getEnv("NIX_IGNORE_SYMLINK_STORE") == "1";

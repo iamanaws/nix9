@@ -8,7 +8,8 @@ recursive fixed outputs, without sandboxing or a diverted store. Partial rebuild
 preserve valid outputs; fixed-output hash mismatches are discarded. The evaluator uses upstream’s
 no-GC mode for short-lived runs. Native `fetchurl` uses 9front’s `webfs` and verifies
 the content hash. Its HTTPS transport does not validate server certificates;
-content integrity relies on the pinned hash. Flakes and evaluator network fetchers remain unported.
+content integrity relies on the pinned hash. Signed `file://` binary caches support
+native substitution. Flakes and evaluator network fetchers remain unported.
 
 Our patched [goken9cc](../pkgs/goken9cc) rebuilds C runtimes and libraries on
 Linux; APE uses GCC for preprocessing. The VM supplies remaining sources,
@@ -26,7 +27,7 @@ libraries. Boehm GC, S3 support, and Linux seccomp can be disabled.
 | C++ | Nix archive, streaming, hashing, compression, URL parsing, and signing code runs on 9front with cc9. The full `libutil` library and `nix` CLI remain unported. The build omits libarchive disk APIs; coroutine stacks and libsodium allocations lack guard pages. |
 | ABI | cc9 uses the SysV ABI. Our existing Plan 9 and APE archives cannot be linked into it; Nix dependencies need separate builds. |
 | Filesystem | The [NAR probe](../tests/nar.py) round-tripped Nix 2.34.8 archives byte-for-byte, including links and control characters in names. Regular files and directories also survived extraction and re-archiving. Links and unsupported names stay in archives; extraction rejects them before writing. Native symlink resolution is still missing. |
-| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. Clients share the store using [native locks](../pkgs/cc9-libs/plan9-lock.c) and rollback journals. They must use the same canonical store path and kernel service namespace, with one connection per store per process. GC and schema changes require exclusive client access. Explicit GC retains permanent roots and their dependencies. Automatic GC, runtime root discovery, indirect roots, profiles, repair, WAL and multiuser mode remain unsupported; power-loss recovery is untested. |
+| Store | `LocalStore` imports regular files and directories from NARs, validates hashes, and queries metadata and references. Temporary roots clean up on close or process death. Clients share the store using [native locks](../pkgs/cc9-libs/plan9-lock.c) and rollback journals. They must use the same canonical store path and kernel service namespace, with one connection per store per process. GC and schema changes require exclusive client access. Explicit GC retains permanent roots and their dependencies. Automatic GC, runtime root discovery, indirect roots, profiles, repair, WAL and multiuser mode remain unsupported. Offline recovery of interrupted builds and SQLite transactions is tested; torn writes remain untested. |
 | Processes and locks | Child processes support pipes, PATH, environments, wait and kill. Interrupt/hangup notes cancel at Nix interruption checks. Exclusive path locks pass contention, fork/exec and killed-holder tests; server crashes may leave markers. Generic file locks, credentials, process groups, signal threads and PTYs remain unsupported. |
 
 The [Nix build](../pkgs/nix) uses the pinned [cc9 runtime](../pkgs/cc9) and

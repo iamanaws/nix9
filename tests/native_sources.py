@@ -1,4 +1,4 @@
-"""Exercise HTTPS and compile the pinned Lua archive entirely inside 9front."""
+"""Fetch Lua over HTTPS, then build its library and interpreter inside 9front."""
 
 from contextlib import contextmanager
 import functools
@@ -52,17 +52,28 @@ def check_sources(guest, prefix, http_port, tls_port):
     if len(paths) != 1:
         raise RuntimeError(f"missing native Lua output: {result}")
     package = paths[0]
+    result = guest.command(f"nix-store -q --references {package}")
+    libraries = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-liblua-5\.4\.8$", result)
+    if len(libraries) != 1:
+        raise RuntimeError(f"Lua does not retain its library: {result}")
+    library = libraries[0]
+    guest.command(f"test -s {library}/lib/liblua.a && test -s {library}/include/lua.h")
     guest.command(f"lua={package}/bin/lua")
     guest.command("mkdir /tmp/lua-work && cd /tmp/lua-work")
     result = guest.command("$lua /tmp/lua/check.lua 23")
     passed = [line for line in result.splitlines() if line.startswith("PASS:")]
     if passed != EXPECTED:
         raise RuntimeError(f"native Lua checks failed: {passed!r}")
+    result = guest.command("$lua -e 'print(package.path)'")
+    if f"{library}/share/lua/5.4/?.lua" not in result:
+        raise RuntimeError(f"Lua module search path does not use its library: {result}")
     guest.command("cd /")
     guest.command(f"publicLua=`{{nix-instantiate --expr '(import {prefix}/share/nix9).lua'}}")
     result = guest.command("nix-store --realise $publicLua", package)
     if "building '" in result:
         raise RuntimeError(f"public Lua did not reuse the pinned source build: {result}")
+    guest.command("nix-store --gc")
+    guest.command(f"nix-store --verify-path {package} {library}")
     # TLS transport does not replace Nix's required content hash.
     guest.command("fetchHash='sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='")
     guest.command(f"fetchUrl=https://10.0.2.2:{tls_port}/hello.c")
@@ -72,6 +83,6 @@ def check_sources(guest, prefix, http_port, tls_port):
     if "hash mismatch" not in result:
         raise RuntimeError(f"HTTPS did not reach hash verification: {result}")
     guest.command("badOut=`{nix-store -q --outputs $badDrv}; test ! -e $badOut")
-    return {"package": package, "https": "passed", "archive-build": "passed",
+    return {"package": package, "library": library, "https": "passed", "archive-build": "passed",
             "lua-checks": len(EXPECTED), "certificate-validation": "unsupported (untrusted, wrong host accepted)",
             "https-hash-mismatch": "passed"}

@@ -85,10 +85,10 @@ runCommand "nix-${version}-9front-libraries"
     source ${setup}
     # Compile real upstream translation units. No Linux libraries are linked.
     for source in \
-      archive args base-n base-nix-32 canon-path compression compression-algo config-global configuration \
+      archive args base-n base-nix-32 canon-path compression compression-algo compression-settings config-global configuration \
       current-process english environment-variables error executable-path exit experimental-features \
       file-content-address file-descriptor file-system fs-sink git hash hilite json-utils logging memory-source-accessor \
-      mounted-source-accessor nar-accessor nar-listing pos-table position posix-source-accessor processes serialise \
+      memory-source-accessor/json mounted-source-accessor nar-accessor nar-cache nar-listing pos-table position posix-source-accessor processes serialise \
       signature/local-keys signature/signer source-accessor source-path strings suggestions tarfile terminal thread-pool union-source-accessor url users util xml-writer \
       unix/current-process unix/environment-variables unix/file-descriptor unix/file-path \
       unix/file-system-at unix/file-system unix/muxable-pipe unix/processes unix/signals unix/users unix/xdg-dirs; do
@@ -96,14 +96,14 @@ runCommand "nix-${version}-9front-libraries"
         -c "$sources/$source.cc" -o "build/nix-''${source//\//_}.o"
     done
     for source in \
-      build/build-log build/derivation-builder build/derivation-building-goal build/derivation-check \
+      binary-cache-store build/build-log build/derivation-builder build/derivation-building-goal build/derivation-check \
       build/derivation-env-desugar build/derivation-goal build/derivation-resolution-goal \
       build/derivation-trampoline-goal build/drv-output-substitution-goal build/entry-points build/goal \
       build/substitution-goal build/worker unix/build/child unix/build/hook-instance build-result common-protocol content-address derivation-options derivations \
       derived-path derived-path-map downstream-placeholder export-import gc globals keys \
-      local-fs-store local-store log-store machines misc names nar-info nar-info-disk-cache outputs-spec parsed-derivations \
+      local-binary-cache-store local-fs-store local-store log-store machines misc names nar-info nar-info-disk-cache outputs-spec parsed-derivations \
       path path-info path-references path-with-outputs pathlocks posix-fs-canonicalise profiles realisation references sqlite store-api store-dir-config \
-      store-reference store-registration unix/pathlocks worker-protocol; do
+      remote-fs-accessor store-reference store-registration unix/pathlocks worker-protocol; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
         -c "$sources/../libstore/$source.cc" -o "build/store-''${source//\//_}.o"
     done

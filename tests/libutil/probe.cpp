@@ -11,6 +11,8 @@
 #include <iterator>
 
 void checkSQLite();
+void crashSQLite(const char *database);
+void recoverSQLite(const char *database);
 void checkAllocations();
 void checkStore();
 void checkHashes(const char *input, const char *expected);
@@ -125,6 +127,14 @@ int main(int argc, char **argv) {
         if (argc == 2 && std::string_view(argv[1]) == "sqlite") {
             checkSQLite();
             std::cout << "libstore SQLite PASS\n";
+            return 0;
+        }
+        if (argc == 3 && std::string_view(argv[1]) == "sqlite-crash") {
+            crashSQLite(argv[2]);
+            return 0;
+        }
+        if (argc == 3 && std::string_view(argv[1]) == "sqlite-recover") {
+            recoverSQLite(argv[2]);
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "processes") {

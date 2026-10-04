@@ -149,6 +149,11 @@
                 ./tests/native_install.py
                 ./tests/native_fetch.py
                 ./tests/native_sources.py
+                ./tests/native_recovery.py
+                ./tests/native_transfer.py
+                ./tests/native_cache.py
+                ./tests/artifacts.py
+                ./tests/recovery.nix
                 ./tests/sources.nix
                 ./tests/lua.py
                 ./tests/lua
@@ -156,7 +161,8 @@
               ]
             }/native_install.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixPackage} ${nixPackage.guestPrefix} "$out" ${lua.archive}
+              ${nixPackage} ${nixPackage.guestPrefix} "$out" ${lua.archive} \
+              ${nixUtil}/probe.elf ${nixUtil.cc9.elf2aout}
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit

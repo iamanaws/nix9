@@ -2,6 +2,7 @@
 
 import contextlib
 import re
+import signal
 import sys
 
 import pexpect
@@ -10,6 +11,13 @@ import pexpect
 class Guest:
     def __init__(self, child):
         self.child = child
+        self.crashed = False
+
+    def crash(self):
+        """Cut VM power without giving the guest a chance to close files."""
+        self.child.kill(signal.SIGKILL)
+        self.child.expect(pexpect.EOF)
+        self.crashed = True
 
     def command(self, command, expected=None):
         self.child.sendline(command + "; echo NIX9-STATUS:$status")
@@ -62,7 +70,8 @@ def boot(qemu, disk, *, snapshot=True):
         guest = Guest(child)
         guest.command("ip/ipconfig ether /net/ether0")
         yield guest
-        child.sendline("fshalt")
-        child.expect("done halting")
+        if not guest.crashed:
+            child.sendline("fshalt")
+            child.expect("done halting")
     finally:
         child.close(force=True)

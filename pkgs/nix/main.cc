@@ -34,6 +34,8 @@ void showManPage(const std::string &name)
                  "  --query FLAG PATH...   Query --hash, --size, --references or --requisites\n"
                  "  --dump PATH            Write a NAR to stdout\n"
                  "  --restore PATH         Read a NAR from stdin\n"
+                 "  --export PATH...       Write store paths and metadata to stdout\n"
+                 "  --import               Read a trusted export from stdin\n"
                  "  --check-validity PATH  Check store registration\n"
                  "  --version              Print the Nix version\n"
                  "Use --store /tmp/nix9 for a writable store in the guest.\n"

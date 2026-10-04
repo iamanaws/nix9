@@ -80,6 +80,28 @@ Nix build need an explicit root; collection requires other store clients to clos
 Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
 and bootstrap tools. The installed package set also exposes
 `fetchurl { url = "…"; hash = "sha256-…"; }` for native source downloads through
-9front’s `webfs`; networking must be configured in the guest. Native `lua` fetches
-and unpacks its pinned upstream archive before compiling with APE.
+9front’s `webfs`; networking must be configured in the guest. Native `lua` builds against `liblua`; both fetch the same pinned archive
+and compile with APE.
 `nix-util-tests` checks fetching, isolated builds and reuse after reboot.
+
+For a trusted transfer between machines using the same store path, export the
+package and its dependencies, then import the file on the destination:
+
+```rc
+nix-store --export `{nix-store -qR $result} > closure.export
+nix-store --import < closure.export
+```
+
+Root the imported package with `--realise --add-root` as above before running GC.
+For automatic reuse, configure `substituters` with
+`file:///path/to/cache?store=/usr/local/nix/store` and `trusted-public-keys` with
+the cache's public signing key. `--realise` then fetches missing outputs and
+dependencies, checking signatures and content hashes. No cache is configured by default.
+
+After an unclean shutdown, reboot and keep Nix clients stopped during recovery.
+Under `/usr/local/nix`, remove leftover files in `state/db/clients` and `state/temproots`, and
+`state/db/db.sqlite.p9lock`; preserve the database and its rollback journal.
+Remove the interrupted output's exact `.lock` file and leftover `store/tmp-*/.lock`
+markers, then rebuild and verify the output. Never remove locks from a live store
+or use `store/*.lock`: a valid output can also have that suffix.
+The [recovery test](../tests/native_recovery.py) checks this procedure and SQLite journal rollback.
