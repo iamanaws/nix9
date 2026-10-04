@@ -357,7 +357,7 @@
 +                checkInterrupt();
 +                // ORDWR | OCEXEC | ORCLOSE | OEXCL (native 9front flags).
 +                AutoCloseFD gate(n9_create("#s/nix9-lock-create", 1 | 32 | 64 | 0x1000, 0600));
-+                AutoCloseFD fd(gate ? n9_create(lockPath.c_str(), 2 | 32 | 64 | 0x1000, 0600) : -1);
++                AutoCloseFD fd(gate ? n9_create(lockPath.c_str(), 1 | 32 | 64 | 0x1000, 0600) : -1);
 +                if (fd) {
 +                    fds.emplace_back(fd.get(), lockPath);
 +                    fd.release();
@@ -455,11 +455,14 @@
  void SQLite::exec(const std::string & stmt)
 --- a/src/libstore/local-store.cc
 +++ b/src/libstore/local-store.cc
-@@ -126,6 +126,12 @@
+@@ -126,6 +126,15 @@
      , tempRootsDir(config->stateDir.get() / "temproots")
      , fnTempRoots(tempRootsDir / std::to_string(getpid()))
  {
 +#ifdef __plan9__
++    auto startupLock = lockStore();
++    // Other clients can register or update paths while this connection is open.
++    pathInfoCache = make_ref<decltype(pathInfoCache)::element_type>(0);
 +    if (config->readOnly)
 +        throw Error("read-only LocalStore is not supported on 9front");
 +    if (!config->getLocalSettings().buildUsersGroup.get().empty())
@@ -468,20 +471,20 @@
      auto state(_state->lock());
      state->stmts = std::make_unique<State::Stmts>();
  
-@@ -227,6 +233,12 @@
+@@ -227,6 +236,12 @@
      } catch (SystemError & e) { /* don't care about errors */
      }
  
 +#ifdef __plan9__
-+    // Until shared locks are available, keep exclusive access for this
-+    // connection's lifetime. Refuse contention instead of deadlocking clients.
-+    if (!globalLock.lockPaths({dbDir / "big-lock"}, "", false))
-+        throw Error("the 9front store is already open by another client");
++    // Membership changes and collection use the same native startup gate.
++    createDirs(dbDir / "clients");
++    if (!clientLock.lockPaths({dbDir / "clients" / std::to_string(getpid())}, "", false))
++        throw Error("the 9front store is already open in this process");
 +#else
      /* Acquire the big fat lock in shared mode to make sure that no
         schema upgrade is in progress. */
      if (!config->readOnly) {
-@@ -249,6 +261,8 @@
+@@ -249,9 +264,14 @@
          lockFile(globalLock.get(), ltRead, true);
      }
  
@@ -490,7 +493,13 @@
      /* Check the current database schema and if necessary do an
         upgrade.  */
      int curSchema = getSchema();
-@@ -282,6 +296,7 @@
++#ifdef __plan9__
++    if (curSchema != nixSchemaVersion) requireExclusiveStore();
++#endif
+     if (config->readOnly && curSchema < nixSchemaVersion) {
+         debug("current schema version: %d", curSchema);
+         debug("supported schema version: %d", nixSchemaVersion);
+@@ -282,6 +302,7 @@
                  "which is no longer supported. To convert to the new format,\n"
                  "please upgrade Nix to version 1.11 first.");
  
@@ -498,7 +507,7 @@
          if (!lockFile(globalLock.get(), ltWrite, false)) {
              printInfo("waiting for exclusive access to the Nix store...");
              lockFile(
-@@ -289,6 +304,8 @@
+@@ -289,6 +310,8 @@
              lockFile(globalLock.get(), ltWrite, true);
          }
  
@@ -507,7 +516,7 @@
          /* Get the schema version again, because another process may
             have performed the upgrade already. */
          curSchema = getSchema();
-@@ -320,7 +337,9 @@
+@@ -320,7 +343,9 @@
  
          writeFile(schemaPath, fmt("%1%", nixSchemaVersion), 0666, FsSync::Yes);
  
@@ -517,7 +526,7 @@
      }
  
      else
-@@ -437,7 +456,9 @@
+@@ -437,7 +462,9 @@
          auto fdTempRoots(_fdTempRoots.lock());
          if (*fdTempRoots) {
              fdTempRoots->close();
@@ -527,7 +536,17 @@
          }
      } catch (...) {
          ignoreExceptionInDestructor();
-@@ -899,7 +920,11 @@
+@@ -582,6 +609,9 @@
+         if (schemaMigrations.contains(migrationName))
+             return;
+ 
++#ifdef __plan9__
++        requireExclusiveStore();
++#endif
+         debug("executing Nix database schema migration '%s'...", migrationName);
+ 
+         SQLiteTxn txn(state.db);
+@@ -899,7 +929,11 @@
         the validity, at the expense of some speed of the path
         registering operation. */
      if (config->getLocalSettings().syncBeforeRegistering)
@@ -539,7 +558,7 @@
  #endif
  
      return retrySQLite<void>([&]() {
-@@ -988,6 +1013,9 @@
+@@ -988,6 +1022,9 @@
  
  void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairFlag repair, CheckSigsFlag checkSigs)
  {
@@ -549,7 +568,7 @@
      if (checkSigs && pathInfoIsUntrusted(info))
          throw Error("cannot add path '%s' because it lacks a signature by a trusted key", printStorePath(info.path));
  
-@@ -1021,6 +1049,9 @@
+@@ -1021,6 +1058,9 @@
              if (repair || !isValidPath(info.path)) {
  
                  deletePath(realPath);
@@ -559,7 +578,7 @@
  
                  /* While restoring the path from the NAR, compute the hash
                  of the NAR. */
-@@ -1095,6 +1126,9 @@
+@@ -1095,6 +1135,9 @@
                  }
  
                  registerValidPath(info);
@@ -569,7 +588,7 @@
              }
  
              outputLock.setDeletion(true);
-@@ -1114,6 +1148,9 @@
+@@ -1114,6 +1157,9 @@
      const StorePathSet & references,
      RepairFlag repair)
  {
@@ -579,7 +598,7 @@
      /* For computing the store path. */
      auto hashSink = std::make_unique<HashSink>(hashAlgo);
      TeeSource source{source0, *hashSink};
-@@ -1215,6 +1252,9 @@
+@@ -1215,6 +1261,9 @@
          if (repair || !isValidPath(dstPath)) {
  
              deletePath(realPath);
@@ -589,7 +608,7 @@
  
              autoGC();
  
-@@ -1234,7 +1274,13 @@
+@@ -1234,7 +1283,13 @@
                  }
              } else {
                  /* Move the temporary path we restored above. */
@@ -603,7 +622,7 @@
              }
  
              /* For computing the nar hash. In recursive SHA-256 mode, this
-@@ -1259,6 +1305,9 @@
+@@ -1259,6 +1314,9 @@
              auto info = ValidPathInfo::makeFromCA(*this, name, std::move(desc), narHash.hash);
              info.narSize = narHash.numBytesDigested;
              registerValidPath(info);
@@ -613,7 +632,7 @@
          }
  
          outputLock.setDeletion(true);
-@@ -1269,6 +1318,7 @@
+@@ -1269,6 +1327,7 @@
  
  /* Create a temporary directory in the store that won't be
     garbage-collected until the returned FD is closed. */
@@ -621,7 +640,7 @@
  std::pair<std::filesystem::path, AutoCloseFD> LocalStore::createTempDirInStore()
  {
      std::filesystem::path tmpDirFn;
-@@ -1288,6 +1338,8 @@
+@@ -1288,6 +1347,8 @@
      } while (!pathExists(tmpDirFn.string()) || !lockedByUs);
      return {tmpDirFn, std::move(tmpDirFd)};
  }
@@ -632,12 +651,14 @@
  {
 --- a/src/libstore/include/nix/store/local-store.hh
 +++ b/src/libstore/include/nix/store/local-store.hh
-@@ -184,7 +184,11 @@
+@@ -184,7 +184,13 @@
      /**
       * Lock file used for upgrading.
       */
 +#ifdef __plan9__
-+    PathLocks globalLock;
++    PathLocks clientLock;
++    PathLocks lockStore();
++    void requireExclusiveStore();
 +#else
      AutoCloseFD globalLock;
 +#endif
@@ -906,7 +927,7 @@
  static std::string gcSocketPath = "gc-socket/socket";
  static std::string gcRootsDir = "gcroots";
  
-@@ -347,11 +350,18 @@
+@@ -347,11 +350,20 @@
      }
  }
  
@@ -918,14 +939,16 @@
  void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
  {
 +#ifdef __plan9__
-+    // The lifetime store lock excludes other clients. Serialize this client's
-+    // root registration and temporary directory creation with collection.
++    // Keep new clients out until collection completes. Existing clients keep
++    // their inputs alive by making collection fail before any deletion.
++    auto storeLock = lockStore();
++    requireExclusiveStore();
 +    auto gcLock = _fdGCLock.lock();
 +#endif
      const auto & gcSettings = config->getLocalSettings().getGCSettings();
  
      bool shouldDelete = options.action == GCOptions::gcDeleteDead || options.action == GCOptions::gcDeleteSpecific;
-@@ -387,6 +397,7 @@
+@@ -387,6 +399,7 @@
      if (shouldDelete)
          deletePath(reservedPath);
  
@@ -933,7 +956,7 @@
      /* Acquire the global GC root. Note: we don't use fdGCLock
         here because then in auto-gc mode, another thread could
         downgrade our exclusive lock. */
-@@ -513,6 +524,8 @@
+@@ -513,6 +526,8 @@
  
  #endif
  
@@ -942,7 +965,7 @@
      /* Find the roots.  Since we've grabbed the GC lock, the set of
         permanent roots cannot increase now. */
      printInfo("finding garbage collector roots...");
-@@ -548,11 +561,18 @@
+@@ -548,11 +563,18 @@
             by another process. We need to be sure that we can acquire an
             exclusive lock before deleting them. */
          if (baseName.find("tmp-", 0) == 0) {
@@ -961,7 +984,7 @@
          }
  
          if (!shouldDelete)
-@@ -754,6 +774,7 @@
+@@ -754,6 +776,7 @@
          return;
      }
  
@@ -969,7 +992,7 @@
      /* Unlink all files in /nix/store/.links that have a link count of 1,
         which indicates that there are no other links and so they can be
         safely deleted.  FIXME: race condition with optimisePath(): we
-@@ -806,10 +827,13 @@
+@@ -806,10 +829,13 @@
          printInfo("note: hard linking is currently saving %s", renderSize(unsharedSize - actualSize - overhead));
      }
  
@@ -983,7 +1006,7 @@
  void LocalStore::autoGC(bool sync)
  {
  #if HAVE_STATVFS
-@@ -896,4 +920,6 @@
+@@ -896,4 +922,6 @@
  #endif
  }
  

@@ -25,5 +25,8 @@ runCommand "nix-${nixUtil.version}-9front"
     cp ${../libsec/native.nix} "$out/share/nix9/pkgs/libsec.nix"
     cp ${../sha1sum/native.nix} "$out/share/nix9/pkgs/sha1sum.nix"
     cp ${../fetchurl/native.nix} "$out/share/nix9/pkgs/fetchurl.nix"
+    cp ${../lua/native.nix} "$out/share/nix9/pkgs/lua.nix"
+    cp ${../lua/source.nix} "$out/share/nix9/pkgs/lua-source.nix"
+    cp ${../lua/ape-config.h} "$out/share/nix9/pkgs/lua-ape-config.h"
     cp ${./packages.nix} "$out/share/nix9/default.nix"
   ''

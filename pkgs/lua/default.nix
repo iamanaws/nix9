@@ -10,12 +10,10 @@
   libap,
 }:
 let
-  version = "5.4.8";
+  upstream = import ./source.nix;
+  inherit (upstream) version;
   guestPrefix = "/usr/local/pkg/lua-${version}";
-  archive = fetchurl {
-    url = "https://www.lua.org/ftp/lua-${version}.tar.gz";
-    hash = "sha256-TxjdrhVOeT5G7qtyfFnvHAwMK3ROe5QhlxDXb1MGKa4=";
-  };
+  archive = fetchurl upstream.src;
   # Both compilers use the same sources and APE configuration.
   source = runCommand "lua-${version}-ape.tar.gz" { } ''
     tar -xzf ${archive}
@@ -37,7 +35,14 @@ runCommand "lua-${version}-9front"
     ccroot = sysroot;
     apeBsdLibrary = "${libbsd}/lib/libbsd.a";
     apeCoreLibrary = "${libap}/lib/libap.a";
-    passthru = { inherit source version guestPrefix; };
+    passthru = {
+      inherit
+        source
+        archive
+        version
+        guestPrefix
+        ;
+    };
     meta = {
       description = "Lua interpreter for 9front using APE";
       homepage = "https://www.lua.org";

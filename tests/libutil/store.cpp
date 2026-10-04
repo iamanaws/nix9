@@ -5,6 +5,7 @@
 #include <iostream>
 
 void checkImports();
+void checkStoreClients();
 
 static void require(bool condition, const char *what) {
     if (!condition) throw std::runtime_error(what);
@@ -121,16 +122,17 @@ void checkStore() {
     initLibStore(false);
     deletePath(root);
     StorePathSet expected;
-    std::filesystem::path rootsFile, rootsDir;
+    std::filesystem::path rootsFile, rootsDir, clientsDir;
     {
         auto store = openStore();
         require(store->queryAllValidPaths().empty(), "new store is not empty");
-        rejected([] { openStore(); }, "second client bypassed store lock");
+        rejected([] { openStore(); }, "duplicate connection in one process was accepted");
 
         auto dependency = file(*store, "dependency");
         auto dependent = file(*store, "dependent", {dependency.path});
         rootsFile = store->fnTempRoots;
         rootsDir = store->tempRootsDir;
+        clientsDir = store->dbDir / "clients";
         store->addTempRoot(dependency.path);
         store->addTempRoot(dependent.path);
         require(readFile(rootsFile) == store->printStorePath(dependency.path) + '\0' +
@@ -196,15 +198,36 @@ void checkStore() {
             writeFull(ready.writeSide.get(), "r");
             char byte;
             readFull(finish.readSide.get(), &byte, 1);
+            info.ultimate = true;
+            store->registerValidPath(info);
+            auto later = file(*store, "after-peer-open");
+            store->registerValidPath(later);
+            writeFull(ready.writeSide.get(), "u");
+            readFull(finish.readSide.get(), &byte, 1);
         }
         _exit(0);
     });
     ready.writeSide.close(); finish.readSide.close();
     char byte;
     readFull(ready.readSide.get(), &byte, 1);
-    rejected([] { openStore(); }, "competing process bypassed store lock");
+    {
+        auto store = openStore();
+        auto survived = file(*store, "survives-kill");
+        auto later = file(*store, "after-peer-open");
+        require(!store->queryPathInfo(survived.path)->ultimate, "child metadata changed early");
+        rejected([&] { store->queryPathInfo(later.path); }, "unregistered peer path was valid");
+        writeFull(finish.writeSide.get(), "u");
+        readFull(ready.readSide.get(), &byte, 1);
+        require(store->queryPathInfo(survived.path)->ultimate, "peer metadata remained cached");
+        require(store->isValidPath(later.path), "peer registration remained negatively cached");
+        GCResults result;
+        rejected([&] { store->collectGarbage(GCOptions{}, result); }, "GC ran alongside a live client");
+        require(pathExists(store->toRealPath(survived.path)), "GC deleted a live client's input");
+        expected.insert(later.path);
+    }
     require(!statusOk(child.kill()), "killed store client reported success");
     require(std::filesystem::is_empty(rootsDir), "killed store client left temporary roots");
+    require(std::filesystem::is_empty(clientsDir), "killed store client left membership files");
     {
         auto store = openStore();
         auto paths = store->queryAllValidPaths();
@@ -216,5 +239,6 @@ void checkStore() {
     deletePath(root);
     checkGC();
     checkImports();
+    checkStoreClients();
     std::cout << "libstore LocalStore PASS\n";
 }

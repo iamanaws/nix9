@@ -251,8 +251,8 @@ def check_nix_build(guest, expected):
                   "test -e /tmp/n9-sleeper-pid")
     guest.command("test `{cat /tmp/n9-builder-pid} -ne `{cat /tmp/n9-sleeper-pid}")
     output = guest.command(f"{store} --gc; echo GC-STATUS:$status")
-    if not re.search(r"(?m)^GC-STATUS:.*cc9exit=1$", output) or "already open by another client" not in output:
-        raise RuntimeError(f"collector opened store during a build:\n{output}")
+    if not re.search(r"(?m)^GC-STATUS:.*cc9exit=1$", output) or "exclusive store access required" not in output:
+        raise RuntimeError(f"collector ran during a build:\n{output}")
     guest.command(f"test -e {cancel['drv']} && test -e /proc/^`{{cat /tmp/n9-builder-pid}}")
     guest.command("echo interrupt > /proc/^$job^/note")
     guest.command("wait $job; grep 'interrupted by the user' /tmp/n9-cancel-log")

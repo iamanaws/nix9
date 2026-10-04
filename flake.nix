@@ -91,6 +91,7 @@
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
+          amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
           amd64/bin/cat amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
@@ -99,6 +100,8 @@
         cp -r ${sysroot}/sys/include "$out/sys/"
         cp -r ${sysroot}/amd64/include "$out/amd64/"
         cp ${libc}/lib/libc.a "$out/amd64/lib/"
+        mkdir -p "$out/amd64/lib/ape"
+        cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
       '';
       nativePackages = pkgs.runCommand "native-package-inputs" { } ''
         mkdir "$out"
@@ -118,6 +121,7 @@
               pkgs.nix
               pkgs.brotli
               pkgs.zstd
+              pkgs.openssl
             ];
           }
           ''
@@ -127,6 +131,8 @@
                 ./tests/nix_store.py
                 ./tests/nix_eval.py
                 ./tests/nix_build.py
+                ./tests/nix_concurrency.py
+                ./tests/concurrent-builds.nix
                 ./tests/c_abi.py
                 ./tests/sha1sum.py
                 ./tests/cxx.py
@@ -142,11 +148,15 @@
               testSupport [
                 ./tests/native_install.py
                 ./tests/native_fetch.py
+                ./tests/native_sources.py
+                ./tests/sources.nix
+                ./tests/lua.py
+                ./tests/lua
                 ./tests/fetch.nix
               ]
             }/native_install.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixPackage} ${nixPackage.guestPrefix} "$out"
+              ${nixPackage} ${nixPackage.guestPrefix} "$out" ${lua.archive}
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit

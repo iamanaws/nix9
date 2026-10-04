@@ -13,9 +13,10 @@ import threading
 
 from guest import boot
 from native_fetch import fetch_fixtures, check_fetch
+from native_sources import source_server, check_sources
 
 
-qemu, image, archive, prefix, output = sys.argv[1:]
+qemu, image, archive, prefix, output, lua_archive = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     disk = root / "persistent.qcow2"
@@ -24,7 +25,8 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copyfile(archive, root / "package.tar")
     fetch_fixtures(root)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
-    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+    with source_server(root, lua_archive) as tls_port, \
+            http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -35,6 +37,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f". {prefix}/activate")
                 guest.command("nix-instantiate --eval --expr '6 * 7'", "42")
                 fetching = check_fetch(guest, prefix, server.server_port)
+                sources = check_sources(guest, prefix, server.server_port, tls_port)
                 drv_root = "/usr/local/nix/state/gcroots/sha1sum-drv"
                 guest.command(
                     f"nix-instantiate --add-root {drv_root} "
@@ -64,6 +67,7 @@ with tempfile.TemporaryDirectory() as directory:
     with boot(qemu, disk, snapshot=False) as guest:
         guest.command(f". {prefix}/activate")
         guest.command(f"cat {permanent}", package)
+        guest.command(f"{sources['package']}/bin/lua -e 'print(6 * 7)'", "42")
         guest.command("echo disposable > /tmp/gc-unused")
         result = guest.command("nix-store --add /tmp/gc-unused")
         unused = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-gc-unused$", result)
@@ -87,6 +91,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "output": package,
     "installation": "passed",
     "fetching": fetching,
+    "sources": sources,
     "native-build": "passed",
     "gc-before-build": "passed",
     "reuse-after-reboot": "passed",

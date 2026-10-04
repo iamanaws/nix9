@@ -14,6 +14,7 @@ from cxx import cc9_guest
 from nix_store import check_nix_store
 from nix_eval import eval_fixtures, check_nix_eval
 from nix_build import build_fixtures, check_nix_build
+from nix_concurrency import concurrency_fixtures, check_concurrent_builds
 from libutil_compression import check_compression
 from libutil_keys import key_fixtures, check_keys
 
@@ -50,6 +51,7 @@ with tempfile.TemporaryDirectory() as directory:
     files = {"probe.elf": executable, "nix-store.elf": nix_store, "nix-instantiate.elf": nix_instantiate}
     files.update(key_fixtures(root))
     files.update(eval_fixtures(root))
+    files.update(concurrency_fixtures())
     build_files, build_paths = build_fixtures(root, Path(hello), Path(abi), Path(packages), Path(tools))
     files.update(build_files)
     for name, data in fixtures.items():
@@ -83,6 +85,7 @@ with tempfile.TemporaryDirectory() as directory:
         cli = check_nix_store(guest, fixtures)
         evaluator = check_nix_eval(guest)
         native_builds = check_nix_build(guest, build_paths)
+        concurrent_builds = check_concurrent_builds(guest)
         guest.command("mkdir -p /tmp/nix9-process-dir")
         guest.command("/tmp/libutil-probe sqlite", "libstore SQLite PASS")
         guest.command("/tmp/libutil-probe store", "libstore LocalStore PASS")
@@ -119,8 +122,9 @@ with tempfile.TemporaryDirectory() as directory:
         "sqlite": ["store schema", "bindings", "transactions", "foreign keys", "busy retry",
                    "killed-writer recovery", "400 competing commits", "file replacement",
                    "immutable reads", "rollback journal cache"],
+        "concurrent_builds": concurrent_builds,
         "local_store": ["registration", "metadata", "references", "closure", "rollback",
-                        "reopen", "exclusive access", "killed-client recovery", "temporary roots",
+                        "reopen", "concurrent clients", "peer metadata refresh", "GC exclusion", "killed-client recovery", "temporary roots",
                         "NAR imports", "streaming imports", "permissions", "failed-import cleanup"],
         "path_locks": ["contention", "blocking wait", "partial rollback", "cleanup",
                        "killed holder", "fork inheritance", "close-on-exec"],

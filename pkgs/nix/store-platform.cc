@@ -8,6 +8,27 @@ extern "C" int cc9_errno_from_errstr_or(int);
 
 namespace nix {
 
+// A kernel service gate works even before the store's directories exist.
+// Use the same canonical store path and service namespace for all clients.
+static PathLocks lockStoreAt(const std::filesystem::path &dbDir)
+{
+    auto key = hashString(HashAlgorithm::SHA256, canonPath(dbDir).string());
+    return PathLocks({"#s/nix9-store-" + key.to_string(HashFormat::Base16, false)});
+}
+
+PathLocks LocalStore::lockStore()
+{
+    return lockStoreAt(dbDir);
+}
+
+void LocalStore::requireExclusiveStore()
+{
+    auto own = std::to_string(getpid()) + ".lock";
+    for (auto &entry : DirectoryIterator{dbDir / "clients"})
+        if (entry.path().filename() != own)
+            throw Error("exclusive store access required: another 9front client is active");
+}
+
 // Operations without native implementations fail explicitly.
 [[noreturn]] static void unsupported(const char *operation)
 {
@@ -24,8 +45,8 @@ static AutoCloseFD ephemeralFile(const std::filesystem::path &path)
 
 void LocalStore::addTempRoot(const StorePath &path)
 {
-    // Share the in-process GC lock; the lifetime store lock excludes clients
-    // in other processes. Native close/kill/exec removes the root file.
+    // Collection requires exclusive client access. Also serialize this
+    // connection's root updates with collection. Close/kill/exec removes roots.
     auto gcLock = _fdGCLock.lock();
     auto fd = _fdTempRoots.lock();
     if (!*fd) *fd = ephemeralFile(fnTempRoots);
@@ -50,6 +71,7 @@ std::filesystem::path IndirectRootStore::addPermRoot(
     auto target = canonPath(root);
     if (!isInDir(target, rootsDir))
         throw Error("9front permanent roots must be files below %s", PathFmt(rootsDir));
+    auto storeLock = lockStoreAt(store.dbDir);
     addTempRoot(path);
     if (!isValidPath(path))
         throw InvalidPath("cannot root invalid path '%s'", printStorePath(path));
@@ -105,8 +127,8 @@ void LocalStore::findRootsNoTemp(Roots &roots, bool censor)
 void LocalStore::findTempRoots(Roots &roots, bool censor)
 {
     auto fd = _fdTempRoots.lock();
-    // The lifetime store lock excludes other live clients. Retain any leftover
-    // files conservatively: power-loss recovery is not implemented.
+    // Other clients may append roots, so exclude new clients and require
+    // exclusive access before reading. Retain leftovers after power loss.
     for (auto &entry : DirectoryIterator{tempRootsDir}) {
         auto contents = readFile(entry.path());
         size_t pos = 0;
@@ -123,6 +145,8 @@ void LocalStore::findTempRoots(Roots &roots, bool censor)
 
 Roots LocalStore::findRoots(bool censor)
 {
+    auto storeLock = lockStore();
+    requireExclusiveStore();
     auto gcLock = _fdGCLock.lock();
     Roots roots;
     findRootsNoTemp(roots, censor);
