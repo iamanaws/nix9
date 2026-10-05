@@ -17,8 +17,9 @@ The suites run on Linux with KVM, using 9front release 11952. `flake.lock` pins 
   image's headers and libraries hidden.
 
 Tests check exit status and expected results, use bounded waits, and discard VM
-snapshot changes. File transfers use host loopback without forwarded guest
-ports. The builds and tests work with the Nix sandbox enabled.
+snapshot changes. Transfers use host loopback; the two-VM cache test forwards
+one loopback-only port for read-only 9P and checks reuse after the server stops.
+The builds and tests work with the Nix sandbox enabled.
 
 See [development](development.md) for commands and saved results, and
 [toolchain limitations](feasibility.md) for scope.

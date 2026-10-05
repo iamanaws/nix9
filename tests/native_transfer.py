@@ -1,12 +1,14 @@
 """Move a trusted native package closure to a fresh VM using upstream exports."""
 
 import re
+import socket
 import tarfile
 import threading
 
 from artifacts import ArtifactServer
 from guest import boot
-from native_cache import cache_fixture, check_cache
+from native_cache import cache_fixture, check_cache, verify_published
+from native_cache_network import check_network_cache
 
 
 def store_paths(output):
@@ -30,11 +32,14 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
     data = (root / "closure.export").read_bytes()
     (root / "truncated.export").write_bytes(data[:64])
     cache_fixture(root)
-    with ArtifactServer(root, root / "unused.export") as server:
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+    with ArtifactServer(root, root / "published.tar") as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with boot(qemu, image) as guest:
+            with boot(qemu, image, forward_port=port) as guest:
                 guest.child.timeout = 300
                 base = f"http://10.0.2.2:{server.server_port}"
                 for name in ("nix-store", "closure.export", "truncated.export", "cache.tar"):
@@ -67,9 +72,14 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
                 guest.command("rm /usr/local/nix/state/gcroots/lua; nix-store --gc")
                 if store_paths(guest.command("nix-store --dump-db")):
                     raise RuntimeError("unrooted imported closure survived GC")
-                caching = check_cache(guest)
+                caching = check_cache(guest, server.server_port)
+                if not server.received.is_set():
+                    raise RuntimeError("guest did not upload its signed cache")
+                network = check_network_cache(guest, qemu, image, port, base, sources)
         finally:
             server.shutdown()
             thread.join()
+    verify_published(root, sources["package"], expected)
     return {"transfer": "fresh store, truncated input, round-trip, duplicate import, roots and GC passed",
-            "cache": caching}
+            "cache": caching, "publication": "native signing, repeated publication and upstream substitution passed",
+            "network": network}

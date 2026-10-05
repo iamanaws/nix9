@@ -13,11 +13,6 @@ mkDerivation {
     $tools/bin/tar xf source.tar
     cd lua-${upstream.version}/src
     $tools/bin/cp $liblua/include/*.h .
-    rfork n
-    $tools/bin/bind $tools/bin /bin
-    $tools/bin/bind $tools/sys/include /sys/include
-    $tools/bin/bind $tools/amd64/include /amd64/include
-    $tools/bin/bind $tools/amd64/lib /amd64/lib
     objtype=amd64
     $tools/bin/mkdir -p $out/bin
     $tools/bin/pcc -c lua.c

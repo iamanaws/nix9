@@ -152,9 +152,11 @@
                 ./tests/native_recovery.py
                 ./tests/native_transfer.py
                 ./tests/native_cache.py
+                ./tests/native_cache_network.py
                 ./tests/artifacts.py
                 ./tests/recovery.nix
                 ./tests/sources.nix
+                ./tests/isolation.nix
                 ./tests/lua.py
                 ./tests/lua
                 ./tests/fetch.nix

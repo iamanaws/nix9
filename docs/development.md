@@ -78,7 +78,8 @@ Roots are files containing store paths, not symlinks. Remove a root file to rele
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root; collection requires other store clients to close.
 Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
-and bootstrap tools. The installed package set also exposes
+and bootstrap tools. Each builder gets a private namespace for its tools, headers,
+and libraries; other host files remain accessible. The installed package set also exposes
 `fetchurl { url = "…"; hash = "sha256-…"; }` for native source downloads through
 9front’s `webfs`; networking must be configured in the guest. Native `lua` builds against `liblua`; both fetch the same pinned archive
 and compile with APE.
@@ -96,7 +97,11 @@ Root the imported package with `--realise --add-root` as above before running GC
 For automatic reuse, configure `substituters` with
 `file:///path/to/cache?store=/usr/local/nix/store` and `trusted-public-keys` with
 the cache's public signing key. `--realise` then fetches missing outputs and
-dependencies, checking signatures and content hashes. No cache is configured by default.
+dependencies, checking signatures and content hashes. The cache path can be a
+read-only 9P mount. No cache is configured by default.
+To publish natively, generate a key with `nix-store --generate-binary-cache-key NAME SECRET PUBLIC`,
+then import the closure with `--store 'file:///path/to/cache?store=/usr/local/nix/store&secret-key=/path/to/SECRET'`.
+Share the cache and public key; keep the secret key private.
 
 After an unclean shutdown, reboot and keep Nix clients stopped during recovery.
 Under `/usr/local/nix`, remove leftover files in `state/db/clients` and `state/temproots`, and

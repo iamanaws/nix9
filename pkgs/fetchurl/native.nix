@@ -10,7 +10,6 @@ mkDerivation {
   outputHashAlgo = "";
   outputHashMode = "flat";
   buildCommand = ''
-    rfork n
     $tools/bin/webfs -m /mnt/web -T 60000
     <>/mnt/web/clone {
       connection = /mnt/web/^`{$tools/bin/sed 1q}

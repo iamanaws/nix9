@@ -16,7 +16,7 @@ from lua import EXPECTED
 @contextmanager
 def source_server(root, archive):
     shutil.copyfile(archive, root / "lua-5.4.8.tar.gz")
-    for name in ("sources.nix", "lua/check.lua", "lua/fixture.lua"):
+    for name in ("sources.nix", "isolation.nix", "lua/check.lua", "lua/fixture.lua"):
         shutil.copyfile(Path(__file__).parent / name, root / Path(name).name)
     # Deliberately untrusted and for a different host: webfs currently accepts it.
     key, cert = root / "key.pem", root / "cert.pem"
@@ -42,6 +42,12 @@ def check_sources(guest, prefix, http_port, tls_port):
     base = f"http://10.0.2.2:{http_port}"
     guest.command("mkdir /tmp/lua")
     guest.command(f"hget -o /tmp/sources.nix {base}/sources.nix")
+    guest.command(f"hget -o /tmp/isolation.nix {base}/isolation.nix")
+    directories = ("/amd64/bin", "/rc/bin", "/rc/lib", "/sys/include", "/amd64/include", "/amd64/lib")
+    for directory in directories:
+        guest.command(f"echo host-only > {directory}/nix9-host-only")
+    guest.command("isolation=`{nix-instantiate /tmp/isolation.nix --argstr packages $fetchPackages}")
+    guest.command("isolated=`{nix-store --realise $isolation}; cat $isolated", "namespace-isolated")
     for name in ("check.lua", "fixture.lua"):
         guest.command(f"hget -o /tmp/lua/{name} {base}/{name}")
     guest.command(f"luaUrl=https://10.0.2.2:{tls_port}/lua-5.4.8.tar.gz")
@@ -57,6 +63,10 @@ def check_sources(guest, prefix, http_port, tls_port):
     if len(libraries) != 1:
         raise RuntimeError(f"Lua does not retain its library: {result}")
     library = libraries[0]
+    # Builder namespace changes must not leak into the store client or parent shell.
+    for directory in directories:
+        guest.command(f"cat {directory}/nix9-host-only", "host-only")
+        guest.command(f"rm {directory}/nix9-host-only")
     guest.command(f"test -s {library}/lib/liblua.a && test -s {library}/include/lua.h")
     guest.command(f"lua={package}/bin/lua")
     guest.command("mkdir /tmp/lua-work && cd /tmp/lua-work")
@@ -85,4 +95,4 @@ def check_sources(guest, prefix, http_port, tls_port):
     guest.command("badOut=`{nix-store -q --outputs $badDrv}; test ! -e $badOut")
     return {"package": package, "library": library, "https": "passed", "archive-build": "passed",
             "lua-checks": len(EXPECTED), "certificate-validation": "unsupported (untrusted, wrong host accepted)",
-            "https-hash-mismatch": "passed"}
+            "https-hash-mismatch": "passed", "toolchain-isolation": "passed"}

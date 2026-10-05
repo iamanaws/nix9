@@ -18,11 +18,6 @@ mkDerivation {
       $tools/bin/cat $header >> header.tmp
       $tools/bin/cp header.tmp $header
     }
-    rfork n
-    $tools/bin/bind $tools/bin /bin
-    $tools/bin/bind $tools/sys/include /sys/include
-    $tools/bin/bind $tools/amd64/include /amd64/include
-    $tools/bin/bind $tools/amd64/lib /amd64/lib
     objtype=amd64
     for(source in *.c) {
       if(! ~ $source lua.c luac.c) $tools/bin/pcc -c $source
