@@ -55,6 +55,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/store-cycles.patch}
     patch -p1 < ${./patches/version-without-store.patch}
     patch -p1 < ${./patches/gc-query.patch}
+    patch -p1 < ${./patches/cc9-compat.patch}
     patch -p1 < ${./patches/9front.patch}
     cd ..
     sources="$PWD/nix-${version}/src/libutil"

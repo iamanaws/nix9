@@ -1,0 +1,97 @@
+--- a/fs.c
++++ b/fs.c
+@@ -735,9 +735,18 @@
+ int fstatvfs(int fd, void *vp){ (void)fd; (void)vp; errno = ENOSYS; return -1; }
+ 
+ /* getenv/setenv via Plan 9 /env/<name> (the per-process environment namespace). */
+-static void env_path(const char *name, char *path, int n){
+-	const char *pfx="/env/"; int i=0; while(pfx[i]){ path[i]=pfx[i]; i++; }
+-	int j=0; while(name[j] && i<n-1){ path[i++]=name[j++]; } path[i]=0;
++static int env_path(const char *name, char *path, int n){
++	if(!name || !*name || streq(name, ".") || streq(name, "..")){
++		errno=EINVAL; return -1;
++	}
++	size_t len=strlen(name);
++	if(len >= (size_t)n-5){ errno=ENAMETOOLONG; return -1; }
++	for(size_t i=0; i<len; i++)
++		if(name[i]=='/' || name[i]=='='){ errno=EINVAL; return -1; }
++	const char *prefix="/env/";
++	for(int i=0; i<5; i++) path[i]=prefix[i];
++	for(size_t i=0; i<=len; i++) path[5+i]=name[i];
++	return 0;
+ }
+ /* POSIX-compat defaults for vars Plan 9 spells differently ($path is a NUL-
+  * separated rc list; there is no $SHELL). POSIX code (nvim jobstart/'shell',
+@@ -749,32 +758,40 @@
+ 	return 0;
+ }
+ char *getenv(const char *name){
+-	/* Per-thread buffer (__thread → emutls): getenv returns a pointer into this,
+-	 * and std::env::var copies out of it AFTER the call returns, so a shared static
+-	 * let a concurrent getenv on another thread overwrite the value mid-copy (torn
+-	 * read). Per-thread storage removes that race. Buffer is 8K (was 1K) so typical
+-	 * PATH/RUSTFLAGS/LS_COLORS values no longer silently truncate; larger values
+-	 * still cap here (getenv's contract is a pointer to fixed internal storage).
+-	 * TRADEOFF: cc9's emutls never frees per-thread objects at thread exit, so the
+-	 * first getenv on each thread leaks 8K for that thread's lifetime+ (the same
+-	 * leak every __thread var has here). Bounded for the common FIXED-pool model
+-	 * (rayon/tokio: 8K × workers, one-time); a thread-per-request server that calls
+-	 * getenv is the pathological case. The torn-read + truncation it fixes are real;
+-	 * this is the accepted cost until emutls learns to free. */
+-	static __thread char val[8192]; char path[300];
+-	env_path(name, path, sizeof path);
+-	long fd=n9_open(path, 0); if(fd<0) return (char*)env_default(name);
+-	long n=n9_pread((int)fd, val, sizeof val - 1, -1); n9_close((int)fd);
+-	if(n<=0) return (char*)env_default(name);
+-	while(n>0 && (val[n-1]=='\n'||val[n-1]==0)) n--;   /* /env values may be NUL/NL-terminated */
+-	val[n]=0; return val;
++	/* Keep /env authoritative, including changes made outside libc. The buffer
++	 * belongs to this thread and is reused by its next getenv call. */
++	static __thread char *val;
++	static __thread size_t capacity;
++	char path[300];
++	if(env_path(name, path, sizeof path)<0) return 0;
++	long fd=n9_open(path, 0);
++	if(fd<0) return (char*)env_default(name);
++	size_t used=0;
++	for(;;){
++		if(used+1>=capacity){
++			size_t next=capacity ? capacity*2 : 256;
++			char *buf=malloc(next);
++			if(!buf){ n9_close((int)fd); errno=ENOMEM; return 0; }
++			for(size_t i=0; i<used; i++) buf[i]=val[i];
++			free(val); val=buf; capacity=next;
++		}
++		long count=n9_pread((int)fd, val+used, capacity-used-1, used);
++		if(count<0){
++			errno=cc9_errno_from_errstr(); n9_close((int)fd); return 0;
++		}
++		used+=count;
++		if(count==0) break;
++	}
++	n9_close((int)fd);
++	val[used]=0;
++	return val;
+ }
+ /* setenv/unsetenv write the /env file so getenv() round-trips (the libc++
+  * temp_directory_path test sets TMPDIR then expects it back). create() truncates
+  * an existing /env file, giving overwrite semantics. */
+ int setenv(const char *n, const char *v, int overwrite){
+-	if(!n || !*n){ errno=EINVAL; return -1; }
+-	char path[300]; env_path(n, path, sizeof path);
++	char path[300];
++	if(env_path(n, path, sizeof path)<0) return -1;
+ 	if(!overwrite){ long e=n9_open(path,0); if(e>=0){ n9_close((int)e); return 0; } }
+ 	long fd=n9_create(path, 1/*OWRITE*/, 0666); if(fd<0){ errno=EACCES; return -1; }
+ 	long len = v ? (long)strlen(v) : 0;
+@@ -782,8 +799,8 @@
+ 	n9_close((int)fd); return 0;
+ }
+ int unsetenv(const char *n){
+-	if(!n || !*n){ errno=EINVAL; return -1; }
+-	char path[300]; env_path(n, path, sizeof path);
++	char path[300];
++	if(env_path(n, path, sizeof path)<0) return -1;
+ 	n9_remove(path);   /* removing an absent var is not an error */
+ 	return 0;
+ }

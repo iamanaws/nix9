@@ -102,59 +102,6 @@
  #endif
  
  namespace nix {
---- a/src/libutil/serialise.cc
-+++ b/src/libutil/serialise.cc
-@@ -10,12 +10,17 @@
- #include <memory>
- 
- #include <boost/coroutine2/coroutine.hpp>
--#include <boost/coroutine2/protected_fixedsize_stack.hpp>
-+#ifdef __plan9__
-+#  include <boost/context/fixedsize_stack.hpp>
-+#else
-+#  include <boost/coroutine2/protected_fixedsize_stack.hpp>
-+#endif
- 
- #ifdef _WIN32
- #  include <fileapi.h>
- #else
- #  include <poll.h>
-+#  include <sys/select.h>
- #endif
- 
- namespace nix {
-@@ -312,6 +317,13 @@
-    which requires much more stack space. */
- static constexpr size_t defaultCoroutineStackSize = 512 * 1024;
- 
-+#ifdef __plan9__
-+// cc9 cannot protect guard pages. These experimental stacks have no overflow guard.
-+using CoroutineStack = boost::context::fixedsize_stack;
-+#else
-+using CoroutineStack = boost::coroutines2::protected_fixedsize_stack;
-+#endif
-+
- std::unique_ptr<FinishSink> sourceToSink(fun<void(Source &)> reader)
- {
-     struct SourceToSink : FinishSink
-@@ -336,7 +348,7 @@
- 
-             if (!coro) {
-                 coro = coro_t::push_type(
--                    boost::coroutines2::protected_fixedsize_stack(defaultCoroutineStackSize),
-+                    CoroutineStack(defaultCoroutineStackSize),
-                     [&](coro_t::pull_type & yield) {
-                         LambdaSource source([&](char * out, size_t out_len) {
-                             if (cur.empty()) {
-@@ -395,7 +407,7 @@
-             bool hasCoro = coro.has_value();
-             if (!hasCoro) {
-                 coro = coro_t::pull_type(
--                    boost::coroutines2::protected_fixedsize_stack(defaultCoroutineStackSize),
-+                    CoroutineStack(defaultCoroutineStackSize),
-                     [&](coro_t::push_type & yield) {
-                         LambdaSink sink([&](std::string_view data) {
-                             if (!data.empty()) {
 --- a/src/libutil/hilite.cc
 +++ b/src/libutil/hilite.cc
 @@ -1,3 +1,5 @@
@@ -163,53 +110,6 @@
  #include "nix/util/hilite.hh"
  
  namespace nix {
---- a/src/libutil/file-system.cc
-+++ b/src/libutil/file-system.cc
-@@ -21,8 +21,10 @@
- #include <sys/time.h>
- #include <unistd.h>
- 
--#include <boost/iostreams/device/mapped_file.hpp>
--#include <boost/filesystem/path.hpp>
-+#ifndef __plan9__
-+#  include <boost/iostreams/device/mapped_file.hpp>
-+#  include <boost/filesystem/path.hpp>
-+#endif
- 
- #ifdef __FreeBSD__
- #  include <sys/param.h>
-@@ -271,6 +273,7 @@
- 
- void readFile(const std::filesystem::path & path, Sink & sink, bool memory_map)
- {
-+#ifndef __plan9__
-     // Memory-map the file for faster processing where possible.
-     if (memory_map) {
-         try {
-@@ -284,6 +287,11 @@
-         }
-         debug("memory-mapping failed for path: %s", PathFmt(path));
-     }
-+
-+#else
-+    // cc9 emulates file mappings with copies. Use the streaming path instead.
-+    (void) memory_map;
-+#endif
- 
-     // Stream the file instead if memory-mapping fails or is disabled.
-     auto fd = openFileReadonly(std::filesystem::path(path));
-@@ -672,6 +680,11 @@
-     if (std::filesystem::is_symlink(fromStatus) || std::filesystem::is_regular_file(fromStatus)) {
-         std::filesystem::copy(
-             from, to, std::filesystem::copy_options::copy_symlinks | std::filesystem::copy_options::overwrite_existing);
-+#ifdef __plan9__
-+        // cc9's filesystem copy does not preserve executable bits.
-+        if (std::filesystem::is_regular_file(fromStatus))
-+            chmod(to, static_cast<mode_t>(fromStatus.permissions()) & 0777);
-+#endif
-     } else if (std::filesystem::is_directory(fromStatus)) {
-         std::filesystem::create_directory(to);
-         for (auto & entry : DirectoryIterator(from)) {
 --- a/src/libutil/unix/processes.cc
 +++ b/src/libutil/unix/processes.cc
 @@ -114,6 +114,9 @@
@@ -243,87 +143,6 @@
      checkInterrupt();
  
      assert(!(options.standardIn && options.input));
-@@ -366,7 +376,12 @@
-             restoreProcessContext();
- 
-             if (options.lookupPath)
-+#ifdef __plan9__
-+                // cc9 execvp always searches /bin. Use Nix's PATH resolver.
-+                execv(ExecutablePath::load().findPath(options.program).c_str(), stringsToCharPtrs(args_).data());
-+#else
-                 execvp(options.program.c_str(), stringsToCharPtrs(args_).data());
-+#endif
-             // This allows you to refer to a program with a pathname relative
-             // to the PATH variable.
-             else
---- a/src/libutil/unix/environment-variables.cc
-+++ b/src/libutil/unix/environment-variables.cc
-@@ -2,6 +2,9 @@
- #include <cstring>
- 
- #include "nix/util/environment-variables.hh"
-+#ifdef __plan9__
-+#  include "nix/util/file-system.hh"
-+#endif
- 
- extern char ** environ __attribute__((weak));
- 
-@@ -20,6 +23,13 @@
- OsStringMap getEnvOs()
- {
-     OsStringMap env;
-+#ifdef __plan9__
-+    // cc9's environ is a startup snapshot; /env contains subsequent changes.
-+    for (auto & entry : DirectoryIterator{"/env"}) {
-+        auto key = entry.path().filename().string();
-+        if (auto value = getEnv(key)) env.emplace(std::move(key), std::move(*value));
-+    }
-+#else
-     for (size_t i = 0; environ[i]; ++i) {
-         auto s = environ[i];
-         auto eq = strchr(s, '=');
-@@ -28,6 +38,7 @@
-             continue;
-         env.emplace(std::string(s, eq), std::string(eq + 1));
-     }
-+#endif
-     return env;
- }
- 
---- a/src/libutil/environment-variables.cc
-+++ b/src/libutil/environment-variables.cc
-@@ -1,14 +1,31 @@
- #include "nix/util/util.hh"
- #include "nix/util/environment-variables.hh"
-+#ifdef __plan9__
-+#  include "nix/util/file-system.hh"
-+#endif
- 
- namespace nix {
- 
- std::optional<std::string> getEnv(const std::string & key)
- {
-+#ifdef __plan9__
-+    // cc9 getenv drops empty values and trailing newlines. Preserve both.
-+    if (key.empty() || key == "." || key == ".." || key.find_first_of("/=\0", 0, 3) != key.npos)
-+        return {};
-+    try {
-+        auto value = readFile(std::filesystem::path("/env") / key);
-+        if (auto nul = value.find('\0'); nul != value.npos) value.resize(nul);
-+        return value;
-+    } catch (const SysError & e) {
-+        if (e.errNo != ENOENT) throw;
-+        return {};
-+    }
-+#else
-     char * value = getenv(key.c_str());
-     if (!value)
-         return {};
-     return std::string(value);
-+#endif
- }
- 
- std::optional<std::string> getEnvNonEmpty(const std::string & key)
 --- a/src/libstore/unix/pathlocks.cc
 +++ b/src/libstore/unix/pathlocks.cc
 @@ -11,6 +11,12 @@
@@ -885,19 +704,6 @@
  
  /**
   * Saves the signal mask, which is the signal mask that nix will restore
---- a/src/libutil/unix/muxable-pipe.cc
-+++ b/src/libutil/unix/muxable-pipe.cc
-@@ -8,6 +8,10 @@
- 
- void MuxablePipePollState::poll(std::optional<unsigned int> timeout)
- {
-+#ifdef __plan9__
-+    // cc9 poll retries interrupted waits; return periodically to Nix's interruption checks.
-+    if (!timeout || *timeout > 100) timeout = 100;
-+#endif
-     if (::poll(pollStatus.data(), pollStatus.size(), timeout ? *timeout : -1) == -1) {
-         if (errno == EINTR)
-             return;
 --- a/src/libstore/gc.cc
 +++ b/src/libstore/gc.cc
 @@ -5,7 +5,9 @@
