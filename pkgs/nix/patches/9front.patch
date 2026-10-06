@@ -576,7 +576,7 @@
  #include "nix/util/repair-flag.hh"
 --- a/src/libmain/shared.cc
 +++ b/src/libmain/shared.cc
-@@ -27,13 +27,13 @@
+@@ -27,13 +27,11 @@
  #  include <features.h>
  #endif
  
@@ -586,10 +586,7 @@
  #include "nix/util/strings.hh"
  
  #include "main-config-private.hh"
--#include "nix/expr/config.hh"
-+#ifndef __plan9__
-+#  include "nix/expr/config.hh"
-+#endif
+ #include "nix/expr/config.hh"
  
  namespace nix {
  

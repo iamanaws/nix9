@@ -190,3 +190,147 @@
 +endif
 +
  subdir('include/nix/store')
+--- a/src/libexpr/meson.build
++++ b/src/libexpr/meson.build
+@@ -40,7 +40,7 @@
+ 
+ boost = dependency(
+   'boost',
+-  modules : [
++  modules : host_machine.system() == 'plan9' ? [] : [
+     'container',
+     'context',
+   ],
+@@ -80,7 +80,7 @@
+ toml11 = dependency(
+   'toml11',
+   version : '>=3.7.0',
+-  method : 'cmake',
++  method : host_machine.system() == 'plan9' ? 'auto' : 'cmake',
+   include_type : 'system',
+ )
+ 
+@@ -240,7 +240,7 @@
+   include_directories : include_dirs,
+   link_args : linker_export_flags,
+   link_whole : [ parser_library ],
+-  prelink : true, # For C++ static initializers
++  prelink : host_machine.system() != 'plan9', # Plan 9 links the whole static archive.
+   install : true,
+   cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
+ )
+--- a/src/libexpr/primops/meson.build
++++ b/src/libexpr/primops/meson.build
+@@ -5,8 +5,10 @@
+ 
+ sources += files(
+   'context.cc',
+-  'fetchClosure.cc',
+-  'fetchMercurial.cc',
+-  'fetchTree.cc',
+   'fromTOML.cc',
+ )
++
++# Evaluator network fetching is not supported by the native backend.
++if host_machine.system() != 'plan9'
++  sources += files('fetchClosure.cc', 'fetchMercurial.cc', 'fetchTree.cc')
++endif
+--- a/src/libfetchers/meson.build
++++ b/src/libfetchers/meson.build
+@@ -28,8 +28,12 @@
+ nlohmann_json = dependency('nlohmann_json', version : '>= 3.9')
+ deps_public += nlohmann_json
+ 
+-libgit2 = dependency('libgit2', version : '>= 1.9')
+-deps_private += libgit2
++if host_machine.system() == 'plan9'
++  deps_other += dependency('boost')
++else
++  libgit2 = dependency('libgit2', version : '>= 1.9')
++  deps_private += libgit2
++endif
+ 
+ subdir('nix-meson-build-support/common')
+ 
+@@ -40,17 +44,25 @@
+   'fetch-to-store.cc',
+   'fetchers.cc',
+   'filtering-source-accessor.cc',
+-  'git-lfs-fetch.cc',
+-  'git-utils.cc',
+-  'git.cc',
+-  'github.cc',
+-  'indirect.cc',
+   'input-cache.cc',
+-  'mercurial.cc',
+-  'path.cc',
+-  'registry.cc',
+-  'tarball.cc',
+ )
++
++# Keep the native evaluator's explicit error for unsupported downloads.
++if host_machine.system() == 'plan9'
++  sources += files('plan9/eval-platform.cc')
++else
++  sources += files(
++    'git-lfs-fetch.cc',
++    'git-utils.cc',
++    'git.cc',
++    'github.cc',
++    'indirect.cc',
++    'mercurial.cc',
++    'path.cc',
++    'registry.cc',
++    'tarball.cc',
++  )
++endif
+ 
+ subdir('include/nix/fetchers')
+ 
+@@ -64,7 +76,7 @@
+   dependencies : deps_public + deps_private + deps_other,
+   include_directories : include_dirs,
+   link_args : linker_export_flags,
+-  prelink : true, # For C++ static initializers
++  prelink : host_machine.system() != 'plan9', # Plan 9 links the whole static archive.
+   install : true,
+   cpp_pch : do_pch ? [ 'pch/precompiled-headers.hh' ] : [],
+ )
+--- a/src/libmain/meson.build
++++ b/src/libmain/meson.build
+@@ -52,17 +52,24 @@
+   output : 'main-config-private.hh',
+ )
+ 
++if host_machine.system() == 'plan9'
++  deps_other += dependency('boost')
++endif
++
+ subdir('nix-meson-build-support/common')
+ 
+ sources = files(
+   'common-args.cc',
+   'loggers.cc',
+   'plugin.cc',
+-  'progress-bar.cc',
+   'shared.cc',
+ )
+ 
+-if host_machine.system() != 'windows'
++if host_machine.system() != 'plan9'
++  sources += files('progress-bar.cc')
++endif
++
++if host_machine.system() not in ['windows', 'plan9']
+   sources += files(
+     'unix/stack.cc',
+   )
+@@ -81,7 +88,7 @@
+   dependencies : deps_public + deps_private + deps_other,
+   include_directories : include_dirs,
+   link_args : linker_export_flags,
+-  prelink : true, # For C++ static initializers
++  prelink : host_machine.system() != 'plan9', # Plan 9 links the whole static archive.
+   install : true,
+ )
+ 

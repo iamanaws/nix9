@@ -42,12 +42,11 @@ runCommand "nix-util-${version}-9front-probe"
     };
   }
   ''
-    mkdir -p build/cli build/eval "$out"
+    mkdir -p build "$out"
     nixSource=${libraries}/nix-${version}
     nixIncludes=${libraries}/build/include
     source ${libraries.setup}
     cp "$runtime/crt0.o" build/crt0.o
-    libraryObjects=(build/*.o)
     for source in ${../../tests/libutil}/*.cpp; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
         -I ${libraries}/meson-build/subprojects/nix-store/libnixstore.a.p \
@@ -59,23 +58,5 @@ runCommand "nix-util-${version}-9front-probe"
       build/*.o ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
       ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \
       "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --whole-archive ${libraries}/build/libnix{util,store}.a --no-whole-archive --end-group
-    ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
-      -c ${./main.cc} -o build/cli/main.o
-    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail \
-      -T "$runtime/plan9.ld" -o "$out/nix-store.elf" --start-group \
-      "''${libraryObjects[@]}" ${libraries}/build/cli/*.o build/cli/*.o \
-      ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
-      ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \
-      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --whole-archive ${libraries}/build/libnix{util,store}.a --no-whole-archive --end-group
-
-    ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" -DNIX_INSTANTIATE \
-      -c ${./main.cc} -o build/eval/main.o
-    ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
-      -c ${./eval-platform.cc} -o build/eval/platform.o
-    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail \
-      -T "$runtime/plan9.ld" -o "$out/nix-instantiate.elf" --start-group \
-      "''${libraryObjects[@]}" ${libraries}/build/cli/libmain_*.o ${libraries}/build/eval/*.o build/eval/*.o \
-      ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
-      ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \
-      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --whole-archive ${libraries}/build/libnix{util,store}.a --no-whole-archive --end-group
+    cp ${libraries}/meson-build/cli/nix-{store,instantiate}.elf "$out/"
   ''
