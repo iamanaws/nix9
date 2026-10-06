@@ -1,13 +1,14 @@
 # Test coverage
 
-The suites run on Linux with KVM, using 9front release 11952. `flake.lock` pins the inputs; compiler patches live in
+The suites run on Linux with KVM and 9front release 11952. `flake.lock` pins
+the inputs. Compiler patches are in
 [pkgs/goken9cc](../pkgs/goken9cc).
 
-- Compiler tests compare native, cross-compiled, and mixed objects, covering
+- Compiler tests compare native, cross-compiled, and mixed objects. They check
   arguments, callbacks, structures, floating point, and varargs.
 - Guest tests exercise installation, module lookup, file I/O, errors, and processes.
-  Native compiler baselines use the image's libraries; cross and development builds
-  use rebuilt libraries where configured.
+  Native compiler baselines use the image's libraries. Cross and development
+  builds use rebuilt libraries where configured.
 - Library tests use known vectors and independent Python results for checksums,
   compression, and arithmetic. Generator checks compare output with the guest.
 - Build checks cover executable format and archive handling. Native Nix tests
@@ -16,8 +17,8 @@ The suites run on Linux with KVM, using 9front release 11952. `flake.lock` pins 
   Guest development tests build native and POSIX C, including Lua, with the
   image's headers and libraries hidden.
 
-Tests check exit status and expected results, use bounded waits, and discard VM
-snapshot changes. Transfers use host loopback; the two-VM cache test forwards
+Tests check exit status and expected results, set timeouts, and discard VM
+snapshot changes. Transfers use host loopback. The two-VM cache test forwards
 one loopback-only port for read-only 9P and checks reuse after the server stops.
 The builds and tests work with the Nix sandbox enabled.
 

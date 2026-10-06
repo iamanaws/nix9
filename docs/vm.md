@@ -1,33 +1,13 @@
 # Run the VM
 
-On x86_64 Linux with KVM and Nix flakes enabled:
-
-```sh
-nix build .#vm-image -o result-vm
-nix run .#setup-vm
-nix run .#run-vm
-```
-
-Your user and Nix builders need access to `/dev/kvm`.
-The flake pins the image from
+Start with the [native Nix quick start](../README.md#quick-start).
+The flake pins the base image from
 [9front-in-a-box](https://github.com/majiru/9front-in-a-box).
-
-## Console
-
-Press Enter at the boot arguments and user prompts. If `rio` reports a missing
-display, wait for the `term%` serial shell.
-
-Inside the guest, configure networking with:
-
-```sh
-ip/ipconfig ether /net/ether0
-```
-
-Run `fshalt` before stopping QEMU with Ctrl-C.
+The launcher uses two CPUs, 2 GiB RAM and a serial console.
 
 ## Persistent disk
 
-Setup creates `9front.hjfs.amd64.qcow2` in the current directory and refuses to
+Setup creates `9front.hjfs.amd64.qcow2` in the current directory. It refuses to
 replace an existing file. Keep `result-vm` while using that disk so Nix garbage
 collection retains its backing image.
 
@@ -49,7 +29,8 @@ nix build .#guest-environment -o result-package
 nix develop -c python -m http.server 8000 --bind 127.0.0.1
 ```
 
-In the guest, with networking configured:
+In the guest, run `ip/ipconfig ether /net/ether0` if networking is not configured,
+then install and activate the environment:
 
 ```sh
 hget -o /tmp/package.tar http://10.0.2.2:8000/result-package
@@ -59,5 +40,5 @@ lua -e 'print(_VERSION)'
 ```
 
 The environment bundles Lua and the checksum tool under `/usr/local/pkg`.
-Its `activate` sets command paths for this session, including APE subprocesses.
+The `activate` script sets command paths for this session and APE subprocesses.
 Individual package archives also have an `activate` file.
