@@ -1,5 +1,12 @@
 {
   runCommand,
+  meson,
+  ninja,
+  libarchive,
+  libblake3,
+  openssl,
+  libsodium,
+  brotli,
   writeText,
   llvmPackages,
   boost,
@@ -14,6 +21,35 @@
 }:
 let
   inherit (dependencies) compression sodium sqlite;
+  # These target libraries are built separately and do not all ship pkg-config files.
+  libraryProject = writeText "meson.build" ''
+    project('nix9-libraries', 'cpp')
+    assert(meson.get_compiler('cpp').links('int main() { return 0; }'), 'Cannot link against the target runtime')
+    foreach dep : [
+      ['boost', '${boost.version}', '${boost.dev}/include', ['${dependencies.boost}/lib/libboost-target.a']],
+      ['libblake3', '${libblake3.version}', '${dependencies.digests}/include', ['${dependencies.digests}/lib/libdigests.a']],
+      ['libcrypto', '${openssl.version}', '${dependencies.digests}/include', ['${dependencies.digests}/lib/libdigests.a']],
+      ['libarchive', '${libarchive.version}', '${compression}/include', ['${compression}/lib/libarchive.a', '${compression}/lib/libz.a', '${compression}/lib/liblzma.a', '${compression}/lib/libzstd.a']],
+      ['libsodium', '${libsodium.version}', '${sodium}/include', ['${sodium}/lib/libsodium.a']],
+      ['sqlite3', '${sqlite.version}', '${sqlite}/include', ['${sqlite}/lib/libsqlite3.a']],
+      ['nlohmann_json', '${nlohmann_json.version}', '${nlohmann_json}/include', []],
+    ]
+      meson.override_dependency(dep[0], declare_dependency(
+        version: dep[1],
+        include_directories: include_directories(dep[2], is_system: true),
+        link_args: dep[3],
+      ))
+    endforeach
+    foreach name : ['common', 'dec', 'enc']
+      meson.override_dependency('libbrotli' + name, declare_dependency(
+        version: '${brotli.version}',
+        include_directories: include_directories('${compression}/include', is_system: true),
+        link_args: '${compression}/lib/libbrotli' + name + '.a',
+      ))
+    endforeach
+    subproject('nix-util')
+    subproject('nix-store')
+  '';
   setup = writeText "nix9-compile-setup" ''
     runtime=${cc9}
     source ${cc9.setup}
@@ -39,6 +75,8 @@ in
 runCommand "nix-${version}-9front-libraries"
   {
     nativeBuildInputs = [
+      meson
+      ninja
       bison
       flex
     ];
@@ -57,20 +95,11 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/gc-query.patch}
     patch -p1 < ${./patches/cc9-compat.patch}
     patch -p1 < ${./patches/9front.patch}
+    patch -p1 < ${./patches/meson.patch}
     cd ..
     sources="$PWD/nix-${version}/src/libutil"
     mkdir -p build/include/nix/{util,store}
-    cp ${./config/config.hh} build/include/nix/util/config.hh
-    cp ${./config/store-config.hh} build/include/nix/store/config.hh
-    cp ${./config/store-config-private.hh} build/include/store-config-private.hh
-    cp ${./config/util-config-private.hh} build/include/util-config-private.hh
-    cp ${./config/util-unix-config-private.hh} build/include/util-unix-config-private.hh
     echo '#define HAVE_PUBSETBUF 0' > build/include/main-config-private.hh
-    # Use the same schema as upstream LocalStore.
-    for schema in schema ca-specific-schema; do
-      sed '1iR"sql(' "$sources/../libstore/$schema.sql" > "build/include/$schema.sql.gen.hh"
-      echo ')sql"' >> "build/include/$schema.sql.gen.hh"
-    done
     mkdir -p build/eval build/include/nix/expr build/include/primops
     echo '#define NIX_USE_BOEHMGC 0' > build/include/nix/expr/config.hh
     printf '#define HAVE_SYSCONF 0\n#define HAVE_TOML11_4 1\n' > build/include/expr-config-private.hh
@@ -84,30 +113,30 @@ runCommand "nix-${version}-9front-libraries"
     nixSource="$PWD/nix-${version}"
     nixIncludes="$PWD/build/include"
     source ${setup}
-    # Compile real upstream translation units. No Linux libraries are linked.
-    for source in \
-      archive args base-n base-nix-32 canon-path compression compression-algo compression-settings config-global configuration \
-      current-process english environment-variables error executable-path exit experimental-features \
-      file-content-address file-descriptor file-system fs-sink git hash hilite json-utils logging memory-source-accessor \
-      memory-source-accessor/json mounted-source-accessor nar-accessor nar-cache nar-listing pos-table position posix-source-accessor processes serialise \
-      signature/local-keys signature/signer source-accessor source-path strings suggestions tarfile terminal thread-pool union-source-accessor url users util xml-writer \
-      unix/current-process unix/environment-variables unix/file-descriptor unix/file-path \
-      unix/file-system-at unix/file-system unix/muxable-pipe unix/processes unix/signals unix/users unix/xdg-dirs; do
-      ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
-        -c "$sources/$source.cc" -o "build/nix-''${source//\//_}.o"
-    done
-    for source in \
-      binary-cache-store build/build-log build/derivation-builder build/derivation-building-goal build/derivation-check \
-      build/derivation-env-desugar build/derivation-goal build/derivation-resolution-goal \
-      build/derivation-trampoline-goal build/drv-output-substitution-goal build/entry-points build/goal \
-      build/substitution-goal build/worker unix/build/child unix/build/hook-instance build-result common-protocol content-address derivation-options derivations \
-      derived-path derived-path-map downstream-placeholder export-import gc globals keys \
-      local-binary-cache-store local-fs-store local-store log-store machines misc names nar-info nar-info-disk-cache outputs-spec parsed-derivations \
-      path path-info path-references path-with-outputs pathlocks posix-fs-canonicalise profiles realisation references sqlite store-api store-dir-config \
-      remote-fs-accessor store-reference store-registration unix/pathlocks worker-protocol; do
-      ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
-        -c "$sources/../libstore/$source.cc" -o "build/store-''${source//\//_}.o"
-    done
+    mkdir -p library-project/subprojects
+    cp ${libraryProject} library-project/meson.build
+    ln -s "$nixSource/src/libutil" library-project/subprojects/nix-util
+    ln -s "$nixSource/src/libstore" library-project/subprojects/nix-store
+    mkdir "$nixSource/src/libstore/plan9"
+    cp ${./store-platform.cc} "$nixSource/src/libstore/plan9/store-platform.cc"
+    cp ${./build-platform.cc} "$nixSource/src/libstore/plan9/build-platform.cc"
+    substitute ${cc9.meson} cross.ini \
+      --subst-var-by runtime ${cc9} \
+      --subst-var-by clang ${llvmPackages.clang-unwrapped} \
+      --subst-var-by llvm ${llvmPackages.llvm} \
+      --subst-var-by lld ${llvmPackages.lld}
+    meson setup meson-build library-project --cross-file "$PWD/cross.ini" \
+      --wrap-mode=nofallback -Dbuildtype=plain --prefix=/nix --sysconfdir=/etc \
+      -Dnix-util:cpuid=disabled -Dnix-store:seccomp-sandboxing=disabled \
+      -Dnix-store:s3-aws-auth=disabled -Dnix-store:sandbox-shell=
+    ninja -C meson-build -j "$NIX_BUILD_CORES"
+    cp meson-build/subprojects/nix-util/include/nix/util/config.hh build/include/nix/util/
+    cp meson-build/subprojects/nix-util/util-config-private.hh build/include/
+    cp meson-build/subprojects/nix-util/unix/util-unix-config-private.hh build/include/
+    cp meson-build/subprojects/nix-store/include/nix/store/config.hh build/include/nix/store/
+    cp meson-build/subprojects/nix-store/store-config-private.hh build/include/
+    cp meson-build/subprojects/nix-{util,store}/libnix*.a build/
+    # The remaining libraries still use the explicit source lists.
     mkdir build/cli
     for source in libmain/{shared,common-args,loggers,plugin} nix/nix-store/{nix-store,dotgraph,graphml}; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \

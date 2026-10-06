@@ -53,7 +53,6 @@ def eval_fixtures(root):
 
 
 def check_nix_eval(guest):
-    guest.command("elf2aout /tmp/nix-instantiate.elf /tmp/nix-instantiate && chmod +x /tmp/nix-instantiate")
     guest.command("instantiate=/tmp/nix-instantiate")
     cli = "$instantiate --store /tmp/nix9-eval-store --eval --strict --json"
     guest.command("/tmp/nix-instantiate --help", "Usage: nix-instantiate [OPTIONS] [FILES...]")

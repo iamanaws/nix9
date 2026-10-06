@@ -1,4 +1,6 @@
 #include <cerrno>
+#include <cmath>
+#include <stdexcept>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -55,6 +57,28 @@ static void allocations() {
         auto p = std::make_shared<Aligned>();
         check(reinterpret_cast<uintptr_t>(p.get()) % 64 == 0 && !p->bytes[4095], "aligned shared allocation");
     }
+}
+
+static void math() {
+    volatile double two = 2.0, negative = -1.0;
+    check(std::abs(std::sqrt(two) * std::sqrt(two) - two) < 1e-14, "sqrt");
+    check(std::abs(std::sin(two) - 0.9092974268256817) < 1e-14, "sin");
+    check(std::isnan(std::sqrt(negative)), "sqrt domain error");
+    volatile long double value = 9.0L;
+    check(std::sqrt(value) == 3.0L, "long double sqrt");
+}
+
+static void exceptions() {
+    int cleaned = 0;
+    struct Cleanup { int &count; ~Cleanup() { ++count; } };
+    bool caught = false;
+    try {
+        Cleanup cleanup{cleaned};
+        throw std::runtime_error("runtime unwind");
+    } catch (const std::runtime_error &error) {
+        caught = std::strcmp(error.what(), "runtime unwind") == 0;
+    }
+    check(caught && cleaned == 1, "exception unwinding");
 }
 
 static void environment() {
@@ -189,7 +213,8 @@ int main(int argc, char **argv) {
     const char *selected = argc == 2 ? argv[1] : "all";
     bool matched = false;
     for (auto [name, test] : {std::pair{"allocation", allocations}, {"environment", environment},
-                            {"path", execPath}, {"copy", copies}, {"poll", polling}}) {
+                            {"path", execPath}, {"copy", copies}, {"poll", polling},
+                            {"math", math}, {"exceptions", exceptions}}) {
         if (std::strcmp(selected, "all") && std::strcmp(selected, name)) continue;
         matched = true;
         test();
@@ -205,7 +230,7 @@ int main(int argc, char **argv) {
         waitFor(child, 42);
         std::puts("PASS: exit");
     }
-    check(matched && argc <= 2, "unknown test (allocation, environment, path, copy, poll, exit, all)");
+    check(matched && argc <= 2, "unknown test (allocation, environment, path, copy, poll, math, exceptions, exit, all)");
     check(chdir("/tmp") == 0 && rmdir(scratch.c_str()) == 0, "remove test directory");
     std::puts("cc9 runtime tests PASS");
 }

@@ -135,14 +135,13 @@
                 ./tests/concurrent-builds.nix
                 ./tests/c_abi.py
                 ./tests/sha1sum.py
-                ./tests/cxx.py
                 ./tests/libutil_compression.py
                 ./tests/libutil_keys.py
                 ./tests/artifacts.py
               ]
             }/libutil.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixUtil.cc9.archive} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
+              ${nixUtil.cc9.elf2aout} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
               ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
             ${python}/bin/python ${
               testSupport [

@@ -1,6 +1,12 @@
 """Shared disposable serial-console guest for package builds and smoke tests."""
 
 import contextlib
+import functools
+import http.server
+from pathlib import Path
+import shutil
+import tempfile
+import threading
 import re
 import signal
 import sys
@@ -78,3 +84,24 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None):
             child.expect("done halting")
     finally:
         child.close(force=True)
+
+
+@contextlib.contextmanager
+def files_guest(qemu, disk, files):
+    """Boot a guest and copy host fixtures into /tmp."""
+    with tempfile.TemporaryDirectory() as directory:
+        for name, source in files.items():
+            shutil.copyfile(source, Path(directory) / name)
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with boot(qemu, disk) as guest:
+                    guest.child.timeout = 300
+                    for name in files:
+                        guest.command(f"hget -o /tmp/{name} http://10.0.2.2:{server.server_port}/{name}")
+                    yield guest
+            finally:
+                server.shutdown()
+                thread.join()

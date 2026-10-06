@@ -6,7 +6,6 @@ import subprocess
 
 
 def check_nix_store(guest, fixtures):
-    guest.command("elf2aout /tmp/nix-store.elf /tmp/nix-store && chmod +x /tmp/nix-store")
     guest.command("/tmp/nix-store --help", "Usage: nix-store [--store URI] OPERATION [ARGS...]")
     guest.command("/tmp/nix-store --version", "nix-store (Nix) 2.34.8")
     cli = "/tmp/nix-store --store /tmp/nix9-cli"

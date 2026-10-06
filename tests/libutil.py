@@ -1,6 +1,6 @@
 """Exercise upstream Nix's libutil on 9front, using host Nix as the oracle.
 
-Usage: python tests/libutil.py QEMU DISK CC9_ARCHIVE PROBE_ELF NIX_STORE_ELF NIX_INSTANTIATE_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
+Usage: python tests/libutil.py QEMU DISK ELF2AOUT PROBE_ELF NIX_STORE_ELF NIX_INSTANTIATE_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
 """
 
 import base64
@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 
-from cxx import cc9_guest
+from guest import files_guest
 from nix_store import check_nix_store
 from nix_eval import eval_fixtures, check_nix_eval
 from nix_build import build_fixtures, check_nix_build
@@ -19,7 +19,7 @@ from libutil_compression import check_compression
 from libutil_keys import key_fixtures, check_keys
 
 
-qemu, disk, cc9, executable, nix_store, nix_instantiate, hello, abi, packages, tools, output = sys.argv[1:]
+qemu, disk, elf2aout, executable, nix_store, nix_instantiate, hello, abi, packages, tools, output = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     tree = root / "tree"
@@ -48,7 +48,11 @@ with tempfile.TemporaryDirectory() as directory:
         "padding": fixtures["file"][:21] + b"x" + fixtures["file"][22:],
         "traversal": fixtures["tree"].replace(b"binary", b"../bad"),
     })
-    files = {"probe.elf": executable, "nix-store.elf": nix_store, "nix-instantiate.elf": nix_instantiate}
+    files = {}
+    for name, source in {"libutil-probe": executable, "nix-store": nix_store, "nix-instantiate": nix_instantiate}.items():
+        target = root / name
+        subprocess.run([sys.executable, elf2aout, source, str(target)], check=True)
+        files[name] = target
     files.update(key_fixtures(root))
     files.update(eval_fixtures(root))
     files.update(concurrency_fixtures())
@@ -79,8 +83,8 @@ with tempfile.TemporaryDirectory() as directory:
     hash_input.write_bytes(payload)
     manifest.write_text(str(len(cases)) + "\n" + "\n".join(cases) + "\n")
     files.update({"hash-input": hash_input, "hash-cases": manifest})
-    with cc9_guest(qemu, disk, cc9, files) as guest:
-        guest.command("elf2aout /tmp/probe.elf /tmp/libutil-probe && chmod +x /tmp/libutil-probe")
+    with files_guest(qemu, disk, files) as guest:
+        guest.command("chmod +x /tmp/libutil-probe /tmp/nix-store /tmp/nix-instantiate")
         guest.command("/tmp/libutil-probe allocations", "aligned allocations PASS")
         cli = check_nix_store(guest, fixtures)
         evaluator = check_nix_eval(guest)

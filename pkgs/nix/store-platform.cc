@@ -156,7 +156,7 @@ Roots LocalStore::findRoots(bool censor)
 
 void LocalStore::autoGC(bool)
 {
-    if (config->getLocalSettings().getGCSettings().minFree != 0)
+    if (config->getLocalSettings().getGCSettings().minFree != 0U)
         unsupported("automatic garbage collection");
 }
 

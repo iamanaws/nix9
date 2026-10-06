@@ -47,38 +47,35 @@ runCommand "nix-util-${version}-9front-probe"
     nixIncludes=${libraries}/build/include
     source ${libraries.setup}
     cp "$runtime/crt0.o" build/crt0.o
-    ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
-      -c ${./store-platform.cc} -o build/store-platform.o
-    ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
-      -c ${./build-platform.cc} -o build/store-builder.o
-    libraryObjects=(${libraries}/build/*.o build/*.o)
+    libraryObjects=(build/*.o)
     for source in ${../../tests/libutil}/*.cpp; do
       ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
+        -I ${libraries}/meson-build/subprojects/nix-store/libnixstore.a.p \
         -c "$source" -o "build/test-$(basename "$source" .cpp).o"
     done
-    # Discard unused functions and their unported dependencies.
-    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib \
+    # Keep the libraries' static initializers and assertion wrapper; discard unused sections.
+    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail \
       -T "$runtime/plan9.ld" -o "$out/probe.elf" --start-group \
-      ${libraries}/build/*.o build/*.o ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
+      build/*.o ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
       ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \
-      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --end-group
+      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --whole-archive ${libraries}/build/libnix{util,store}.a --no-whole-archive --end-group
     ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
       -c ${./main.cc} -o build/cli/main.o
-    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib \
+    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail \
       -T "$runtime/plan9.ld" -o "$out/nix-store.elf" --start-group \
       "''${libraryObjects[@]}" ${libraries}/build/cli/*.o build/cli/*.o \
       ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
       ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \
-      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --end-group
+      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --whole-archive ${libraries}/build/libnix{util,store}.a --no-whole-archive --end-group
 
     ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" -DNIX_INSTANTIATE \
       -c ${./main.cc} -o build/eval/main.o
     ${llvmPackages.clang-unwrapped}/bin/clang++ "''${flags[@]}" \
       -c ${./eval-platform.cc} -o build/eval/platform.o
-    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib \
+    ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail \
       -T "$runtime/plan9.ld" -o "$out/nix-instantiate.elf" --start-group \
       "''${libraryObjects[@]}" ${libraries}/build/cli/libmain_*.o ${libraries}/build/eval/*.o build/eval/*.o \
       ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
       ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \
-      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --end-group
+      "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --whole-archive ${libraries}/build/libnix{util,store}.a --no-whole-archive --end-group
   ''
