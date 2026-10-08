@@ -1,0 +1,94 @@
+--- a/src/nix/nix-build/nix-build.cc
++++ b/src/nix/nix-build/nix-build.cc
+@@ -14,6 +14,9 @@
+ #include "nix/store/derivation-options.hh"
+ #include "nix/store/store-open.hh"
+ #include "nix/store/local-fs-store.hh"
++#ifdef __plan9__
++#include "nix/store/local-store.hh"
++#endif
+ #include "nix/store/globals.hh"
+ #include "nix/store/realisation.hh"
+ #include "nix/store/derivations.hh"
+@@ -147,6 +150,9 @@
+     AutoDelete tmpDir(createTempDir("", myName));
+ 
+     std::string outLink = "./result";
++#ifdef __plan9__
++    bool explicitOutLink = false;
++#endif
+ 
+     // List of environment variables kept for --pure
+     StringSet keepVars{
+@@ -219,8 +225,14 @@
+         else if (*arg == "--add-drv-link" || *arg == "--indirect")
+             ; // obsolete
+ 
+-        else if (*arg == "--no-out-link" || *arg == "--no-link")
++        else if (*arg == "--no-out-link" || *arg == "--no-link") {
++#ifdef __plan9__
++            explicitOutLink = true;
++            outLink.clear();
++#else
+             outLink = (tmpDir.path() / "result").string();
++#endif
++        }
+ 
+         else if (*arg == "--attr" || *arg == "-A")
+             attrPaths.push_back(getArg(*arg, arg, end));
+@@ -228,8 +240,13 @@
+         else if (*arg == "--drv-link")
+             getArg(*arg, arg, end); // obsolete
+ 
+-        else if (*arg == "--out-link" || *arg == "-o")
++        else if (*arg == "--out-link" || *arg == "-o") {
+             outLink = getArg(*arg, arg, end);
++#ifdef __plan9__
++            explicitOutLink = true;
++            if (outLink.empty()) throw UsageError("output root must not be empty");
++#endif
++        }
+ 
+         else if (*arg == "--dry-run")
+             dryRun = true;
+@@ -317,7 +334,18 @@
+     if (packages && fromArgs)
+         throw UsageError("'-p' and '-E' are mutually exclusive");
+ 
++#ifdef __plan9__
++    if (isNixShell) throw UsageError("nix-shell is not supported on Plan 9");
++#endif
+     auto store = openStore();
++#ifdef __plan9__
++    auto local = store.dynamic_pointer_cast<LocalStore>();
++    if (!local) throw UsageError("nix-build requires a local store on Plan 9");
++    auto roots = canonPath(local->config->stateDir.get() / "gcroots");
++    if (!explicitOutLink) outLink = (roots / "result").string();
++    if (!outLink.empty() && !isInDir(canonPath(absPath(outLink)), roots))
++        throw UsageError("output roots must be files below %s", PathFmt(roots));
++#endif
+     auto evalStore = myArgs.evalStoreUrl ? openStore(StoreReference{*myArgs.evalStoreUrl}) : store;
+ 
+     auto state = std::make_shared<EvalState>(myArgs.lookupPath, evalStore, fetchSettings, evalSettings, store);
+@@ -734,7 +762,10 @@
+                 std::string symlink = drvPrefix;
+                 if (outputName != "out")
+                     symlink += "-" + outputName;
+-                store2->addPermRoot(outputPath, absPath(symlink));
++#ifdef __plan9__
++                if (!outLink.empty())
++#endif
++                    store2->addPermRoot(outputPath, absPath(symlink));
+             }
+ 
+             outPaths.push_back(outputPath);
+--- a/src/libcmd/network-proxy.cc
++++ b/src/libcmd/network-proxy.cc
+@@ -1,6 +1,7 @@
+ #include "nix/cmd/network-proxy.hh"
+ 
+ #include <algorithm>
++#include <iterator>
+ 
+ #include "nix/util/environment-variables.hh"
+ 

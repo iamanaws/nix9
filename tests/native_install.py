@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("nix-store --gc")
                 guest.command(f"nix-store --check-validity {drv}")
                 permanent = "/usr/local/nix/state/gcroots/sha1sum"
-                guest.command(f"nix-store --realise {drv} --add-root {permanent}", permanent)
+                guest.command(f"nix-build {prefix}/share/nix9 -A sha1sum --out-link {permanent}")
                 result = guest.command(f"cat {permanent}")
                 paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum$", result)
                 if len(paths) != 1:

@@ -73,15 +73,14 @@ Start with the [README quick start](../README.md#quick-start), then run in the g
 . /usr/local/pkg/nix-2.34.8/activate
 cd /usr/local/pkg/nix-2.34.8/share/nix9
 roots=/usr/local/nix/state/gcroots
-nix-instantiate --add-root $roots/build --attr sha1sum
-drv=`{cat $roots/build}
-nix-store --realise $drv --add-root $roots/package && rm $roots/build
+nix-build -A sha1sum --out-link $roots/package
 result=`{cat $roots/package}
 echo -n abc | $result/bin/sha1sum
 ```
 
 The store persists at `/usr/local/nix/store`. Activate the environment after login.
-The example retains the derivation until its output has a permanent root.
+`nix-build` evaluates and builds the selected package. Its default root is
+`state/gcroots/result`; use `--no-out-link` to leave no permanent root.
 Roots are files containing store paths, not symlinks. Remove a root file to release
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root. Close other store clients before collection.

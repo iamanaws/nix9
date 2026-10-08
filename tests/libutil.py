@@ -1,6 +1,6 @@
 """Exercise upstream Nix's libutil on 9front, using host Nix as the oracle.
 
-Usage: python tests/libutil.py QEMU DISK ELF2AOUT PROBE_ELF NIX_STORE_ELF NIX_INSTANTIATE_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
+Usage: python tests/libutil.py QEMU DISK ELF2AOUT PROBE_ELF NIX_STORE_ELF NIX_INSTANTIATE_ELF NIX_BUILD_ELF HELLO_SOURCE ABI_SOURCE PACKAGE_INPUTS NATIVE_TOOLS OUTPUT
 """
 
 import base64
@@ -14,12 +14,13 @@ from guest import files_guest
 from nix_store import check_nix_store
 from nix_eval import eval_fixtures, check_nix_eval
 from nix_build import build_fixtures, check_nix_build
+from nix_build_cli import build_cli_fixtures, check_nix_build_cli
 from nix_concurrency import concurrency_fixtures, check_concurrent_builds
 from libutil_compression import check_compression
 from libutil_keys import key_fixtures, check_keys
 
 
-qemu, disk, elf2aout, executable, nix_store, nix_instantiate, hello, abi, packages, tools, output = sys.argv[1:]
+qemu, disk, elf2aout, executable, nix_store, nix_instantiate, nix_build, hello, abi, packages, tools, output = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     tree = root / "tree"
@@ -49,13 +50,14 @@ with tempfile.TemporaryDirectory() as directory:
         "traversal": fixtures["tree"].replace(b"binary", b"../bad"),
     })
     files = {}
-    for name, source in {"libutil-probe": executable, "nix-store": nix_store, "nix-instantiate": nix_instantiate}.items():
+    for name, source in {"libutil-probe": executable, "nix-store": nix_store, "nix-instantiate": nix_instantiate, "nix-build": nix_build}.items():
         target = root / name
         subprocess.run([sys.executable, elf2aout, source, str(target)], check=True)
         files[name] = target
     files.update(key_fixtures(root))
     files.update(eval_fixtures(root))
     files.update(concurrency_fixtures())
+    files.update(build_cli_fixtures())
     build_files, build_paths = build_fixtures(root, Path(hello), Path(abi), Path(packages), Path(tools))
     files.update(build_files)
     for name, data in fixtures.items():
@@ -84,10 +86,11 @@ with tempfile.TemporaryDirectory() as directory:
     manifest.write_text(str(len(cases)) + "\n" + "\n".join(cases) + "\n")
     files.update({"hash-input": hash_input, "hash-cases": manifest})
     with files_guest(qemu, disk, files) as guest:
-        guest.command("chmod +x /tmp/libutil-probe /tmp/nix-store /tmp/nix-instantiate")
+        guest.command("chmod +x /tmp/libutil-probe /tmp/nix-store /tmp/nix-instantiate /tmp/nix-build")
         guest.command("/tmp/libutil-probe allocations", "aligned allocations PASS")
         cli = check_nix_store(guest, fixtures)
         evaluator = check_nix_eval(guest)
+        build_cli = check_nix_build_cli(guest)
         native_builds = check_nix_build(guest, build_paths)
         concurrent_builds = check_concurrent_builds(guest)
         guest.command("mkdir -p /tmp/nix9-process-dir")
@@ -119,6 +122,7 @@ with tempfile.TemporaryDirectory() as directory:
         "nix_store": cli,
         "evaluator": evaluator,
         "native_builds": native_builds,
+        "nix_build": build_cli,
         "urls": ["parsing", "encoding", "relative resolution", "invalid input"],
         "signatures": signatures,
         "processes": ["pipes", "exit status", "PATH", "environment", "working directory",

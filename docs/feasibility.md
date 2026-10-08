@@ -5,7 +5,8 @@ Plan 9 mechanisms. Nix libraries and commands build through Meson.
 
 Packages cross-compile on Linux. An experimental native `nix-store` adds files
 and directories and queries metadata on 9front. `nix-instantiate` evaluates expressions
-as JSON and instantiates derivations. Native builds use upstream Nix's scheduler
+as JSON and instantiates derivations. `nix-build` evaluates and builds packages
+in one command. Native builds use upstream Nix's scheduler
 with a 9front process backend. They support input-addressed outputs and flat or
 recursive fixed outputs, without sandboxing or a diverted store. Partial rebuilds
 preserve valid outputs. Nix discards fixed outputs whose hashes do not match. The evaluator uses upstream's

@@ -4,7 +4,7 @@
 #include "nix/util/exit.hh"
 
 #include <iostream>
-#ifdef NIX_INSTANTIATE
+#if defined(NIX_INSTANTIATE) || defined(NIX_BUILD)
 #include "nix/expr/eval-gc.hh"
 #endif
 
@@ -18,6 +18,16 @@ RegisterLegacyCommand::Commands & RegisterLegacyCommand::commands()
 
 void showManPage(const std::string &name)
 {
+    if (name == "nix-build") {
+        std::cout << "Usage: nix-build [OPTIONS] [FILES...]\n"
+                     "  --attr NAME            Build an attribute\n"
+                     "  --expr EXPR            Build a command-line expression\n"
+                     "  --out-link PATH        Retain outputs in a root file\n"
+                     "  --no-out-link          Leave no permanent output root\n"
+                     "  --dry-run              Show what would be built\n"
+                     "The default root is STATE/gcroots/result.\n";
+        throw Exit();
+    }
     if (name == "nix-instantiate") {
         std::cout << "Usage: nix-instantiate [OPTIONS] [FILES...]\n"
                      "  --eval --strict --json Evaluate an expression as JSON\n"
@@ -49,9 +59,13 @@ int main(int argc, char ** argv)
 {
     return nix::handleExceptions(argv[0], [&] {
         nix::initNix();
-#ifdef NIX_INSTANTIATE
+#if defined(NIX_INSTANTIATE) || defined(NIX_BUILD)
         nix::initGC();
+#ifdef NIX_BUILD
+        nix::RegisterLegacyCommand::commands().at("nix-build")(argc, argv);
+#else
         nix::RegisterLegacyCommand::commands().at("nix-instantiate")(argc, argv);
+#endif
 #else
         nix::RegisterLegacyCommand::commands().at("nix-store")(argc, argv);
 #endif

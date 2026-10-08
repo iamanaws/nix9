@@ -1,8 +1,8 @@
 # nix9
 
 nix9 brings Nix to Plan 9, with 9front as the tested system.
-Native `nix-instantiate` evaluates expressions and `nix-store` builds packages,
-verifies outputs and manages the store. Packages can also cross-compile on Linux.
+Native `nix-build` builds packages, `nix-instantiate` evaluates expressions,
+and `nix-store` verifies outputs and manages the store. Packages can also cross-compile on Linux.
 
 The project explores a basic Nix interface built on Plan 9 mechanisms.
 

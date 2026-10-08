@@ -6,7 +6,7 @@ foreach part : ['util', 'store', 'fetchers', 'expr', 'main']
   )
 endforeach
 
-foreach command : ['store', 'instantiate']
+foreach command : ['store', 'instantiate', 'build']
   sources = ['main.cc', 'src/nix/nix-' + command + '/nix-' + command + '.cc']
   args = []
   libraries = [nix_libraries['util'], nix_libraries['store'], nix_libraries['main']]
@@ -14,7 +14,12 @@ foreach command : ['store', 'instantiate']
     sources += ['src/nix/nix-store/dotgraph.cc', 'src/nix/nix-store/graphml.cc']
   else
     sources += ['src/libcmd/common-eval-args.cc']
-    args += '-DNIX_INSTANTIATE'
+    if command == 'build'
+      sources += ['src/libcmd/network-proxy.cc']
+      args += '-DNIX_BUILD'
+    else
+      args += '-DNIX_INSTANTIATE'
+    endif
     libraries += [nix_libraries['fetchers'], nix_libraries['expr']]
   endif
   executable(

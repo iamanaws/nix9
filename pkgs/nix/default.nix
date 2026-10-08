@@ -39,5 +39,5 @@ runCommand "nix-${version}"
   }
   ''
     mkdir -p "$out"
-    cp ${libraries}/meson-build/cli/nix-{store,instantiate}.elf "$out/"
+    cp ${libraries}/meson-build/cli/nix-{store,instantiate,build}.elf "$out/"
   ''

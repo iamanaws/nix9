@@ -132,6 +132,8 @@
                 ./tests/nix_store.py
                 ./tests/nix_eval.py
                 ./tests/nix_build.py
+                ./tests/nix_build_cli.py
+                ./tests/nix-build.nix
                 ./tests/nix_concurrency.py
                 ./tests/concurrent-builds.nix
                 ./tests/c_abi.py
@@ -142,7 +144,7 @@
               ]
             }/libutil.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixUtil.cc9.elf2aout} ${nixProbe}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
+              ${nixUtil.cc9.elf2aout} ${nixProbe}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf ${nixUtil}/nix-build.elf \
               ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
             ${python}/bin/python ${
               testSupport [

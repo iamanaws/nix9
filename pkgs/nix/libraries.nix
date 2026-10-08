@@ -99,6 +99,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/gc-query.patch}
     patch -p1 < ${./patches/cc9-compat.patch}
     patch -p1 < ${./patches/9front.patch}
+    patch -p1 < ${./patches/nix-build.patch}
     patch -p1 < ${./patches/meson.patch}
     cd ..
     mkdir -p build/include/nix/{util,store}
