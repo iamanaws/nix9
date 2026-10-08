@@ -57,6 +57,7 @@
       };
       python = pkgs.python3.withPackages (p: [ p.pexpect ]);
       nixUtil = pkgs.callPackage ./pkgs/nix { };
+      nixProbe = pkgs.callPackage ./tests/libutil { inherit nixUtil; };
       testSupport =
         files:
         pkgs.lib.fileset.toSource {
@@ -141,7 +142,7 @@
               ]
             }/libutil.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixUtil.cc9.elf2aout} ${nixUtil}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
+              ${nixUtil.cc9.elf2aout} ${nixProbe}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf \
               ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
             ${python}/bin/python ${
               testSupport [
@@ -163,7 +164,7 @@
             }/native_install.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${nixPackage} ${nixPackage.guestPrefix} "$out" ${lua.archive} \
-              ${nixUtil}/probe.elf ${nixUtil.cc9.elf2aout}
+              ${nixProbe}/probe.elf ${nixUtil.cc9.elf2aout}
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit
