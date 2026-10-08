@@ -59,5 +59,22 @@ def check_nix_store(guest, fixtures):
     guest.command("ls /tmp/nix9-cli/nix/var/nix/temproots > /tmp/roots && test ! -s /tmp/roots")
     guest.command(f"{cli} --check-validity {' '.join(paths)}")
     guest.command(f"{cli} --realise {paths[0]}", paths[0])
+    guest.command(f"{cli} --verify --check-contents")
+    backing = "/tmp/nix9-cli" + paths[0]
+    guest.command(f"chmod +w {backing}; echo changed > {backing}")
+    guest.command(f"{cli} --verify")  # Existence checks do not hash the contents.
+    for flags, message in (("--check-contents", "was modified"),
+                           ("--check-contents --repair", "use --repair-path")):
+        output = guest.command(f"{cli} --verify {flags}; echo VERIFY-STATUS:$status")
+        if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", output) or message not in output:
+            raise RuntimeError(f"unexpected verification result: {output}")
+        guest.command(f"cat {backing}", "changed")
+        guest.command(f"{cli} --query --hash {paths[0]}", "sha256:" + hashes[0])
+    guest.command(f"cp /tmp/cli-file {backing}; {cli} --verify --check-contents")
+    guest.command(f"rm {backing}; {cli} --verify --check-contents")
+    output = guest.command(f"{cli} --check-validity {paths[0]}; echo VERIFY-STATUS:$status")
+    if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", output):
+        raise RuntimeError(f"verification left a missing path registered: {output}")
+    guest.command(f"{cli} --verify-path {paths[1]}")
     return ["version without store", "add", "query", "host store paths", "NAR round-trip", "reopen",
-            "environment", "stdin", "error status", "temporary-root cleanup"]
+            "environment", "stdin", "error status", "temporary-root cleanup", "whole-store verification"]

@@ -515,6 +515,23 @@
  
  void LocalStore::invalidatePathChecked(const StorePath & path)
  {
+@@ -1314,8 +1314,15 @@
+ 
+     /* Acquire the global GC lock to get a consistent snapshot of
+        existing and valid paths. */
++#ifdef __plan9__
++    if (repair) throw Error("whole-store repair is not supported on Plan 9; use --repair-path");
++    auto storeLock = lockStore();
++    requireExclusiveStore();
++    auto gcLock = _fdGCLock.lock();
++#else
+     auto fdGCLock = openGCLock();
+     FdLock gcLock(fdGCLock.get(), ltRead, true, "waiting for the big garbage collector lock...");
++#endif
+ 
+     auto [errors, validPaths] = verifyAllValidPaths(repair);
+ 
+
 --- a/src/libstore/include/nix/store/local-store.hh
 +++ b/src/libstore/include/nix/store/local-store.hh
 @@ -184,7 +184,13 @@

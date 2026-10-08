@@ -108,7 +108,9 @@ For automatic reuse, configure `substituters` with
 the cache's public signing key. `--realise` then fetches missing outputs and
 dependencies and verifies their signatures and content hashes. The cache path can be a
 read-only 9P mount. No cache is configured by default.
-With other store clients stopped, `nix-store --repair-path PATH` restores a path
+With other store clients stopped, `nix-store --verify --check-contents` checks the
+store and removes registrations for missing, unreferenced paths.
+Under the same restriction, `nix-store --repair-path PATH` restores a path
 from a configured cache. It verifies the replacement before copying it into place.
 An interrupted copy requires another repair after offline recovery.
 To publish natively, generate a key with `nix-store --generate-binary-cache-key NAME SECRET PUBLIC`,

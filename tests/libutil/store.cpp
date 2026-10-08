@@ -40,6 +40,30 @@ static nix::ValidPathInfo file(nix::LocalStore &store, const std::string &name,
     return info;
 }
 
+static void checkVerification() {
+    using namespace nix;
+    {
+        auto store = openStore();
+        auto dependency = file(*store, "verify-dependency");
+        auto dependent = file(*store, "verify-dependent", {dependency.path});
+        store->registerValidPaths({{dependency.path, dependency}, {dependent.path, dependent}});
+        require(!store->verifyStore(true, NoRepair), "healthy store failed verification");
+        deletePath(store->toRealPath(dependency.path));
+        require(store->verifyStore(true, NoRepair), "verification missed a referenced missing path");
+        require(store->isValidPath(dependency.path) && store->isValidPath(dependent.path),
+                "verification removed referenced registrations");
+        require(readFile(store->toRealPath(dependent.path)) == "verify-dependent",
+                "verification changed a dependent path");
+        auto unknown = store->config->realStoreDir.get() / "unfinished";
+        writeFile(unknown, "keep");
+        deletePath(store->toRealPath(dependent.path));
+        require(!store->verifyStore(true, NoRepair), "verification failed to reconcile missing paths");
+        require(store->queryAllValidPaths().empty(), "missing unreferenced paths remained registered");
+        require(readFile(unknown) == "keep", "verification deleted an unknown file");
+    }
+    deletePath(root);
+}
+
 static void checkGC() {
     using namespace nix;
     StorePathSet kept;
@@ -240,6 +264,7 @@ void checkStore() {
         require(store->isValidPath(later.path), "peer registration remained negatively cached");
         GCResults result;
         rejected([&] { store->collectGarbage(GCOptions{}, result); }, "GC ran alongside a live client");
+        rejected([&] { store->verifyStore(true, NoRepair); }, "verification ran alongside a live client");
         require(pathExists(store->toRealPath(survived.path)), "GC deleted a live client's input");
         StringSink nar;
         dumpString("survives-kill", nar);
@@ -263,6 +288,7 @@ void checkStore() {
     }
     deletePath(root);
     checkGC();
+    checkVerification();
     checkImports();
     checkStoreClients();
     std::cout << "libstore LocalStore PASS\n";

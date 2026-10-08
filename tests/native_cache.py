@@ -95,11 +95,12 @@ def check_cache(guest, port):
 
 
 def check_repair(guest):
+    guest.command("nix-store --verify --check-contents")
     for damaged in (False, True):
         if damaged:
             guest.command("chmod +w $package/bin/lua; echo damaged > $package/bin/lua")
-            result = guest.command("nix-store --verify-path $package; echo VERIFY-STATUS:$status")
-            if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", result):
+            result = guest.command("nix-store --verify --check-contents; echo VERIFY-STATUS:$status")
+            if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", result) or "was modified" not in result:
                 raise RuntimeError(f"corrupt package passed verification: {result}")
         for name, reason in (("bad-signature", "not signed"), ("bad-content", "hash mismatch")):
             guest.command(f"cache='file:///tmp/{name}?store=/usr/local/nix/store'")
@@ -112,9 +113,9 @@ def check_repair(guest):
                 guest.command("nix-store --verify-path $package $library")
         guest.command("cache='file:///tmp/cache?store=/usr/local/nix/store'")
         guest.command("cached --repair-path $package")
-        guest.command("nix-store --verify-path $package $library")
+        guest.command("nix-store --verify --check-contents")
         guest.command("$package/bin/lua -e 'print(6 * 7)'", "42")
     guest.command("chmod +w $package/bin; rm $package/bin/lua")
     guest.command("cached --repair-path $package")
-    guest.command("nix-store --verify-path $package $library")
+    guest.command("nix-store --verify --check-contents")
     guest.command("$package/bin/lua -e 'print(6 * 7)'", "42")
