@@ -56,7 +56,16 @@ static void checkGC() {
         permanent = store->config->stateDir.get() / "gcroots" / "package";
         store->addPermRoot(package.path, permanent);
         store->addPermRoot(package.path, permanent); // Idempotent.
-        rejected([&] { store->addPermRoot(dead.path, permanent); }, "root was overwritten");
+        store->addPermRoot(dead.path, permanent);
+        require(readFile(permanent) == store->printStorePath(dead.path) + '\n', "root was not replaced");
+        std::filesystem::permissions(permanent, std::filesystem::perms::owner_read);
+        store->addPermRoot(dead.path, permanent); // An unchanged root needs no write.
+        rejected([&] { store->addPermRoot(package.path, permanent); }, "read-only root was replaced");
+        require(readFile(permanent) == store->printStorePath(dead.path) + '\n', "failed update changed root");
+        std::filesystem::permissions(permanent, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
+        store->addPermRoot(package.path, permanent);
+        rejected([&] { store->addPermRoot(StorePath(std::string(32, '0') + "-missing"), permanent); },
+                 "invalid path replaced a root");
         rejected([&] { store->addPermRoot(package.path, "/tmp/outside-root"); }, "outside root accepted");
         require(readFile(permanent) == store->printStorePath(package.path) + '\n', "root contents changed");
     }
@@ -89,6 +98,15 @@ static void checkGC() {
         GCResults results;
         rejected([&] { store->collectGarbage(options, results); }, "GC deleted rooted path");
         options = GCOptions{};
+        auto rootContents = readFile(permanent);
+        rootContents.pop_back();
+        auto rooted = store->parseStorePath(rootContents);
+        for (auto contents : {std::string{}, store->printStorePath(temporary.path)}) {
+            writeFile(permanent, contents); // Truncation or a write without the final newline.
+            rejected([&] { store->collectGarbage(options, results); }, "GC ignored interrupted root update");
+            require(store->queryAllValidPaths().size() == 5, "interrupted root update allowed deletion");
+            store->addPermRoot(rooted, permanent);
+        }
         auto malformed = permanent.parent_path() / "broken";
         writeFile(malformed, "incomplete");
         rejected([&] { store->collectGarbage(options, results); }, "GC ignored malformed root");

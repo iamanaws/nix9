@@ -77,17 +77,14 @@ std::filesystem::path IndirectRootStore::addPermRoot(
     if (!isValidPath(path))
         throw InvalidPath("cannot root invalid path '%s'", printStorePath(path));
     createDirs(target.parent_path());
-    // Do not truncate an existing root. A failed write leaves a malformed root,
-    // which stops collection until repaired or removed.
     auto contents = printStorePath(path) + '\n';
-    if (pathExists(target)) {
-        if (readFile(target) != contents)
-            throw Error("root %s already exists; remove it before replacing it", PathFmt(target));
-    } else {
-        AutoCloseFD fd(n9_create(target.c_str(), 1 | 32 | 0x1000, 0600));
-        if (!fd) throw SysError(cc9_errno_from_errstr_or(EIO), "creating root %s", PathFmt(target));
-        writeFull(fd.get(), contents);
-    }
+    bool exists = pathExists(target);
+    if (exists && readFile(target) == contents) return target;
+    // The store gate excludes GC while create truncates and we write the root.
+    // A failed write leaves no final newline, so later GC refuses to collect.
+    AutoCloseFD fd(n9_create(target.c_str(), 1 | 32 | (exists ? 0 : 0x1000), 0600));
+    if (!fd) throw SysError(cc9_errno_from_errstr_or(EIO), "writing root %s", PathFmt(target));
+    writeFull(fd.get(), contents);
     return target;
 }
 
