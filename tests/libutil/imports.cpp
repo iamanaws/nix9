@@ -1,6 +1,7 @@
 #include "nix/store/local-store.hh"
 #include "nix/store/globals.hh"
 #include "nix/util/archive.hh"
+#include <future>
 
 static void require(bool condition, const char *what) {
     if (!condition) throw std::runtime_error(what);
@@ -55,9 +56,30 @@ void checkImports() {
         StringSource duplicate(nar);
         store->addToStore(info, duplicate, NoRepair, CheckSigs);
         require(duplicate.drain().empty(), "duplicate import left unread bytes");
+        for (auto failure : {"hash", "size", "truncated", "ca"}) {
+            auto bad = info;
+            auto bytes = nar;
+            if (std::string_view(failure) == "hash") bad.narHash = hashString(HashAlgorithm::SHA256, "wrong");
+            if (std::string_view(failure) == "size") ++bad.narSize;
+            if (std::string_view(failure) == "truncated") bytes.pop_back();
+            if (std::string_view(failure) == "ca") bad.ca->hash = hashString(HashAlgorithm::SHA256, "wrong");
+            StringSource input(bytes);
+            rejected([&] { store->addToStore(bad, input, Repair, NoCheckSigs); }, "invalid repair accepted");
+            StringSink unchanged;
+            store->narFromPath(info.path, unchanged);
+            require(unchanged.s == nar, "rejected repair changed stored data");
+        }
+        std::filesystem::permissions(path, std::filesystem::perms::owner_write,
+                                     std::filesystem::perm_options::add);
+        deletePath(path / "binary");
         StringSource repair(nar);
-        rejected([&] { store->addToStore(info, repair, Repair, CheckSigs); }, "repair was accepted");
-        require(readFile(path / "binary").size() == 261, "rejected repair changed stored data");
+        // Substitution repairs through a worker using the same store connection.
+        std::async(std::launch::async, [&] {
+            store->addToStore(info, repair, Repair, CheckSigs);
+        }).get();
+        StringSink repaired;
+        store->narFromPath(info.path, repaired);
+        require(repaired.s == nar, "repair did not restore the original NAR");
 
         // Exercise both the in-memory and temporary-directory ingestion paths.
         for (size_t limit : {size_t{1 << 20}, size_t{8}}) {
@@ -74,7 +96,8 @@ void checkImports() {
             expected.insert(imported);
         }
         for (auto &entry : std::filesystem::directory_iterator(config->realStoreDir.get()))
-            require(!entry.path().filename().string().starts_with("tmp-"), "temporary import directory leaked");
+            require(!entry.path().filename().string().starts_with("tmp-") &&
+                    !entry.path().filename().string().starts_with("repair-"), "temporary import directory leaked");
 
         for (auto failure : {"hash", "size", "truncated", "reference", "link", "gc", "optimise"}) {
             auto bytes = nar;

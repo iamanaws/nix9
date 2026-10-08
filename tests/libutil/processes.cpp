@@ -54,7 +54,7 @@ static void checkEnvironment() {
         require(actual && value == actual, "setenv overwrote existing value");
         require(nix::getEnvOs().at(key) == value, "environment enumeration lost update");
     }
-    nix::writeFile("/env/NIX9_ENV_TEST", "direct\n");
+    nix::writeFile("/env/NIX9_ENV_TEST", std::string_view("direct\n\0", 8));
     require(std::string_view(::getenv(key)) == "direct\n", "getenv missed /env write");
     require(::unsetenv(key) == 0 && !::getenv(key), "unsetenv left a value");
     require(!nix::getEnvOs().contains(key), "environment enumeration retained removed value");

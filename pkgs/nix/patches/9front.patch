@@ -377,19 +377,34 @@
  #endif
  
      return retrySQLite<void>([&]() {
-@@ -988,6 +1022,9 @@
+@@ -988,6 +1022,13 @@
  
  void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairFlag repair, CheckSigsFlag checkSigs)
  {
 +#ifdef __plan9__
-+    if (repair) throw Error("store repair is not supported on 9front");
++    PathLocks repairLock;
++    if (repair) {
++        repairLock = lockStore();
++        requireExclusiveStore();
++    }
 +#endif
      if (checkSigs && pathInfoIsUntrusted(info))
          throw Error("cannot add path '%s' because it lacks a signature by a trusted key", printStorePath(info.path));
  
-@@ -1021,6 +1058,9 @@
+@@ -1020,7 +1061,20 @@
+ 
              if (repair || !isValidPath(info.path)) {
  
++#ifdef __plan9__
++                // Validate repairs before touching the existing store contents.
++                auto destination = realPath;
++                AutoDelete repairTemp;
++                if (repair) {
++                    auto temp = createTempDir(config->realStoreDir.get(), "repair");
++                    repairTemp = AutoDelete(temp);
++                    realPath = (temp / "contents").string();
++                }
++#endif
                  deletePath(realPath);
 +#ifdef __plan9__
 +                AutoDelete incomplete(realPath);
@@ -397,7 +412,39 @@
  
                  /* While restoring the path from the NAR, compute the hash
                  of the NAR. */
-@@ -1095,6 +1135,9 @@
+@@ -1050,8 +1104,13 @@
+                 if (info.ca) {
+                     auto & specified = *info.ca;
+                     auto actualHash = ({
++#ifdef __plan9__
++                        auto accessor = makeFSSourceAccessor(realPath);
++                        auto path = CanonPath::root;
++#else
+                         auto accessor = getFSAccessor(false);
+                         CanonPath path{info.path.to_string()};
++#endif
+                         Hash h{HashAlgorithm::SHA256}; // throwaway def to appease C++
+                         auto fim = specified.method.getFileIngestionMethod();
+                         switch (fim) {
+@@ -1085,6 +1143,17 @@
+ 
+                 autoGC();
+ 
++#ifdef __plan9__
++                if (repair) {
++                    // Cross-directory rename is unavailable. Other store clients
++                    // remain excluded until the verified copy is registered.
++                    deletePath(destination);
++                    incomplete.cancel();
++                    incomplete = AutoDelete(destination);
++                    copyFile(realPath, destination, true);
++                    realPath = destination;
++                }
++#endif
+                 canonicalisePathMetaData(realPath, {NIX_WHEN_SUPPORT_ACLS(config->getLocalSettings().ignoredAcls)});
+ 
+                 optimisePath(realPath, repair); // FIXME: combine with hashPath()
+@@ -1095,6 +1163,9 @@
                  }
  
                  registerValidPath(info);
@@ -407,7 +454,7 @@
              }
  
              outputLock.setDeletion(true);
-@@ -1114,6 +1157,9 @@
+@@ -1114,6 +1185,9 @@
      const StorePathSet & references,
      RepairFlag repair)
  {
@@ -417,7 +464,7 @@
      /* For computing the store path. */
      auto hashSink = std::make_unique<HashSink>(hashAlgo);
      TeeSource source{source0, *hashSink};
-@@ -1215,6 +1261,9 @@
+@@ -1215,6 +1289,9 @@
          if (repair || !isValidPath(dstPath)) {
  
              deletePath(realPath);
@@ -427,7 +474,7 @@
  
              autoGC();
  
-@@ -1234,7 +1283,13 @@
+@@ -1234,7 +1311,13 @@
                  }
              } else {
                  /* Move the temporary path we restored above. */
@@ -441,7 +488,7 @@
              }
  
              /* For computing the nar hash. In recursive SHA-256 mode, this
-@@ -1259,6 +1314,9 @@
+@@ -1259,6 +1342,9 @@
              auto info = ValidPathInfo::makeFromCA(*this, name, std::move(desc), narHash.hash);
              info.narSize = narHash.numBytesDigested;
              registerValidPath(info);
@@ -451,7 +498,7 @@
          }
  
          outputLock.setDeletion(true);
-@@ -1269,6 +1327,7 @@
+@@ -1269,6 +1355,7 @@
  
  /* Create a temporary directory in the store that won't be
     garbage-collected until the returned FD is closed. */
@@ -459,7 +506,7 @@
  std::pair<std::filesystem::path, AutoCloseFD> LocalStore::createTempDirInStore()
  {
      std::filesystem::path tmpDirFn;
-@@ -1288,6 +1347,8 @@
+@@ -1288,6 +1375,8 @@
      } while (!pathExists(tmpDirFn.string()) || !lockedByUs);
      return {tmpDirFn, std::move(tmpDirFd)};
  }

@@ -223,6 +223,13 @@ void checkStore() {
         GCResults result;
         rejected([&] { store->collectGarbage(GCOptions{}, result); }, "GC ran alongside a live client");
         require(pathExists(store->toRealPath(survived.path)), "GC deleted a live client's input");
+        StringSink nar;
+        dumpString("survives-kill", nar);
+        StringSource repairSource(nar.s);
+        rejected([&] { store->addToStore(survived, repairSource, Repair, NoCheckSigs); },
+                 "repair ran alongside a live client");
+        require(readFile(store->toRealPath(survived.path)) == "survives-kill",
+                "rejected repair changed a live client's input");
         expected.insert(later.path);
     }
     require(!statusOk(child.kill()), "killed store client reported success");

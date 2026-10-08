@@ -31,6 +31,26 @@ void checkCompression(const char *method, const char *input, const char *host, c
     catch (const nix::Error &) { rejected = true; }
     check(rejected);
 
+    if (std::string_view(method) == "br") {
+        for (size_t size : {size_t{0}, encoded.size() - 1}) {
+            auto partial = std::string_view(encoded).substr(0, size);
+            rejected = false;
+            try { nix::decompress(method, partial); }
+            catch (const nix::CompressionError &) { rejected = true; }
+            check(rejected);
+
+            nix::StringSink sink;
+            auto truncated = nix::makeDecompressionSink(method, sink);
+            rejected = false;
+            try {
+                for (size_t pos = 0; pos < partial.size(); pos += 97)
+                    (*truncated)(partial.substr(pos, 97));
+                truncated->finish();
+            } catch (const nix::CompressionError &) { rejected = true; }
+            check(rejected);
+        }
+    }
+
     std::ofstream out(output, std::ios::binary);
     out.write(compressed.s.data(), compressed.s.size());
     out.close();

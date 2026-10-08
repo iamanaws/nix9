@@ -23,7 +23,8 @@ PathLocks LocalStore::lockStore()
 
 void LocalStore::requireExclusiveStore()
 {
-    auto own = std::to_string(getpid()) + ".lock";
+    // Workers share the connection but have different native process IDs.
+    auto own = fnTempRoots.filename().string() + ".lock";
     for (auto &entry : DirectoryIterator{dbDir / "clients"})
         if (entry.path().filename() != own)
             throw Error("exclusive store access required: another 9front client is active");

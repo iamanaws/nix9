@@ -8,6 +8,9 @@ import subprocess
 def check_nix_store(guest, fixtures):
     guest.command("/tmp/nix-store --help", "Usage: nix-store [--store URI] OPERATION [ARGS...]")
     guest.command("/tmp/nix-store --version", "nix-store (Nix) 2.34.8")
+    # Version reporting must work even when the selected store cannot open.
+    guest.command("/tmp/nix-store --store invalid:// --version", "nix-store (Nix) 2.34.8")
+    guest.command("NIX_REMOTE=invalid:// /tmp/nix-store --version", "nix-store (Nix) 2.34.8")
     cli = "/tmp/nix-store --store /tmp/nix9-cli"
     guest.command(f"{cli} --init")
     paths, hashes = [], []
@@ -56,5 +59,5 @@ def check_nix_store(guest, fixtures):
     guest.command("ls /tmp/nix9-cli/nix/var/nix/temproots > /tmp/roots && test ! -s /tmp/roots")
     guest.command(f"{cli} --check-validity {' '.join(paths)}")
     guest.command(f"{cli} --realise {paths[0]}", paths[0])
-    return ["add", "query", "host store paths", "NAR round-trip", "reopen",
+    return ["version without store", "add", "query", "host store paths", "NAR round-trip", "reopen",
             "environment", "stdin", "error status", "temporary-root cleanup"]

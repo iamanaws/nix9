@@ -91,9 +91,12 @@ static void environment() {
         actual = getenv(key);
         check(actual && value == actual, "setenv preserved value");
     }
-    writeFile("/env/CC9_REGRESSION_ENV", "direct\n");
+    writeFile("/env/CC9_REGRESSION_ENV", std::string("direct\n\0", 8));
     const char *actual = getenv(key);
     check(actual && std::string(actual) == "direct\n", "getenv sees /env writes");
+    writeFile("/env/CC9_REGRESSION_ENV", "direct\n");
+    actual = getenv(key);
+    check(actual && std::string(actual) == "direct", "getenv strips raw trailing newlines");
     check(unsetenv(key) == 0 && !getenv(key), "unsetenv");
     for (const char *name : {"", ".", "..", "../dev/pid", "/dev/pid", "a=b"}) {
         check(!getenv(name), "invalid getenv name");

@@ -5,7 +5,7 @@
  #endif
  	if(!p) return;
 -	/* aligned_alloc blocks carry a sentinel and a different base — never cache. */
-+	/* Recover the malloc base before choosing its size-class free list. */
++	/* aligned_alloc block: free the malloc base through the normal paths. */
 +	if(((unsigned long *)p)[-1] == CC9_ALIGN_MAGIC){
 +		free(*(void **)((char *)p - 16));
 +		return;
