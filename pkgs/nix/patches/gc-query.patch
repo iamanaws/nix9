@@ -1,12 +1,19 @@
 --- a/src/libstore/gc.cc
 +++ b/src/libstore/gc.cc
-@@ -555,6 +555,9 @@
-             }
-         }
- 
-+        if (!shouldDelete)
-+            return;
+@@ -540,6 +540,7 @@
+        GCLimitReached if we've deleted enough garbage. */
+     auto deleteFromStore = [&](std::string_view baseName, bool isKnownPath) {
+         assert(!std::filesystem::path(baseName).is_absolute());
 +
-         printInfo("deleting '%1%'", path);
+         /* Using `std::string` since this is the logical store dir. Hopefully that is the right choice. */
+         std::string path = storeDir + "/" + std::string(baseName);
+         auto realPath = config->realStoreDir.get() / std::string(baseName);
+@@ -732,7 +733,7 @@
  
-         results.paths.insert(path);
+                 if (auto storePath = maybeParseStorePath(storeDir + "/" + name))
+                     deleteReferrersClosure(*storePath);
+-                else
++                else if (shouldDelete)
+                     deleteFromStore(name, false);
+             }
+         } catch (GCLimitReached & e) {

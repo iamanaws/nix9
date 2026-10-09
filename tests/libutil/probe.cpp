@@ -13,6 +13,7 @@
 void checkSQLite();
 void crashSQLite(const char *database);
 void recoverSQLite(const char *database);
+void interruptRepair(const char *package);
 void checkAllocations();
 void checkStore();
 void checkHashes(const char *input, const char *expected);
@@ -115,6 +116,10 @@ int main(int argc, char **argv) {
             return 0;
         }
         nix::initLibUtil();
+        if (argc == 3 && std::string_view(argv[1]) == "repair-crash") {
+            interruptRepair(argv[2]);
+            return 0;
+        }
         if (argc == 2 && std::string_view(argv[1]) == "store") {
             checkStore();
             return 0;

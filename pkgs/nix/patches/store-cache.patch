@@ -9,16 +9,27 @@
      return id;
  }
  
-@@ -907,6 +905,12 @@
-     return retrySQLite<void>([&]() {
-         auto state(_state->lock());
+@@ -947,6 +945,14 @@
+             topoSortResult);
  
-+        // Publish validity through the database only after commit. Invalidate
-+        // cached misses, updates and failed batches after the transaction ends.
-+        Finally clearCache([&]() {
-+            for (auto & [path, info] : infos)
-+                invalidatePathInfoCacheFor(path);
-+        });
-         SQLiteTxn txn(state->db);
-         StorePathSet paths;
+         txn.commit();
++
++        /* Cache what's in the database, not `infos`: it lacks fields
++           like the registration time. */
++        {
++            auto cache(pathInfoCache->lock());
++            for (auto & [path, _] : infos)
++                cache->upsert(path, PathInfoCacheValue{.value = queryPathInfoInternal(*state, path)});
++        }
+     });
+ }
+ 
+@@ -1525,6 +1531,8 @@
+         updatePathInfo(*state, *info);
+ 
+         txn.commit();
++
++        pathInfoCache->lock()->upsert(storePath, PathInfoCacheValue{.value = info});
+     });
+ }
  

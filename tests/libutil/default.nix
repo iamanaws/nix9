@@ -19,7 +19,7 @@ runCommand "nix-${version}-probe" { } ''
       -c "$source" -o "build/test-$(basename "$source" .cpp).o"
   done
   # Keep the libraries' static initializers and assertion wrapper; discard unused sections.
-  ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail \
+  ${llvmPackages.lld}/bin/ld.lld --gc-sections -static -nostdlib --wrap=__assert_fail --wrap=n9_pwrite \
     -T "$runtime/plan9.ld" -o "$out/probe.elf" --start-group \
     build/*.o ${compression}/lib/*.a ${sodium}/lib/libsodium.a ${sqlite}/lib/libsqlite3.a \
     ${dependencies.boost}/lib/*.a ${dependencies.digests}/lib/*.a \

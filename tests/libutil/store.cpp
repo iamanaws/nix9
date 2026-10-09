@@ -2,6 +2,7 @@
 #include "nix/store/globals.hh"
 #include "nix/util/archive.hh"
 #include "nix/util/processes.hh"
+#include "nix/util/signature/local-keys.hh"
 #include <iostream>
 
 void checkImports();
@@ -24,6 +25,15 @@ static nix::ref<nix::LocalStore> openStore() {
     return nix::make_ref<nix::LocalStore>(
         nix::make_ref<nix::LocalStore::Config>(root, nix::Store::Config::Params{}));
 }
+
+// Exercise the general cache fixes in an isolated connection. Native stores
+// normally disable this cache because other clients can update the database.
+struct CachedStore : nix::LocalStore {
+    CachedStore(nix::ref<const LocalStore::Config> config)
+        : Store(*config), LocalFSStore(*config), LocalStore(config) {
+        pathInfoCache = nix::make_ref<decltype(pathInfoCache)::element_type>(32);
+    }
+};
 
 static nix::ValidPathInfo file(nix::LocalStore &store, const std::string &name,
                               const nix::StorePathSet &references = {}) {
@@ -166,11 +176,12 @@ void checkStore() {
     StorePathSet expected;
     std::filesystem::path rootsFile, rootsDir, clientsDir;
     {
-        auto store = openStore();
+        auto store = make_ref<CachedStore>(make_ref<LocalStore::Config>(root, Store::Config::Params{}));
         require(store->queryAllValidPaths().empty(), "new store is not empty");
         rejected([] { openStore(); }, "duplicate connection in one process was accepted");
 
         auto dependency = file(*store, "dependency");
+        dependency.registrationTime = 0;
         auto dependent = file(*store, "dependent", {dependency.path});
         rootsFile = store->fnTempRoots;
         rootsDir = store->tempRootsDir;
@@ -184,6 +195,8 @@ void checkStore() {
         require(!store->isValidPath(dependent.path), "unregistered path is valid");
         store->registerValidPaths({{dependent.path, dependent}, {dependency.path, dependency}});
         require(store->queryAllValidPaths() == expected, "registration lost paths");
+        require(store->queryPathInfo(dependency.path)->registrationTime != 0,
+                "cache omitted the database registration time");
         auto info = store->queryPathInfo(dependent.path);
         require(info->narHash == dependent.narHash && info->narSize == dependent.narSize &&
                 info->registrationTime == dependent.registrationTime && info->ca == dependent.ca &&
@@ -200,6 +213,10 @@ void checkStore() {
         dependent.ultimate = true;
         store->registerValidPath(dependent);
         require(store->queryPathInfo(dependent.path)->ultimate, "updated metadata stayed cached");
+        auto signature = SecretKey::generate("store-test").signDetached("test");
+        store->addSignatures(dependent.path, {signature});
+        require(store->queryPathInfo(dependent.path)->sigs.contains(signature),
+                "added signature stayed hidden by cached metadata");
 
         // Failed batches must disappear from both the database and the path cache.
         auto missing = file(*store, "missing");

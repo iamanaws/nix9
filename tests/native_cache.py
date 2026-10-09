@@ -119,3 +119,38 @@ def check_repair(guest):
     guest.command("cached --repair-path $package")
     guest.command("nix-store --verify --check-contents")
     guest.command("$package/bin/lua -e 'print(6 * 7)'", "42")
+
+
+def interrupt_repair(guest):
+    guest.command("cd /tmp && tar xf cache.tar")
+    guest.command("cached --realise $package --add-root /usr/local/nix/state/gcroots/cached")
+    guest.command("chmod +w $package/bin/lua; echo damaged > $package/bin/lua")
+    guest.command("{exec /tmp/store-probe repair-crash $package} > /tmp/repair.log >[2=1] &")
+    guest.command("for(i in 1 2 3 4 5 6 7 8 9 10) {if(! test -e /tmp/nix9-repair-ready) sleep 1}; "
+                  "cat /tmp/repair.log; test -e /tmp/nix9-repair-ready")
+    guest.command("test `{wc -c < $package/bin/lua} -eq 1")
+    guest.command("test -e $package^.lock")
+    # As in build recovery, persist the interrupted state; do not simulate torn writes.
+    guest.command("echo sync >> /srv/hjfs.cmd; sleep 3")
+    guest.crash()
+
+
+def recover_repair(guest):
+    guest.command("state=/usr/local/nix/state; store=/usr/local/nix/store")
+    guest.command("test `{wc -c < $package/bin/lua} -eq 1")
+    result = guest.command("nix-store --verify --check-contents; echo VERIFY-STATUS:$status")
+    if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", result) or "exclusive store access required" not in result:
+        raise RuntimeError(f"verification ignored the interrupted client's marker: {result}")
+    # The old VM is gone and no clients are running. Retain all database data.
+    guest.command("rm -f $state/db/clients/*.lock $state/temproots/* $package^.lock")
+    guest.command("nix-store --check-validity $package $library")
+    result = guest.command("nix-store --verify --check-contents; echo VERIFY-STATUS:$status")
+    if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", result) or "was modified" not in result:
+        raise RuntimeError(f"partial replacement passed verification: {result}")
+    guest.command("key=`{cat /tmp/cache.pub}; cache='file:///tmp/cache?store=/usr/local/nix/store'")
+    guest.command("nix-store --option substituters $cache --option trusted-public-keys $key --repair-path $package")
+    guest.command("nix-store --verify --check-contents")
+    guest.command("nix-store --gc")
+    guest.command("test ! -e $store/repair-*")
+    guest.command("$package/bin/lua -e 'print(6 * 7)'", "42")
+    return "partial replacement, offline marker cleanup, signed repair and GC passed"

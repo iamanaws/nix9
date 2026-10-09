@@ -1,13 +1,15 @@
 """Move a trusted native package closure to a fresh VM using upstream exports."""
 
 import re
+from pathlib import Path
 import socket
+import subprocess
 import tarfile
 import threading
 
 from artifacts import ArtifactServer
 from guest import boot
-from native_cache import cache_fixture, check_cache, verify_published
+from native_cache import cache_fixture, check_cache, verify_published, interrupt_repair, recover_repair
 from native_cache_network import check_network_cache
 
 
@@ -32,6 +34,9 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
     data = (root / "closure.export").read_bytes()
     (root / "truncated.export").write_bytes(data[:64])
     cache_fixture(root)
+    disk = root / "transfer.qcow2"
+    subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
+                    "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
@@ -39,12 +44,12 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with boot(qemu, image, forward_port=port) as guest:
+            with boot(qemu, disk, snapshot=False) as guest:
                 guest.child.timeout = 300
                 base = f"http://10.0.2.2:{server.server_port}"
-                for name in ("nix-store", "closure.export", "truncated.export", "cache.tar"):
+                for name in ("nix-store", "store-probe", "closure.export", "truncated.export", "cache.tar"):
                     guest.command(f"hget -o /tmp/{name} {base}/{name}")
-                guest.command("chmod +x /tmp/nix-store; path=(/tmp $path)")
+                guest.command("chmod +x /tmp/nix-store /tmp/store-probe; path=(/tmp $path)")
                 guest.command("NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'")
                 guest.command("test ! -e /usr/local/nix/store")
                 result = guest.command("nix-store --import < /tmp/truncated.export; echo IMPORT-STATUS:$status")
@@ -75,6 +80,13 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
                 caching = check_cache(guest, server.server_port)
                 if not server.received.is_set():
                     raise RuntimeError("guest did not upload its signed cache")
+                interrupt_repair(guest)
+            with boot(qemu, disk, snapshot=False, forward_port=port) as guest:
+                guest.child.timeout = 300
+                guest.command("path=(/tmp $path)")
+                guest.command("NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'")
+                guest.command(f"package={sources['package']}; library={sources['library']}")
+                recovery = recover_repair(guest)
                 network = check_network_cache(guest, qemu, image, port, base, sources)
         finally:
             server.shutdown()
@@ -82,4 +94,4 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
     verify_published(root, sources["package"], expected)
     return {"transfer": "fresh store, truncated input, round-trip, duplicate import, roots and GC passed",
             "cache": caching, "publication": "native signing, repeated publication and upstream substitution passed",
-            "network": network}
+            "repair-recovery": recovery, "network": network}

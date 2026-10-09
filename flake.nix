@@ -1,6 +1,13 @@
 {
   description = "Experiments in Nix-managed cross compilation for 9front";
 
+  nixConfig = {
+    extra-substituters = [ "https://nix9.cachix.org" ];
+    extra-trusted-public-keys = [
+      "nix9.cachix.org-1:geiAfwmo+PftMUs4uIL9so9vuNAgP36d+CM9k86Q8nk="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     ninefront = {
