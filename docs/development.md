@@ -117,11 +117,9 @@ To publish natively, generate a key with `nix-store --generate-binary-cache-key 
 then import the closure with `--store 'file:///path/to/cache?store=/usr/local/nix/store&secret-key=/path/to/SECRET'`.
 Share the cache and public key. Keep the secret key private.
 
-After an unclean shutdown, reboot and keep Nix clients stopped during recovery.
-Under `/usr/local/nix`, remove leftover files in `state/db/clients` and
-`state/temproots`, and the `state/db/db.sqlite.p9lock` file. Preserve the database
-and its rollback journal.
-Remove the interrupted output's exact `.lock` file and leftover `store/tmp-*/.lock`
-markers, then rebuild and verify the output. Never remove locks from a live store
-or use `store/*.lock`. A valid output can also have that suffix.
-The [recovery test](../tests/native_recovery.py) checks this procedure and SQLite journal rollback.
+After an unclean shutdown, reboot, activate Nix, and run `nix-store --recover`
+before opening the store. It removes stale lock markers and lets SQLite recover
+its journal. Then rebuild or repair interrupted outputs and verify them.
+Recovery refuses to run once a store client has opened during the current boot.
+All clients must share the same canonical store path and kernel service namespace.
+The [recovery test](../tests/native_recovery.py) checks rollback, rebuilding and GC.

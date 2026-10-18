@@ -138,11 +138,7 @@ def interrupt_repair(guest):
 def recover_repair(guest):
     guest.command("state=/usr/local/nix/state; store=/usr/local/nix/store")
     guest.command("test `{wc -c < $package/bin/lua} -eq 1")
-    result = guest.command("nix-store --verify --check-contents; echo VERIFY-STATUS:$status")
-    if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", result) or "exclusive store access required" not in result:
-        raise RuntimeError(f"verification ignored the interrupted client's marker: {result}")
-    # The old VM is gone and no clients are running. Retain all database data.
-    guest.command("rm -f $state/db/clients/*.lock $state/temproots/* $package^.lock")
+    guest.command("nix-store --recover", "store recovery complete")
     guest.command("nix-store --check-validity $package $library")
     result = guest.command("nix-store --verify --check-contents; echo VERIFY-STATUS:$status")
     if not re.search(r"(?m)^VERIFY-STATUS:.*cc9exit=1$", result) or "was modified" not in result:
@@ -153,4 +149,4 @@ def recover_repair(guest):
     guest.command("nix-store --gc")
     guest.command("test ! -e $store/repair-*")
     guest.command("$package/bin/lua -e 'print(6 * 7)'", "42")
-    return "partial replacement, offline marker cleanup, signed repair and GC passed"
+    return "partial replacement, offline recovery, signed repair and GC passed"

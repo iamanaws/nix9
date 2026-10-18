@@ -10,15 +10,78 @@ namespace nix {
 
 // A kernel service gate works even before the store's directories exist.
 // Use the same canonical store path and service namespace for all clients.
-static PathLocks lockStoreAt(const std::filesystem::path &dbDir)
+static std::string storeService(const std::filesystem::path &dbDir)
 {
     auto key = hashString(HashAlgorithm::SHA256, canonPath(dbDir).string());
-    return PathLocks({"#s/nix9-store-" + key.to_string(HashFormat::Base16, false)});
+    return "#s/nix9-store-" + key.to_string(HashFormat::Base16, false);
+}
+
+static PathLocks lockStoreAt(const std::filesystem::path &dbDir)
+{
+    return PathLocks({storeService(dbDir)});
 }
 
 PathLocks LocalStore::lockStore()
 {
     return lockStoreAt(dbDir);
+}
+
+void LocalStore::markStoreUsed()
+{
+    // Called under the startup gate. Unlike locks, this service survives close
+    // and process death, but not reboot. Never remove it during this boot.
+    auto marker = storeService(dbDir) + "-used";
+    if (pathExists(marker)) return;
+    AutoCloseFD fd(n9_create(marker.c_str(), 1 | 32 | 0x1000, 0600));
+    if (!fd) throw SysError(cc9_errno_from_errstr_or(EIO), "marking store use");
+}
+
+void recoverLocalStore(const LocalStoreConfig &config)
+{
+    auto dbDir = config.stateDir.get() / "db";
+    auto gate = lockStoreAt(dbDir);
+    if (pathExists(storeService(dbDir) + "-used"))
+        throw Error("recovery requires a reboot before any client opens this store");
+    if (config.readOnly || config.realStoreDir.get().string() != config.storeDir)
+        throw Error("recovery requires a writable, non-diverted local store");
+    if (readFile(dbDir / "schema") != std::to_string(nixSchemaVersion))
+        throw Error("unsupported store schema for recovery");
+
+    // All old clients died at reboot; the gate keeps new ones out. Preserve
+    // the hot journal: SQLite must roll it back before we inspect ValidPaths.
+    std::filesystem::remove(dbDir / "db.sqlite.p9lock");
+    SQLite db(dbDir / "db.sqlite", {.mode = SQLiteOpenMode::NoCreate, .useWAL = false});
+    StringSet valid;
+    SQLiteStmt query(db, "SELECT path FROM ValidPaths");
+    auto rows = query.use();
+    while (rows.next()) valid.insert(rows.getStr(0));
+
+    auto removeMarkers = [](const std::filesystem::path &dir) {
+        for (auto &entry : DirectoryIterator{dir}) {
+            checkInterrupt();
+            if (!entry.is_regular_file())
+                throw Error("unexpected recovery marker %s", PathFmt(entry.path()));
+            std::filesystem::remove(entry.path());
+        }
+    };
+    removeMarkers(dbDir / "clients");
+    removeMarkers(config.stateDir.get() / "temproots");
+    for (auto &entry : DirectoryIterator{config.realStoreDir.get()}) {
+        checkInterrupt();
+        auto name = entry.path().filename().string();
+        if (name.starts_with("tmp-") && entry.is_directory()) {
+            std::filesystem::remove(entry.path() / ".lock");
+        } else if (name.ends_with(".lock") && entry.is_regular_file()
+                   && !valid.contains(entry.path().string())) {
+            // A registered output may itself end in .lock. Only remove an
+            // empty, unregistered marker belonging to a syntactic store path.
+            try {
+                config.parseStorePath(entry.path().string().substr(0, entry.path().string().size() - 5));
+            } catch (const BadStorePath &) { continue; }
+            if (entry.file_size() == 0) std::filesystem::remove(entry.path());
+        }
+    }
+    printInfo("store recovery complete");
 }
 
 void LocalStore::requireExclusiveStore()

@@ -104,11 +104,12 @@
  namespace nix {
 --- a/src/libutil/hilite.cc
 +++ b/src/libutil/hilite.cc
-@@ -1,3 +1,5 @@
-+#include <algorithm>
-+#include <sys/types.h>
+@@ -1,3 +1,6 @@
  #include "nix/util/hilite.hh"
  
++#include <algorithm>
++#include <sys/types.h>
++
  namespace nix {
 --- a/src/libutil/unix/processes.cc
 +++ b/src/libutil/unix/processes.cc
@@ -232,7 +233,7 @@
              printError("error (ignored): cannot close lock file on %1%", PathFmt(i.second));
 --- a/src/libstore/sqlite.cc
 +++ b/src/libstore/sqlite.cc
-@@ -1,10 +1,12 @@
+@@ -1,10 +1,13 @@
  #include "nix/store/sqlite.hh"
 -#include "nix/store/globals.hh"
 +#include "nix/util/environment-variables.hh"
@@ -244,6 +245,7 @@
 +#  include "nix/util/file-descriptor.hh"
 +#  include <fcntl.h>
  #  include <sys/vfs.h>
++#  include <unistd.h>
  #endif
  
 @@ -89,7 +91,13 @@
@@ -274,12 +276,13 @@
  void SQLite::exec(const std::string & stmt)
 --- a/src/libstore/local-store.cc
 +++ b/src/libstore/local-store.cc
-@@ -126,6 +126,15 @@
+@@ -126,6 +126,16 @@
      , tempRootsDir(config->stateDir.get() / "temproots")
      , fnTempRoots(tempRootsDir / std::to_string(getpid()))
  {
 +#ifdef __plan9__
 +    auto startupLock = lockStore();
++    markStoreUsed();
 +    // Other clients can register or update paths while this connection is open.
 +    pathInfoCache = make_ref<decltype(pathInfoCache)::element_type>(0);
 +    if (config->readOnly)
@@ -290,7 +293,7 @@
      auto state(_state->lock());
      state->stmts = std::make_unique<State::Stmts>();
  
-@@ -227,6 +236,12 @@
+@@ -227,6 +237,12 @@
      } catch (SystemError & e) { /* don't care about errors */
      }
  
@@ -303,7 +306,7 @@
      /* Acquire the big fat lock in shared mode to make sure that no
         schema upgrade is in progress. */
      if (!config->readOnly) {
-@@ -249,9 +264,14 @@
+@@ -249,9 +265,14 @@
          lockFile(globalLock.get(), ltRead, true);
      }
  
@@ -318,7 +321,7 @@
      if (config->readOnly && curSchema < nixSchemaVersion) {
          debug("current schema version: %d", curSchema);
          debug("supported schema version: %d", nixSchemaVersion);
-@@ -282,6 +302,7 @@
+@@ -282,6 +303,7 @@
                  "which is no longer supported. To convert to the new format,\n"
                  "please upgrade Nix to version 1.11 first.");
  
@@ -326,7 +329,7 @@
          if (!lockFile(globalLock.get(), ltWrite, false)) {
              printInfo("waiting for exclusive access to the Nix store...");
              lockFile(
-@@ -289,6 +310,8 @@
+@@ -289,6 +311,8 @@
              lockFile(globalLock.get(), ltWrite, true);
          }
  
@@ -335,7 +338,7 @@
          /* Get the schema version again, because another process may
             have performed the upgrade already. */
          curSchema = getSchema();
-@@ -320,7 +343,9 @@
+@@ -320,7 +344,9 @@
  
          writeFile(schemaPath, fmt("%1%", nixSchemaVersion), 0666, FsSync::Yes);
  
@@ -345,7 +348,7 @@
      }
  
      else
-@@ -437,7 +462,9 @@
+@@ -437,7 +463,9 @@
          auto fdTempRoots(_fdTempRoots.lock());
          if (*fdTempRoots) {
              fdTempRoots->close();
@@ -355,7 +358,7 @@
          }
      } catch (...) {
          ignoreExceptionInDestructor();
-@@ -582,6 +609,9 @@
+@@ -582,6 +610,9 @@
          if (schemaMigrations.contains(migrationName))
              return;
  
@@ -365,7 +368,7 @@
          debug("executing Nix database schema migration '%s'...", migrationName);
  
          SQLiteTxn txn(state.db);
-@@ -899,7 +929,11 @@
+@@ -899,7 +930,11 @@
         the validity, at the expense of some speed of the path
         registering operation. */
      if (config->getLocalSettings().syncBeforeRegistering)
@@ -377,7 +380,7 @@
  #endif
  
      return retrySQLite<void>([&]() {
-@@ -988,6 +1022,13 @@
+@@ -990,6 +1025,13 @@
  
  void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairFlag repair, CheckSigsFlag checkSigs)
  {
@@ -391,7 +394,7 @@
      if (checkSigs && pathInfoIsUntrusted(info))
          throw Error("cannot add path '%s' because it lacks a signature by a trusted key", printStorePath(info.path));
  
-@@ -1020,7 +1061,20 @@
+@@ -1022,7 +1064,20 @@
  
              if (repair || !isValidPath(info.path)) {
  
@@ -412,7 +415,7 @@
  
                  /* While restoring the path from the NAR, compute the hash
                  of the NAR. */
-@@ -1050,8 +1104,13 @@
+@@ -1052,8 +1107,13 @@
                  if (info.ca) {
                      auto & specified = *info.ca;
                      auto actualHash = ({
@@ -426,7 +429,7 @@
                          Hash h{HashAlgorithm::SHA256}; // throwaway def to appease C++
                          auto fim = specified.method.getFileIngestionMethod();
                          switch (fim) {
-@@ -1085,6 +1143,17 @@
+@@ -1087,6 +1147,17 @@
  
                  autoGC();
  
@@ -444,7 +447,7 @@
                  canonicalisePathMetaData(realPath, {NIX_WHEN_SUPPORT_ACLS(config->getLocalSettings().ignoredAcls)});
  
                  optimisePath(realPath, repair); // FIXME: combine with hashPath()
-@@ -1095,6 +1163,9 @@
+@@ -1097,6 +1168,9 @@
                  }
  
                  registerValidPath(info);
@@ -454,7 +457,7 @@
              }
  
              outputLock.setDeletion(true);
-@@ -1114,6 +1185,9 @@
+@@ -1116,6 +1190,9 @@
      const StorePathSet & references,
      RepairFlag repair)
  {
@@ -464,7 +467,7 @@
      /* For computing the store path. */
      auto hashSink = std::make_unique<HashSink>(hashAlgo);
      TeeSource source{source0, *hashSink};
-@@ -1215,6 +1289,9 @@
+@@ -1217,6 +1294,9 @@
          if (repair || !isValidPath(dstPath)) {
  
              deletePath(realPath);
@@ -474,7 +477,7 @@
  
              autoGC();
  
-@@ -1234,7 +1311,13 @@
+@@ -1236,7 +1316,13 @@
                  }
              } else {
                  /* Move the temporary path we restored above. */
@@ -488,7 +491,7 @@
              }
  
              /* For computing the nar hash. In recursive SHA-256 mode, this
-@@ -1259,6 +1342,9 @@
+@@ -1261,6 +1347,9 @@
              auto info = ValidPathInfo::makeFromCA(*this, name, std::move(desc), narHash.hash);
              info.narSize = narHash.numBytesDigested;
              registerValidPath(info);
@@ -498,7 +501,7 @@
          }
  
          outputLock.setDeletion(true);
-@@ -1269,6 +1355,7 @@
+@@ -1271,6 +1360,7 @@
  
  /* Create a temporary directory in the store that won't be
     garbage-collected until the returned FD is closed. */
@@ -506,16 +509,16 @@
  std::pair<std::filesystem::path, AutoCloseFD> LocalStore::createTempDirInStore()
  {
      std::filesystem::path tmpDirFn;
-@@ -1288,6 +1375,8 @@
-     } while (!pathExists(tmpDirFn.string()) || !lockedByUs);
+@@ -1291,6 +1381,8 @@
      return {tmpDirFn, std::move(tmpDirFd)};
  }
-+
-+#endif
  
++#endif
++
  void LocalStore::invalidatePathChecked(const StorePath & path)
  {
-@@ -1314,8 +1314,15 @@
+     retrySQLite<void>([&]() {
+@@ -1320,8 +1412,15 @@
  
      /* Acquire the global GC lock to get a consistent snapshot of
         existing and valid paths. */
@@ -531,16 +534,27 @@
  
      auto [errors, validPaths] = verifyAllValidPaths(repair);
  
-
 --- a/src/libstore/include/nix/store/local-store.hh
 +++ b/src/libstore/include/nix/store/local-store.hh
-@@ -184,7 +184,13 @@
+@@ -171,6 +171,10 @@
+     StoreReference getReference() const override;
+ };
+ 
++#ifdef __plan9__
++void recoverLocalStore(const LocalStoreConfig & config);
++#endif
++
+ class LocalStore : public virtual IndirectRootStore, public virtual GcStore
+ {
+ public:
+@@ -184,7 +188,14 @@
      /**
       * Lock file used for upgrading.
       */
 +#ifdef __plan9__
 +    PathLocks clientLock;
 +    PathLocks lockStore();
++    void markStoreUsed();
 +    void requireExclusiveStore();
 +#else
      AutoCloseFD globalLock;
@@ -751,6 +765,49 @@
  }
  
  static void opGenerateBinaryCacheKey(Strings opFlags, Strings opArgs)
+@@ -1108,6 +1112,18 @@
+     writeFile(secretKeyFile, secretKey.to_string(), 0600, FsSync::Yes);
+ }
+ 
++#ifdef __plan9__
++static void opRecover(Strings opFlags, Strings opArgs)
++{
++    if (!opFlags.empty() || !opArgs.empty())
++        throw UsageError("--recover takes no arguments");
++    auto config = resolveStoreConfig(StoreReference{settings.storeUri.get()});
++    auto local = dynamic_cast<const LocalStoreConfig *>(&*config);
++    if (!local) throw Error("recovery requires a local store");
++    recoverLocalStore(*local);
++}
++#endif
++
+ static void opVersion(Strings opFlags, Strings opArgs)
+ {
+     printVersion("nix-store");
+@@ -1130,6 +1146,10 @@
+ 
+             if (*arg == "--help")
+                 showHelp = true;
++#ifdef __plan9__
++            else if (*arg == "--recover")
++                op = opRecover;
++#endif
+             else if (*arg == "--version")
+                 op = opVersion;
+             else if (*arg == "--realise" || *arg == "--realize" || *arg == "-r") {
+@@ -1233,7 +1253,11 @@
+         if (!op)
+             throw UsageError("no operation specified");
+ 
+-        if (op != opDump && op != opRestore && op != opVersion) /* !!! hack */
++        if (op != opDump && op != opRestore && op != opVersion
++#ifdef __plan9__
++            && op != opRecover
++#endif
++        ) /* !!! hack */
+             store = openStore();
+ 
+         op(std::move(opFlags), std::move(opArgs));
 --- a/src/libutil/unix/include/nix/util/signals-impl.hh
 +++ b/src/libutil/unix/include/nix/util/signals-impl.hh
 @@ -48,6 +48,11 @@

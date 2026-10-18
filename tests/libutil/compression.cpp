@@ -10,6 +10,10 @@ void checkCompression(const char *method, const char *input, const char *host, c
         if (!ok) throw std::runtime_error("compression check failed");
     };
     check(nix::decompress(method, encoded) == data);
+    check(nix::decompress(method, "").empty());
+    nix::StringSink empty;
+    nix::makeDecompressionSink(method, empty)->finish();
+    check(empty.s.empty());
 
     nix::StringSink compressed;
     auto compressor = nix::makeCompressionSink(nix::parseCompressionAlgo(method), compressed);
@@ -20,19 +24,25 @@ void checkCompression(const char *method, const char *input, const char *host, c
 
     nix::StringSink restored;
     auto decoder = nix::makeDecompressionSink(method, restored);
-    for (size_t pos = 0; pos < encoded.size(); pos += 97)
+    for (size_t pos = 0; pos < encoded.size(); pos += 97) {
         (*decoder)(std::string_view(encoded).substr(pos, 97));
+        if (std::string_view(method) == "br")
+            dynamic_cast<nix::BufferedSink &>(*decoder).flush();
+    }
     decoder->finish();
     check(restored.s == data);
 
     // A partial stream must fail, including when finish() needs more input.
     bool rejected = false;
-    try { nix::decompress(method, std::string_view(encoded).substr(0, encoded.size() / 2)); }
-    catch (const nix::Error &) { rejected = true; }
-    check(rejected);
+    if (encoded.size() > 1) {
+        try { nix::decompress(method, std::string_view(encoded).substr(0, encoded.size() / 2)); }
+        catch (const nix::Error &) { rejected = true; }
+        check(rejected);
+    }
 
     if (std::string_view(method) == "br") {
-        for (size_t size : {size_t{0}, encoded.size() - 1}) {
+        for (size_t size : {size_t{1}, encoded.size() - 1}) {
+            if (size == 0 || size >= encoded.size()) continue;
             auto partial = std::string_view(encoded).substr(0, size);
             rejected = false;
             try { nix::decompress(method, partial); }
@@ -41,10 +51,12 @@ void checkCompression(const char *method, const char *input, const char *host, c
 
             nix::StringSink sink;
             auto truncated = nix::makeDecompressionSink(method, sink);
+            for (size_t pos = 0; pos < partial.size(); pos += 97) {
+                (*truncated)(partial.substr(pos, 97));
+                dynamic_cast<nix::BufferedSink &>(*truncated).flush();
+            }
             rejected = false;
             try {
-                for (size_t pos = 0; pos < partial.size(); pos += 97)
-                    (*truncated)(partial.substr(pos, 97));
                 truncated->finish();
             } catch (const nix::CompressionError &) { rejected = true; }
             check(rejected);
