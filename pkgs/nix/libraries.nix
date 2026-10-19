@@ -117,6 +117,7 @@ runCommand "nix-${version}-9front-libraries"
     mkdir "$nixSource/src/libstore/plan9"
     cp ${./store-platform.cc} "$nixSource/src/libstore/plan9/store-platform.cc"
     cp ${./build-platform.cc} "$nixSource/src/libstore/plan9/build-platform.cc"
+    cp ${./filetransfer-platform.cc} "$nixSource/src/libstore/plan9/filetransfer-platform.cc"
     mkdir "$nixSource/src/libfetchers/plan9"
     cp ${./eval-platform.cc} "$nixSource/src/libfetchers/plan9/eval-platform.cc"
     substitute ${cc9.meson} cross.ini \

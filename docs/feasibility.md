@@ -12,8 +12,9 @@ recursive fixed outputs, without sandboxing or a diverted store. Partial rebuild
 preserve valid outputs. Nix discards fixed outputs whose hashes do not match. The evaluator uses upstream's
 no-GC mode for short-lived runs. Native `fetchurl` uses 9front's `webfs` and verifies
 the content hash. Its HTTPS transport does not validate server certificates.
-Content integrity relies on the pinned hash. Signed `file://` binary caches support
-native substitution and repair. Flakes and evaluator network fetchers remain unported.
+Content integrity relies on the pinned hash. Signed `file://` and read-only HTTP(S)
+caches support native substitution and repair. Network caches use mounted webfs
+with the same TLS limitation. Flakes and evaluator network fetchers remain unported.
 
 See the [toolchains](development.md#toolchains) used for cross-builds.
 

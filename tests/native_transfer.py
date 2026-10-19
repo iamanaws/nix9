@@ -11,6 +11,7 @@ from artifacts import ArtifactServer
 from guest import boot
 from native_cache import cache_fixture, check_cache, verify_published, interrupt_repair, recover_repair
 from native_cache_network import check_network_cache
+from native_cache_http import check_http_cache
 
 
 def store_paths(output):
@@ -78,6 +79,7 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
                 if store_paths(guest.command("nix-store --dump-db")):
                     raise RuntimeError("unrooted imported closure survived GC")
                 caching = check_cache(guest, server.server_port)
+                http = check_http_cache(guest, root)
                 if not server.received.is_set():
                     raise RuntimeError("guest did not upload its signed cache")
                 interrupt_repair(guest)
@@ -94,4 +96,4 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
     verify_published(root, sources["package"], expected)
     return {"transfer": "fresh store, truncated input, round-trip, duplicate import, roots and GC passed",
             "cache": caching, "publication": "native signing, repeated publication and upstream substitution passed",
-            "repair-recovery": recovery, "network": network}
+            "repair-recovery": recovery, "network": network, "http": http}

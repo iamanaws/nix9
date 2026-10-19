@@ -108,7 +108,7 @@
    'outputs-spec.cc',
    'parsed-derivations.cc',
    'path-info.cc',
-@@ -334,23 +321,46 @@
+@@ -334,23 +321,47 @@
    'realisation.cc',
    'references.cc',
    'remote-fs-accessor.cc',
@@ -130,10 +130,11 @@
    'worker-protocol.cc',
  )
 +
-+# The native backend supplies roots, GC and builders. Remote stores and
++# The native backend supplies roots, GC and builders. Daemon connections and
 +# Unix builtins are not supported on Plan 9.
 +if host_machine.system() == 'plan9'
-+  sources += files('plan9/store-platform.cc', 'plan9/build-platform.cc')
++  sources += files('plan9/store-platform.cc', 'plan9/build-platform.cc',
++    'plan9/filetransfer-platform.cc', 'http-binary-cache-store.cc')
 +else
 +  sources += files(
 +    'builtins/buildenv.cc',
