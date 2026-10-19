@@ -1,17 +1,16 @@
 {
   nativeBuildInputs,
   buildInputs,
+  initialPath ? [ ],
   interactive ? false,
 }:
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
   inputList = inputs: builtins.concatStringsSep " " (map quote inputs);
-  searchPath = map (input: "${input}/bin") nativeBuildInputs ++ [ "/bin" ];
-  bindInputs =
-    if interactive then
-      builtins.foldl' (result: input: [ input ] ++ result) [ ] nativeBuildInputs
-    else
-      nativeBuildInputs;
+  searchPath = map (input: "${input}/bin") (nativeBuildInputs ++ initialPath) ++ [ "/bin" ];
+  bindInputs = builtins.foldl' (result: input: [ input ] ++ result) [ ] (
+    nativeBuildInputs ++ initialPath
+  );
 in
 ''
   $tools/bin/bind $tools/sys/include /sys/include
@@ -20,7 +19,7 @@ in
   objtype=amd64
   $tools/bin/bind $tools/amd64/mkfile /amd64/mkfile
   $tools/bin/bind $tools/sys/src/mkfile.proto /sys/src/mkfile.proto
-  for(file in mkone mklib mkmany) {
+  for(file in mkone mklib mkmany mksyslib) {
     $tools/bin/bind $tools/sys/src/cmd/$file /sys/src/cmd/$file
   }
   nativeBuildInputs=( ${inputList nativeBuildInputs} )
@@ -40,9 +39,7 @@ in
   }
   # APE execvp searches /bin, so commands also need namespace bindings.
   for(input in (${inputList bindInputs})) {
-    if($tools/bin/test -d $input/bin) $tools/bin/bind ${
-      if interactive then "-b" else "-a"
-    } $input/bin /bin
+    if($tools/bin/test -d $input/bin) $tools/bin/bind -b $input/bin /bin
   }
   for(input in $buildInputs) {
     if($tools/bin/test -d $input/include) $tools/bin/bind -a $input/include /sys/include

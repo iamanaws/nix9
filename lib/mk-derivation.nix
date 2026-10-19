@@ -1,4 +1,7 @@
-{ tools }:
+{
+  tools,
+  initialPath ? [ ],
+}:
 let
   mkDerivation =
     attrs:
@@ -91,7 +94,7 @@ let
             $tools/bin/bind $tools/bin /bin
             for(directory in /amd64/bin /rc/bin) /bin/bind .nix-empty $directory
             /bin/bind .nix-rc /rc/lib
-            ${import ./setup-environment.nix { inherit nativeBuildInputs buildInputs; }}
+            ${import ./setup-environment.nix { inherit nativeBuildInputs buildInputs initialPath; }}
             ${script}
           ''
         ];

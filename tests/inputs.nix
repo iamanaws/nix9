@@ -15,6 +15,17 @@ let
       echo tool-only > $out/include/build-tool-only.h
     '';
   };
+  generators = [
+    generator
+    (generator.overrideAttrs (_: {
+      name = "other-generator";
+      src = builtins.toFile "generate.c" ''
+        #include <u.h>
+        #include <libc.h>
+        void main(void) { print("#define BUILD_NUMBER 99\n"); exits(nil); }
+      '';
+    }))
+  ];
   library =
     ape:
     let
@@ -46,7 +57,7 @@ let
     ape:
     mkDerivation {
       name = if ape then "ape-inputs" else "native-inputs";
-      nativeBuildInputs = [ generator ];
+      nativeBuildInputs = generators;
       buildInputs = libraries;
       unpackPhase = "";
       sourceRoot = ".";
@@ -101,7 +112,16 @@ let
       doCheck = true;
       checkPhase = ''
         ./answer
-        ${if ape then "./answer tool > generated-from-ape.h; test -s generated-from-ape.h" else ""}
+        ${
+          if ape then
+            ''
+              ./answer tool > generated-from-ape.h
+              test -s generated-from-ape.h
+              awk '$0 != "#define BUILD_NUMBER 42" { exit 1 }' generated-from-ape.h
+            ''
+          else
+            ""
+        }
       '';
       installPhase = ''
         mkdir -p $out/bin
@@ -114,17 +134,7 @@ in
   ape = program true;
   shell = mkShell {
     name = "input-shell";
-    nativeBuildInputs = [
-      generator
-      (generator.overrideAttrs (_: {
-        name = "other-generator";
-        src = builtins.toFile "generate.c" ''
-          #include <u.h>
-          #include <libc.h>
-          void main(void) { print("#define BUILD_NUMBER 99\n"); exits(nil); }
-        '';
-      }))
-    ];
+    nativeBuildInputs = generators;
     buildInputs = libraries;
     shellHook = ''
       shellSource=${(program false).src}

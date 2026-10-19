@@ -1,4 +1,4 @@
-{ mkDerivation, tools }:
+{ stdenv }:
 {
   name ? "shell",
   nativeBuildInputs ? [ ],
@@ -6,6 +6,7 @@
   shellHook ? "",
 }:
 let
+  inherit (stdenv) tools initialPath;
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
   script = ''
     #!/bin/rc
@@ -14,7 +15,7 @@ let
     tools=${quote tools}
     $tools/bin/bind -b $tools/bin /bin
     ${import ./setup-environment.nix {
-      inherit nativeBuildInputs buildInputs;
+      inherit nativeBuildInputs buildInputs initialPath;
       interactive = true;
     }}
     ${shellHook}
@@ -22,7 +23,7 @@ let
     if not exec $tools/bin/rc -m $tools/rcmain $*
   '';
 in
-mkDerivation {
+stdenv.mkDerivation {
   inherit name;
   buildCommand = ''
     mkdir -p $out

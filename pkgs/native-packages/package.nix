@@ -3,6 +3,7 @@
   nativeTools,
   secSource,
   fortuneSource,
+  mkSource,
   sha1sum,
 }:
 runCommand "native-packages" { } ''
@@ -10,8 +11,10 @@ runCommand "native-packages" { } ''
   cp -r ${nativeTools} "$out/tools"
   cp -r ${secSource} "$out/libsec-source"
   cp -r ${fortuneSource} "$out/fortune-source"
+  cp -r ${mkSource} "$out/mk-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
+  cp ${../../lib/stdenv.nix} "$out/stdenv.nix"
   cp ${../../lib/setup-environment.nix} "$out/setup-environment.nix"
   cp ${../../lib/mk-shell.nix} "$out/mk-shell.nix"
   cp ${../../lib/build-env.nix} "$out/build-env.nix"
@@ -19,6 +22,8 @@ runCommand "native-packages" { } ''
   cp ${../libsec/native.nix} "$out/pkgs/libsec.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"
+  cp ${../libregexp/native.nix} "$out/pkgs/libregexp.nix"
+  cp ${../mk/native.nix} "$out/pkgs/mk.nix"
   cp ${../fortune/native.nix} "$out/pkgs/fortune.nix"
   cp ${../fetchurl/native.nix} "$out/pkgs/fetchurl.nix"
   cp ${../lua/native.nix} "$out/pkgs/lua.nix"

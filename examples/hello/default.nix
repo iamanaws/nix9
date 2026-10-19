@@ -1,7 +1,7 @@
 {
   pkgs ? import /usr/local/pkg/native-packages,
 }:
-pkgs.mkDerivation {
+pkgs.stdenv.mkDerivation {
   name = "hello";
   src = builtins.path {
     path = ./.;

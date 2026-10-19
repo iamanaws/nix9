@@ -131,11 +131,12 @@ The store persists at `/usr/local/nix/store`.
 Roots are files containing store paths, not symlinks. Remove a root file to release
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root. Close other store clients before collection.
-Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
-and bootstrap tools. Recipes can use `pname`/`version`, `buildPhase` and
-`installPhase`, with `checkPhase` enabled by `doCheck = true`. Each phase accepts
-`pre` and `post` hooks, such as `preBuild` and `postInstall`. Directory sources
-are copied to `source`; tar archives need an explicit `sourceRoot`. Override
+Packages use `stdenv.mkDerivation` with store-provided sources and tools, including
+the rebuilt `mk`. `mkDerivation` remains an alias. Recipes can use `pname`/`version`,
+`buildPhase` and `installPhase`, with `checkPhase` enabled by `doCheck = true`.
+Each phase accepts `pre` and `post` hooks, such as `preBuild` and `postInstall`.
+Directory sources are copied to `source`; tar archives need an explicit
+`sourceRoot`. Override
 `unpackPhase` for other formats, or use `buildCommand` for a single script.
 Customize a package with `package.overrideAttrs (old: { version = "2"; })`.
 Each builder gets a private namespace for its tools, headers,

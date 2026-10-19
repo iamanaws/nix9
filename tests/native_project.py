@@ -4,10 +4,21 @@ import re
 
 
 def check_project(guest, port):
-    includes = ("/amd64/mkfile", "/sys/src/mkfile.proto", "/sys/src/cmd/mkone", "/sys/src/cmd/mklib", "/sys/src/cmd/mkmany")
+    guest.command("nix-instantiate --eval --expr 'let p=import /usr/local/pkg/native-packages; a={name=\"alias-check\"; buildCommand=\"echo alias > $out\";}; in (p.mkDerivation a).drvPath == (p.stdenv.mkDerivation a).drvPath'", "true")
+    includes = ("/amd64/mkfile", "/sys/src/mkfile.proto", "/sys/src/cmd/mkone", "/sys/src/cmd/mklib", "/sys/src/cmd/mkmany", "/sys/src/cmd/mksyslib")
     guest.command("echo host-mkfile-unavailable > /tmp/host-mkfile")
     for file in includes:
         guest.command(f"bind /tmp/host-mkfile {file}")
+    mk_root = "/usr/local/nix/state/gcroots/native-mk"
+    guest.command(f"nix-build /usr/local/pkg/native-packages -A mk --out-link {mk_root}")
+    result = guest.command(f"cat {mk_root}")
+    paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-mk$", result)
+    if len(paths) != 1:
+        raise RuntimeError(f"missing native mk output: {result}")
+    native_mk = paths[0]
+    closure = set(re.findall(r"(?m)^/usr/local/nix/store/[^\s]+$", guest.command(f"nix-store -qR {native_mk}")))
+    if closure != {native_mk}:
+        raise RuntimeError(f"native mk retains build dependencies: {closure}")
     guest.command("mkdir /tmp/hello")
     for name in ("default.nix", "shell.nix", "hello.c", "mkfile"):
         guest.command(f"hget -o /tmp/hello/{name} http://10.0.2.2:{port}/project/{name}")
@@ -23,6 +34,7 @@ def check_project(guest, port):
         raise RuntimeError(f"unchanged project was rebuilt: {result}")
     guest.command("nix-build shell.nix --out-link /usr/local/nix/state/gcroots/hello-shell")
     guest.command("development=`{cat /usr/local/nix/state/gcroots/hello-shell}")
+    guest.command("$development/shell -c 'whatis mk'", native_mk + "/bin/mk")
     guest.command("$development/shell -c 'mk && ./6.out && mk clean'", "hello from nix9")
     guest.command("test ! -e hello.6 && test ! -e 6.out")
     guest.command("rm /usr/local/nix/state/gcroots/hello-shell")
@@ -34,8 +46,9 @@ def check_project(guest, port):
         guest.command(f"cat {file}", "host-mkfile-unavailable")
         guest.command(f"unmount /tmp/host-mkfile {file}")
     guest.command("cd /; rm -r /tmp/hello; nix-store --gc")
+    guest.command(f"nix-store --verify-path {native_mk}")
     guest.command(f"{package}/bin/hello", "hello from nix9")
     guest.command(f"nix-store --verify-path {package}")
-    guest.command("rm /usr/local/nix/state/gcroots/hello; nix-store --gc")
-    guest.command(f"test ! -e {package}")
-    return "mkfile build, install, shell, clean, bundled includes, failures, reuse and GC passed"
+    guest.command(f"rm /usr/local/nix/state/gcroots/hello {mk_root}; nix-store --gc")
+    guest.command(f"test ! -e {package} && test ! -e {native_mk}")
+    return "native mk, static closure, mkfile build, shell, bundled includes, failures, reuse and GC passed"
