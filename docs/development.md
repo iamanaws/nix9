@@ -50,7 +50,8 @@ explicitly. `package-tests` checks installation and use of the default environme
 
 ## Build inside 9front
 
-Install `guest-development` using the [VM instructions](vm.md#install-packages).
+Follow the [VM instructions](vm.md#install-packages), replacing `guest-environment`
+with `guest-development`.
 In the guest, activate it and compile native Plan 9 C:
 
 ```sh
@@ -67,15 +68,19 @@ with the image's headers and libraries hidden.
 
 ## Native Nix
 
-Start with the [README quick start](../README.md#quick-start), then run in the guest:
+Start with the [README quick start](../README.md#quick-start). On the host, build
+the separate package set with `nix build .#native-packages -o result-native-packages`.
+With the HTTP server running, install it and build in the guest:
 
 ```sh
 . /usr/local/pkg/nix-2.34.8/activate
-cd /usr/local/pkg/nix-2.34.8/share/nix9
+hget -o /tmp/packages.tar http://10.0.2.2:8000/result-native-packages
+cd / && tar xf /tmp/packages.tar
+cd /usr/local/pkg/native-packages
 roots=/usr/local/nix/state/gcroots
-nix-build -A sha1sum --out-link $roots/package
+nix-build -A fortune --out-link $roots/package
 result=`{cat $roots/package}
-echo -n abc | $result/bin/sha1sum
+$result/bin/fortune
 ```
 
 The store persists at `/usr/local/nix/store`. Activate the environment after login.
@@ -98,11 +103,12 @@ For a trusted transfer between machines using the same store path, export the
 package and its dependencies, then import the file on the destination:
 
 ```rc
-nix-store --export `{nix-store -qR $result} > closure.export
-nix-store --import < closure.export
+nix-store --export `{nix-store -qR $result} > /tmp/closure.export
+nix-store --import < /tmp/closure.export
 ```
 
-Root the imported package with `--realise --add-root` as above before running GC.
+Root the imported package with `nix-store --realise --add-root $roots/package $result`
+before running GC.
 For automatic reuse, configure `substituters` with
 `file:///path/to/cache?store=/usr/local/nix/store` and `trusted-public-keys` with
 the cache's public signing key. `--realise` then fetches missing outputs and

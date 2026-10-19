@@ -16,10 +16,10 @@ def fetch_fixtures(root):
     (root / "fetch.nix").write_bytes(Path(__file__).with_name("fetch.nix").read_bytes())
 
 
-def check_fetch(guest, prefix, port):
+def check_fetch(guest, packages, port):
     url = f"http://10.0.2.2:{port}"
     guest.command(f"hget -o /tmp/fetch.nix {url}/fetch.nix")
-    guest.command(f"fetchPackages={prefix}/share/nix9")
+    guest.command(f"fetchPackages={packages}")
     digest = base64.b64encode(hashlib.sha256(SOURCE).digest()).decode()
     guest.command(f"fetchHash='sha256-{digest}'")
     guest.command(f"fetchUrl={url}/source")

@@ -2,9 +2,6 @@
   runCommand,
   python3,
   nixUtil,
-  nativeTools,
-  secSource,
-  sha1sum,
 }:
 runCommand "nix-${nixUtil.version}-9front"
   {
@@ -13,21 +10,9 @@ runCommand "nix-${nixUtil.version}-9front"
     '';
   }
   ''
-    mkdir -p "$out/bin" "$out/share/nix9/pkgs"
+    mkdir -p "$out/bin"
     for command in nix-store nix-instantiate nix-build; do
       ${python3}/bin/python ${nixUtil.cc9.elf2aout} ${nixUtil}/$command.elf "$out/bin/$command"
       chmod +x "$out/bin/$command"
     done
-    cp -r ${nativeTools} "$out/share/nix9/tools"
-    cp -r ${secSource} "$out/share/nix9/libsec-source"
-    cp ${sha1sum.source} "$out/share/nix9/sha1sum.c"
-    cp ${../../lib/mk-derivation.nix} "$out/share/nix9/mk-derivation.nix"
-    cp ${../libsec/native.nix} "$out/share/nix9/pkgs/libsec.nix"
-    cp ${../sha1sum/native.nix} "$out/share/nix9/pkgs/sha1sum.nix"
-    cp ${../fetchurl/native.nix} "$out/share/nix9/pkgs/fetchurl.nix"
-    cp ${../lua/native.nix} "$out/share/nix9/pkgs/lua.nix"
-    cp ${../liblua/native.nix} "$out/share/nix9/pkgs/liblua.nix"
-    cp ${../lua/source.nix} "$out/share/nix9/pkgs/lua-source.nix"
-    cp ${../lua/ape-config.h} "$out/share/nix9/pkgs/lua-ape-config.h"
-    cp ${./packages.nix} "$out/share/nix9/default.nix"
   ''

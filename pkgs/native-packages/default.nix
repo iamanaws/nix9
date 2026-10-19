@@ -4,6 +4,10 @@ let
     inherit mkDerivation;
     src = ./libsec-source;
   };
+  libbio = import ./pkgs/libbio.nix {
+    inherit mkDerivation;
+    src = ./fortune-source/sys/src/libbio;
+  };
   fetchurl = import ./pkgs/fetchurl.nix { inherit mkDerivation; };
   upstream = import ./pkgs/lua-source.nix;
   liblua = import ./pkgs/liblua.nix {
@@ -14,6 +18,7 @@ in
 {
   inherit
     libsec
+    libbio
     liblua
     mkDerivation
     fetchurl
@@ -29,5 +34,9 @@ in
   sha1sum = import ./pkgs/sha1sum.nix {
     inherit mkDerivation libsec;
     src = ./sha1sum.c;
+  };
+  fortune = import ./pkgs/fortune.nix {
+    inherit mkDerivation libbio;
+    src = ./fortune-source;
   };
 }

@@ -38,7 +38,7 @@ def source_server(root, archive):
             thread.join()
 
 
-def check_sources(guest, prefix, http_port, tls_port):
+def check_sources(guest, packages, http_port, tls_port):
     base = f"http://10.0.2.2:{http_port}"
     guest.command("mkdir /tmp/lua")
     guest.command(f"hget -o /tmp/sources.nix {base}/sources.nix")
@@ -78,7 +78,7 @@ def check_sources(guest, prefix, http_port, tls_port):
     if f"{library}/share/lua/5.4/?.lua" not in result:
         raise RuntimeError(f"Lua module search path does not use its library: {result}")
     guest.command("cd /")
-    guest.command(f"publicLua=`{{nix-instantiate --expr '(import {prefix}/share/nix9).lua'}}")
+    guest.command(f"publicLua=`{{nix-instantiate --expr '(import {packages}).lua'}}")
     result = guest.command("nix-store --realise $publicLua", package)
     if "building '" in result:
         raise RuntimeError(f"public Lua did not reuse the pinned source build: {result}")

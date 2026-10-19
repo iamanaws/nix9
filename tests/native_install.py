@@ -13,17 +13,19 @@ from guest import boot
 from artifacts import ArtifactServer
 from native_fetch import fetch_fixtures, check_fetch
 from native_sources import source_server, check_sources
+from native_fortune import check_fortune
 from native_recovery import interrupt_build, recover_build
 from native_transfer import export_closure, check_transfer
 
 
-qemu, image, archive, prefix, output, lua_archive, probe, elf2aout = sys.argv[1:]
+qemu, image, archive, prefix, packages_archive, packages, output, lua_archive, probe, elf2aout = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     disk = root / "persistent.qcow2"
     subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
                     "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
     shutil.copyfile(archive, root / "package.tar")
+    shutil.copyfile(packages_archive, root / "packages.tar")
     shutil.copyfile(Path(__file__).with_name("recovery.nix"), root / "recovery.nix")
     subprocess.run([sys.executable, elf2aout, probe, str(root / "store-probe")], check=True)
     fetch_fixtures(root)
@@ -41,15 +43,19 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("chmod +x /tmp/store-probe")
                 guest.command(f". {prefix}/activate")
                 guest.command("nix-instantiate --eval --expr '6 * 7'", "42")
-                fetching = check_fetch(guest, prefix, server.server_port)
-                sources = check_sources(guest, prefix, server.server_port, tls_port)
+                guest.command(f"test ! -e {prefix}/share/nix9")
+                guest.command(f"hget -o /tmp/packages.tar http://10.0.2.2:{server.server_port}/packages.tar")
+                guest.command("cd / && tar xf /tmp/packages.tar && rm /tmp/packages.tar")
+                fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
+                fetching = check_fetch(guest, packages, server.server_port)
+                sources = check_sources(guest, packages, server.server_port, tls_port)
                 closure = export_closure(guest, sources["package"], server.server_port)
                 if not server.received.is_set():
                     raise RuntimeError("guest did not upload the closure")
                 drv_root = "/usr/local/nix/state/gcroots/sha1sum-drv"
                 guest.command(
                     f"nix-instantiate --add-root {drv_root} "
-                    f"--expr '(import {prefix}/share/nix9).sha1sum'", drv_root)
+                    f"--expr '(import {packages}).sha1sum'", drv_root)
                 result = guest.command(f"cat {drv_root}")
                 paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum\.drv$", result)
                 if len(paths) != 1:
@@ -58,7 +64,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("nix-store --gc")
                 guest.command(f"nix-store --check-validity {drv}")
                 permanent = "/usr/local/nix/state/gcroots/sha1sum"
-                guest.command(f"nix-build {prefix}/share/nix9 -A sha1sum --out-link {permanent}")
+                guest.command(f"nix-build {packages} -A sha1sum --out-link {permanent}")
                 result = guest.command(f"cat {permanent}")
                 paths = re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-sha1sum$", result)
                 if len(paths) != 1:
@@ -108,6 +114,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "derivation": drv,
     "output": package,
     "installation": "passed",
+    "fortune": fortune,
     "fetching": fetching,
     "sources": sources,
     "native-build": "passed",

@@ -14,6 +14,7 @@ See [test coverage](docs/validation.md) and [limitations](docs/feasibility.md).
 
 On x86_64 Linux with KVM and Nix flakes enabled, run from the checkout.
 Your user and Nix builders need access to `/dev/kvm`.
+Accept the flake's cache settings when prompted to use `nix9.cachix.org`.
 In one terminal, prepare the VM and serve the native Nix package:
 
 ```sh

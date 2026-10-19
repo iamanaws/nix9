@@ -158,6 +158,7 @@
                 ./tests/native_install.py
                 ./tests/native_fetch.py
                 ./tests/native_sources.py
+                ./tests/native_fortune.py
                 ./tests/native_recovery.py
                 ./tests/native_transfer.py
                 ./tests/native_cache.py
@@ -172,7 +173,8 @@
               ]
             }/native_install.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nixPackage} ${nixPackage.guestPrefix} "$out" ${lua.archive} \
+              ${nixPackage} ${nixPackage.guestPrefix} \
+              ${nativePackagesArchive} ${nativePackagesArchive.guestPrefix} "$out" ${lua.archive} \
               ${nixProbe}/probe.elf ${nixUtil.cc9.elf2aout}
           '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
@@ -246,6 +248,18 @@
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
       mpc = pkgs.callPackage ./pkgs/mpc { source = secSource; };
+      fortuneSource = pkgs.runCommand "9front-fortune-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/fortune.c sys/src/libbio sys/games/lib/fortunes
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
       libmp = pkgs.callPackage ./pkgs/libmp {
         inherit cTools sysroot;
         source = secSource;
@@ -286,13 +300,18 @@
         package = sha1sum;
       };
       mkGuestEnvironment = import ./lib/mk-guest-environment.nix { inherit pkgs; };
-      nativeNix = pkgs.callPackage ./pkgs/nix/package.nix {
+      nativeNix = pkgs.callPackage ./pkgs/nix/package.nix { inherit nixUtil; };
+      nativePackageSet = pkgs.callPackage ./pkgs/native-packages/package.nix {
         inherit
-          nixUtil
           nativeTools
           secSource
+          fortuneSource
           sha1sum
           ;
+      };
+      nativePackagesArchive = mkGuestPackage {
+        name = "native-packages";
+        package = nativePackageSet;
       };
       nixPackage = mkGuestPackage {
         name = "nix-${nixUtil.version}";
@@ -437,6 +456,7 @@
         guest-development = guestDevelopment;
         nix = nativeNix;
         nix-package = nixPackage;
+        native-packages = nativePackagesArchive;
         guest-development-tests = developmentTests;
         inherit libbz2;
         inherit libbsd;
