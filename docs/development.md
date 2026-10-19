@@ -100,6 +100,9 @@ are copied to `source`; tar archives need an explicit `sourceRoot`. Override
 `unpackPhase` for other formats, or use `buildCommand` for a single script.
 Each builder gets a private namespace for its tools, headers,
 and libraries. Other host files remain accessible.
+`nativeBuildInputs` adds commands to rc's `path` and POSIX `PATH`.
+`buildInputs` exposes `include` and `lib` in the compiler namespace.
+APE dependencies use `include/ape` and `lib/ape` instead.
 
 The package set includes `fetchurl { url = "…"; hash = "sha256-…"; }` for downloads
 through 9front's `webfs`. Configure networking in the guest before fetching.

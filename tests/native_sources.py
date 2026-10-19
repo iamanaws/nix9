@@ -67,7 +67,7 @@ def check_sources(guest, packages, http_port, tls_port):
     for directory in directories:
         guest.command(f"cat {directory}/nix9-host-only", "host-only")
         guest.command(f"rm {directory}/nix9-host-only")
-    guest.command(f"test -s {library}/lib/liblua.a && test -s {library}/include/lua.h")
+    guest.command(f"test -s {library}/lib/ape/liblua.a && test -s {library}/include/ape/lua.h")
     guest.command(f"lua={package}/bin/lua")
     guest.command("mkdir /tmp/lua-work && cd /tmp/lua-work")
     result = guest.command("$lua /tmp/lua/check.lua 23")

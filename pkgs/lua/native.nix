@@ -8,13 +8,15 @@ mkDerivation {
   pname = "lua";
   version = upstream.version;
   src = fetchurl upstream.src;
-  inherit liblua;
+  buildInputs = [ liblua ];
   sourceRoot = "lua-${upstream.version}/src";
   buildPhase = ''
-    $tools/bin/cp $liblua/include/*.h .
+    for(header in lua.h luaconf.h lauxlib.h lualib.h lprefix.h ape-config.h) {
+      cp /sys/include/ape/$header .
+    }
     objtype=amd64
     $tools/bin/pcc -c lua.c
-    $tools/bin/pcc -o lua lua.6 $liblua/lib/liblua.a
+    $tools/bin/pcc -o lua lua.6 -llua
   '';
   doCheck = true;
   checkPhase = ''
