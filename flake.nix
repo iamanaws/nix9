@@ -162,6 +162,7 @@
               testSupport [
                 ./tests/native_install.py
                 ./tests/native_fetch.py
+                ./tests/eval_fetch.py
                 ./tests/native_sources.py
                 ./tests/native_fortune.py
                 ./tests/libsec.py

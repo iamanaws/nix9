@@ -12,6 +12,7 @@ import threading
 from guest import boot
 from artifacts import ArtifactServer
 from native_fetch import fetch_fixtures, check_fetch
+from eval_fetch import check_eval_fetch
 from native_sources import source_server, check_sources
 from native_fortune import check_fortune
 from libsec import check_native as check_crypto
@@ -70,6 +71,7 @@ with tempfile.TemporaryDirectory() as directory:
                 crypto = check_crypto(guest, packages, server.server_port)
                 fetching = check_fetch(guest, packages, server.server_port)
                 sources = check_sources(guest, packages, server.server_port, tls_port)
+                evaluator_fetching = check_eval_fetch(guest, root)
                 environments = check_environments(guest, packages, server.server_port)
                 closure = export_closure(guest, sources["package"], server.server_port)
                 if not server.received.is_set():
@@ -146,6 +148,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "shell": shell,
     "environments": environments,
     "fetching": fetching,
+    "evaluator-fetching": evaluator_fetching,
     "sources": sources,
     "native-build": "passed",
     "gc-before-build": "passed",

@@ -1,0 +1,51 @@
+--- a/src/libexpr/primops/fetchTree.cc
++++ b/src/libexpr/primops/fetchTree.cc
+@@ -20,6 +20,7 @@
+ 
+ namespace nix {
+ 
++#ifndef __plan9__
+ void emitTreeAttrs(
+     EvalState & state,
+     const StorePath & storePath,
+@@ -373,6 +374,8 @@
+     .internal = true,
+ });
+ 
++#endif
++
+ static void fetch(
+     EvalState & state,
+     const PosIdx pos,
+@@ -534,6 +537,7 @@
+     .impl = prim_fetchurl,
+ });
+ 
++#ifndef __plan9__
+ static void prim_fetchTarball(EvalState & state, const PosIdx pos, Value ** args, Value & v)
+ {
+     fetch(state, pos, args, v, "fetchTarball", true, "source");
+@@ -800,4 +804,6 @@
+     .impl = prim_fetchGit,
+ });
+ 
++#endif
++
+ } // namespace nix
+--- a/src/libfetchers/tarball.cc
++++ b/src/libfetchers/tarball.cc
+@@ -104,6 +104,7 @@
+     };
+ }
+ 
++#ifndef __plan9__
+ static DownloadTarballResult downloadTarball_(
+     const Settings & settings, const std::string & urlS, const Headers & headers, const std::string & displayPrefix)
+ {
+@@ -527,4 +528,6 @@
+ static auto rTarballInputScheme = OnStartup([] { registerInputScheme(std::make_unique<TarballInputScheme>()); });
+ static auto rFileInputScheme = OnStartup([] { registerInputScheme(std::make_unique<FileInputScheme>()); });
+ 
++#endif
++
+ } // namespace nix::fetchers

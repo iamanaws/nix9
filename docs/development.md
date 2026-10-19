@@ -161,6 +161,9 @@ APE dependencies use `include/ape` and `lib/ape` instead.
 
 The package set includes `fetchurl { url = "…"; hash = "sha256-…"; }` for downloads
 through 9front's `webfs`. Configure networking in the guest before fetching.
+`builtins.fetchurl { url = "…"; sha256 = "sha256-…"; }` fetches files during
+evaluation. Mount webfs first with `webfs -m /mnt/web -T 60000`.
+Pinned files can be reused offline.
 Native `lua` builds against `liblua`. Both fetch the same pinned archive and
 compile with APE.
 `nix-util-tests` checks fetching, isolated builds and reuse after reboot.

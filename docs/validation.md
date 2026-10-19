@@ -21,6 +21,7 @@ Tests check exit status and expected results, set timeouts, and discard VM
 snapshot changes. Transfers use host loopback. The two-VM cache test forwards
 one loopback-only port for read-only 9P and checks reuse after the server stops.
 HTTP(S) cache tests check signatures, damaged downloads, redirects and repair.
+Evaluator fetch tests cover hashes, imports, pure evaluation and offline reuse.
 The builds and tests work with the Nix sandbox enabled.
 
 See [development](development.md) for commands and saved results, and

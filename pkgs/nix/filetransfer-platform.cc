@@ -46,7 +46,7 @@ static FileTransferResult transfer(const FileTransferRequest &request, Sink *sin
 
     AutoCloseFD control(open("/mnt/web/clone", O_RDWR | O_CLOEXEC));
     if (!control)
-        throw Error("cannot open /mnt/web/clone; mount webfs before using HTTP caches");
+        throw Error("cannot open /mnt/web/clone; mount webfs before using HTTP downloads");
     char buffer[65536];
     auto count = ::read(control.get(), buffer, 32);
     if (count < 0) transferError(request);
