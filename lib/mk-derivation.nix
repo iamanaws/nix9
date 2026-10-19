@@ -9,8 +9,20 @@ let
       name = attrs.name or "${attrs.pname}-${attrs.version}";
       nativeBuildInputs = attrs.nativeBuildInputs or [ ];
       buildInputs = attrs.buildInputs or [ ];
+      propagatedNativeBuildInputs = attrs.propagatedNativeBuildInputs or [ ];
+      propagatedBuildInputs = attrs.propagatedBuildInputs or [ ];
       quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
       flags = values: builtins.concatStringsSep " " (map quote values);
+      propagate =
+        file: inputs:
+        if inputs == [ ] then
+          ""
+        else
+          ''
+            $tools/bin/mkdir -p $out/nix-support
+            $tools/bin/echo ${flags inputs} > $out/nix-support/${file}
+          '';
+
       makefile = attrs.makefile or "mkfile";
       makeFlags = flags (attrs.makeFlags or [ ]);
       mkPhase =
@@ -103,6 +115,8 @@ let
           sourceRoot
           nativeBuildInputs
           buildInputs
+          propagatedNativeBuildInputs
+          propagatedBuildInputs
           ;
         system = "x86_64-plan9";
         builder = "${tools}/bin/rc";
@@ -118,8 +132,18 @@ let
             $tools/bin/bind $tools/bin /bin
             for(directory in /amd64/bin /rc/bin) /bin/bind .nix-empty $directory
             /bin/bind .nix-rc /rc/lib
-            ${import ./setup-environment.nix { inherit nativeBuildInputs buildInputs initialPath; }}
+            ${import ./setup-environment.nix {
+              inherit
+                nativeBuildInputs
+                buildInputs
+                propagatedNativeBuildInputs
+                propagatedBuildInputs
+                initialPath
+                ;
+            }}
             ${script}
+            ${propagate "propagated-build-inputs" propagatedBuildInputs}
+            ${propagate "propagated-native-build-inputs" propagatedNativeBuildInputs}
           ''
         ];
       }
@@ -128,6 +152,8 @@ let
         "sourceRoot"
         "nativeBuildInputs"
         "buildInputs"
+        "propagatedNativeBuildInputs"
+        "propagatedBuildInputs"
         "buildCommand"
         "unpackPhase"
         "buildPhase"

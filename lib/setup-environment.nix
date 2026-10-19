@@ -1,16 +1,14 @@
 {
   nativeBuildInputs,
   buildInputs,
+  propagatedNativeBuildInputs ? [ ],
+  propagatedBuildInputs ? [ ],
   initialPath ? [ ],
   interactive ? false,
 }:
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
   inputList = inputs: builtins.concatStringsSep " " (map quote inputs);
-  searchPath = map (input: "${input}/bin") (nativeBuildInputs ++ initialPath) ++ [ "/bin" ];
-  bindInputs = builtins.foldl' (result: input: [ input ] ++ result) [ ] (
-    nativeBuildInputs ++ initialPath
-  );
 in
 ''
   $tools/bin/bind $tools/sys/include /sys/include
@@ -22,11 +20,49 @@ in
   for(file in mkone mklib mkmany mksyslib) {
     $tools/bin/bind $tools/sys/src/cmd/$file /sys/src/cmd/$file
   }
-  nativeBuildInputs=( ${inputList nativeBuildInputs} )
-  buildInputs=( ${inputList buildInputs} )
-  path=( ${inputList searchPath} ${if interactive then "$path" else ""} )
+  nativeBuildInputs=( ${inputList (nativeBuildInputs ++ propagatedNativeBuildInputs)} )
+  buildInputs=( ${inputList (buildInputs ++ propagatedBuildInputs)} )
+  fn findInputs {
+    inputType=$1
+    pendingInputs=$*(2-)
+    foundInputs=()
+    while(! ~ $#pendingInputs 0) {
+      input=$pendingInputs(1)
+      pendingInputs=$pendingInputs(2-)
+      if(! ~ $input $foundInputs) {
+        foundInputs=($foundInputs $input)
+        if($tools/bin/test -f $input/nix-support/propagated-build-inputs) {
+          pendingInputs=($pendingInputs `{$tools/bin/cat $input/nix-support/propagated-build-inputs})
+        }
+        if($tools/bin/test -f $input/nix-support/propagated-native-build-inputs) {
+          if(~ $inputType native) {
+            pendingInputs=($pendingInputs `{$tools/bin/cat $input/nix-support/propagated-native-build-inputs})
+          }
+          if not nativeBuildInputs=($nativeBuildInputs `{$tools/bin/cat $input/nix-support/propagated-native-build-inputs})
+        }
+      }
+    }
+    status='''
+  }
+  findInputs build $buildInputs
+  buildInputs=$foundInputs
+  findInputs native $nativeBuildInputs ${inputList initialPath}
+  nativeBuildInputs=$foundInputs
+  fn findInputs
+  buildPath=()
+  bindInputs=()
+  for(input in $nativeBuildInputs) {
+    buildPath=($buildPath $input/bin)
+    bindInputs=($input $bindInputs)
+  }
+  buildPath=($buildPath /bin)
+  path=($buildPath ${if interactive then "$path" else ""})
   ${if interactive then "previousPATH=$PATH" else ""}
-  PATH=${quote (builtins.concatStringsSep ":" searchPath)}
+  PATH='''
+  for(directory in $buildPath) {
+    if(~ $PATH ''') PATH=$directory
+    if not PATH=$PATH^:^$directory
+  }
   ${
     if interactive then
       ''
@@ -38,7 +74,7 @@ in
       ""
   }
   # APE execvp searches /bin, so commands also need namespace bindings.
-  for(input in (${inputList bindInputs})) {
+  for(input in $bindInputs) {
     if($tools/bin/test -d $input/bin) $tools/bin/bind -b $input/bin /bin
   }
   for(input in $buildInputs) {

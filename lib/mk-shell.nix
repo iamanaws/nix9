@@ -4,6 +4,8 @@
   inputsFrom ? [ ],
   nativeBuildInputs ? [ ],
   buildInputs ? [ ],
+  propagatedNativeBuildInputs ? [ ],
+  propagatedBuildInputs ? [ ],
   shellHook ? "",
 }@attrs:
 let
@@ -17,6 +19,8 @@ let
   inputs = {
     nativeBuildInputs = mergeInputs "nativeBuildInputs";
     buildInputs = mergeInputs "buildInputs";
+    propagatedNativeBuildInputs = mergeInputs "propagatedNativeBuildInputs";
+    propagatedBuildInputs = mergeInputs "propagatedBuildInputs";
   };
   hooks = builtins.concatStringsSep "\n" (
     builtins.foldl' (hooks: input: [ (input.shellHook or "") ] ++ hooks) [ ] inputsFrom ++ [ shellHook ]
@@ -29,7 +33,12 @@ let
     tools=${quote tools}
     $tools/bin/bind -b $tools/bin /bin
     ${import ./setup-environment.nix {
-      inherit (inputs) nativeBuildInputs buildInputs;
+      inherit (inputs)
+        nativeBuildInputs
+        buildInputs
+        propagatedNativeBuildInputs
+        propagatedBuildInputs
+        ;
       inherit initialPath;
       interactive = true;
     }}
@@ -40,7 +49,12 @@ let
 in
 stdenv.mkDerivation {
   inherit name;
-  inherit (inputs) nativeBuildInputs buildInputs;
+  inherit (inputs)
+    nativeBuildInputs
+    buildInputs
+    propagatedNativeBuildInputs
+    propagatedBuildInputs
+    ;
   shellHook = hooks;
   buildCommand = ''
     mkdir -p $out

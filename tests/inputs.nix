@@ -26,7 +26,12 @@ let
       '';
     }))
   ];
-  library =
+  toolSet = mkDerivation {
+    name = "propagated-tools";
+    propagatedNativeBuildInputs = generators;
+    buildCommand = "mkdir -p $out";
+  };
+  answerLibrary =
     ape:
     let
       suffix = if ape then "/ape" else "";
@@ -49,6 +54,39 @@ let
         cp $tools/bin/echo $out/bin/input-only
       '';
     };
+  library =
+    ape:
+    let
+      suffix = if ape then "/ape" else "";
+      wrapper = mkDerivation {
+        name = if ape then "ape-wrapped-answer" else "native-wrapped-answer";
+        propagatedBuildInputs = [ (answerLibrary ape) ];
+        src = builtins.toFile "wrapped.c" ''
+          #include <answer.h>
+          int wrappedAnswer(void) { return answer(); }
+        '';
+        header = builtins.toFile "wrapped-answer.h" ''
+          ${if ape then "" else "#pragma lib \"/amd64/lib/libwrappedanswer.a\""}
+          #include <answer.h>
+          int wrappedAnswer(void);
+        '';
+        buildCommand = ''
+          ${if ape then "pcc -c" else "6c"} -o wrapped.6 $src
+          mkdir -p $out/include${suffix} $out/lib${suffix}
+          cp $header $out/include${suffix}/wrapped-answer.h
+          ar rc $out/lib${suffix}/libwrappedanswer.a wrapped.6
+        '';
+      };
+    in
+    mkDerivation {
+      name = if ape then "ape-library-inputs" else "native-library-inputs";
+      propagatedBuildInputs = [ wrapper ];
+      propagatedNativeBuildInputs = [ toolSet ];
+      buildCommand = ''
+        generate > /dev/null
+        mkdir -p $out
+      '';
+    };
   libraries = [
     (library false)
     (library true)
@@ -57,8 +95,8 @@ let
     ape:
     mkDerivation {
       name = if ape then "ape-inputs" else "native-inputs";
-      nativeBuildInputs = generators;
-      buildInputs = libraries;
+      # Store paths exercise propagation without derivation attributes.
+      buildInputs = map (input: "${input}") libraries;
       unpackPhase = "";
       sourceRoot = ".";
       src = builtins.toFile "main.c" (
@@ -69,7 +107,7 @@ let
             #include <stdlib.h>
             #include <string.h>
             #include <unistd.h>
-            #include <answer.h>
+            #include <wrapped-answer.h>
             #include "generated.h"
             int main(int argc, char **argv) {
               if (argc > 1) {
@@ -83,7 +121,7 @@ let
                 perror("execvp generate");
                 return 1;
               }
-              if (EXPECTED_ANSWER != 24 || answer() != 24 || BUILD_NUMBER != 42) return 1;
+              if (EXPECTED_ANSWER != 24 || wrappedAnswer() != 24 || BUILD_NUMBER != 42) return 1;
               puts("ape inputs PASS");
               return 0;
             }
@@ -92,10 +130,10 @@ let
           ''
             #include <u.h>
             #include <libc.h>
-            #include <answer.h>
+            #include <wrapped-answer.h>
             #include "generated.h"
             void main(void) {
-              if (EXPECTED_ANSWER != 42 || answer() != 42 || BUILD_NUMBER != 42) exits("wrong answer");
+              if (EXPECTED_ANSWER != 42 || wrappedAnswer() != 42 || BUILD_NUMBER != 42) exits("wrong answer");
               print("native inputs PASS\n");
               exits(nil);
             }
@@ -107,7 +145,7 @@ let
         generate > generated.h
         objtype=amd64
         ${if ape then "pcc -c" else "6c"} -I . -o main.6 $src
-        ${if ape then "pcc -o answer main.6 -lanswer" else "6l -s -o answer main.6"}
+        ${if ape then "pcc -o answer main.6 -lwrappedanswer -lanswer" else "6l -s -o answer main.6"}
       '';
       doCheck = true;
       checkPhase = ''
@@ -128,13 +166,16 @@ let
         cp answer $out/bin/answer
       '';
     };
-  shellNative = (program false).overrideAttrs (_: {
+  shellNative = (program false).overrideAttrs (old: {
     nativeBuildInputs = [ (builtins.elemAt generators 1) ];
+    buildInputs = [ ];
+    propagatedBuildInputs = old.buildInputs;
     buildCommand = "exit 'inputsFrom package must not be built'";
     shellHook = "NIX9_SHELL_HOOK=$NIX9_SHELL_HOOK^native";
   });
-  shellApe = (program true).overrideAttrs (old: {
-    buildInputs = [ shellNative ] ++ old.buildInputs;
+  shellApe = (program true).overrideAttrs (_: {
+    buildInputs = [ shellNative ];
+    propagatedNativeBuildInputs = [ toolSet ];
     buildCommand = "exit 'inputsFrom package must not be built'";
     shellHook = "NIX9_SHELL_HOOK=ape";
   });

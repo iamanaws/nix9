@@ -157,6 +157,8 @@ Each builder gets a private namespace for its tools, headers,
 and libraries. Other host files remain accessible.
 `nativeBuildInputs` adds commands to rc's `path` and POSIX `PATH`.
 `buildInputs` exposes `include` and `lib` in the compiler namespace.
+Use `propagatedNativeBuildInputs` or `propagatedBuildInputs` to pass those
+dependencies on to consumers.
 APE dependencies use `include/ape` and `lib/ape` instead.
 
 The package set includes `fetchurl { url = "…"; hash = "sha256-…"; }` for downloads

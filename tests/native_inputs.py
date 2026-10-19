@@ -16,6 +16,11 @@ def check_shell(guest, packages, port):
     guest.command("echo $NIX9_SHELL_TEST", "ready")
     guest.command("echo $NIX9_SHELL_HOOK", "apenativeshell")
     guest.command("echo $IN_NIX_SHELL", "impure")
+    for variable in ("nativeBuildInputs", "buildInputs"):
+        result = guest.command(f"for(input in ${variable}) echo $input")
+        inputs = re.findall(r"(?m)^/usr/local/nix/store/[^\s]+$", result)
+        if len(inputs) != len(set(inputs)):
+            raise RuntimeError(f"duplicate propagated {variable}: {result}")
     result = guest.command("ls /usr/local/nix/state/gcroots/nix-shell-*")
     roots = re.findall(r"(?m)^/usr/local/nix/state/gcroots/nix-shell-[^\s]+$", result)
     if len(roots) != 1:
@@ -25,7 +30,7 @@ def check_shell(guest, packages, port):
     guest.command("test ! -e /bin/input-only && test ! -e /sys/include/build-tool-only.h")
     guest.command("generate > generated.h")
     guest.command("6c -I . -o main.6 $shellSource; 6l -s -o answer main.6; ./answer", "native inputs PASS")
-    guest.command("pcc -I . -o ape-answer $apeShellSource -lanswer; ./ape-answer", "ape inputs PASS")
+    guest.command("pcc -I . -o ape-answer $apeShellSource -lwrappedanswer -lanswer; ./ape-answer", "ape inputs PASS")
     guest.command("./ape-answer tool > generated-from-ape.h; cat generated-from-ape.h", "#define BUILD_NUMBER 42")
     guest.command("test -e /no-such-shell-command; echo interactive-shell-alive", "interactive-shell-alive")
     guest.child.sendline("exit")
@@ -36,6 +41,7 @@ def check_shell(guest, packages, port):
     guest.command("~ $#IN_NIX_SHELL 0")
     guest.command("test ! -e /bin/generate && test ! -e /sys/include/answer.h")
     guest.command("test ! -e /sys/include/ape/answer.h && test ! -e /amd64/lib/libanswer.a")
+    guest.command("test ! -e /sys/include/wrapped-answer.h && test ! -e /sys/include/ape/wrapped-answer.h")
     guest.command("test ! -e /amd64/lib/ape/libanswer.a && ~ $#NIX9_SHELL_TEST 0")
     guest.command("~ $#NIX9_SHELL_HOOK 0")
     for variable, original in (("path", "outsidePath"), ("PATH", "outsidePATH")):
