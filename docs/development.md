@@ -132,8 +132,11 @@ Roots are files containing store paths, not symlinks. Remove a root file to rele
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root. Close other store clients before collection.
 Packages use `stdenv.mkDerivation` with store-provided sources and tools, including
-the rebuilt `mk`. `mkDerivation` remains an alias. Recipes can use `pname`/`version`,
-`buildPhase` and `installPhase`, with `checkPhase` enabled by `doCheck = true`.
+the rebuilt `mk`. `mkDerivation` remains an alias. With a mkfile, the default phases
+run `mk` and `mk install BIN=$out/bin`. Set `makefile` for another filename and use
+the list attributes `makeFlags`, `buildFlags` and `installFlags` for arguments.
+Recipes can use `pname`/`version` and override `buildPhase` or `installPhase`.
+Enable `checkPhase` with `doCheck = true`.
 Each phase accepts `pre` and `post` hooks, such as `preBuild` and `postInstall`.
 Directory sources are copied to `source`; tar archives need an explicit
 `sourceRoot`. Override

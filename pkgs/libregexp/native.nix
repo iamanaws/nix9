@@ -2,7 +2,7 @@
 mkDerivation {
   name = "libregexp";
   inherit src;
-  buildPhase = "mk 'LIB=libregexp.a'";
+  makeFlags = [ "LIB=libregexp.a" ];
   installPhase = ''
     mkdir -p $out/lib
     cp libregexp.a $out/lib/

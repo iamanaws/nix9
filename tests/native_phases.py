@@ -3,6 +3,29 @@
 import re
 
 
+def check_mk_phases(guest, packages, port):
+    guest.command(f"hget -o /tmp/mk-phases.nix http://10.0.2.2:{port}/mk-phases.nix")
+    guest.command(f"mkPhasePackages={packages}")
+    guest.command("fn mkPhases { nix-build /tmp/mk-phases.nix --argstr packages $mkPhasePackages -A $1 --out-link $2 }")
+    root = "/usr/local/nix/state/gcroots/mk-phases"
+    for name, file, expected in (
+        ("default", "/bin/message", "built"),
+        ("custom", "/bin/message", "built"),
+        ("override", "", "overridden"),
+        ("noMkfile", "", "hook"),
+        ("singleCommand", "", "single"),
+    ):
+        guest.command(f"mkPhases {name} {root}")
+        guest.command(f"mkResult=`{{cat {root}}}")
+        guest.command(f"cat $mkResult{file}", expected)
+    for name in ("failBuild", "failInstall"):
+        result = guest.command(f"mkPhases {name} {root}; echo MK-PHASE-STATUS:$status")
+        if not re.search(r"(?m)^MK-PHASE-STATUS:.*cc9exit=100$", result):
+            raise RuntimeError(f"{name} failure was not propagated: {result}")
+    guest.command(f"rm {root}")
+    return "default mk phases, flags, custom mkfile, overrides, absent mkfile, buildCommand and failures passed"
+
+
 def check_overrides(guest, packages, port):
     guest.command(f"hget -o /tmp/overrides.nix http://10.0.2.2:{port}/overrides.nix")
     guest.command(f"overridePackages={packages}")

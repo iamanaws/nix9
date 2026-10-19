@@ -166,6 +166,7 @@
                 ./tests/native_project.py
                 ./tests/native_phases.py
                 ./tests/phases.nix
+                ./tests/mk-phases.nix
                 ./tests/overrides.nix
                 ./tests/native_inputs.py
                 ./tests/inputs.nix

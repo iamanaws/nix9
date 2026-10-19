@@ -9,6 +9,30 @@ let
       name = attrs.name or "${attrs.pname}-${attrs.version}";
       nativeBuildInputs = attrs.nativeBuildInputs or [ ];
       buildInputs = attrs.buildInputs or [ ];
+      quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
+      flags = values: builtins.concatStringsSep " " (map quote values);
+      makefile = attrs.makefile or "mkfile";
+      makeFlags = flags (attrs.makeFlags or [ ]);
+      mkPhase =
+        commands:
+        if attrs ? makefile || (attrs.makeFlags or [ ]) != [ ] then
+          commands
+        else
+          ''
+            if(test -f mkfile) {
+              ${commands}
+            }
+            status='''
+          '';
+      buildPhase =
+        attrs.buildPhase or (mkPhase ''
+          mk -f ${quote makefile} ${makeFlags} ${flags (attrs.buildFlags or [ ])}
+        '');
+      installPhase =
+        attrs.installPhase or (mkPhase ''
+          mkdir -p $out/bin
+          mk -f ${quote makefile} 'BIN='$out/bin ${makeFlags} ${flags (attrs.installFlags or [ ])} install
+        '');
       sourceRoot = attrs.sourceRoot or (if attrs ? src then "source" else ".");
       unpackPhase =
         attrs.unpackPhase or (
@@ -54,7 +78,7 @@ let
           cd $sourceRoot
           ${attrs.postUnpack or ""}
           ${attrs.preBuild or ""}
-          ${attrs.buildPhase or ""}
+          ${buildPhase}
           ${attrs.postBuild or ""}
           ${
             if attrs.doCheck or false then
@@ -67,7 +91,7 @@ let
               ""
           }
           ${attrs.preInstall or ""}
-          ${attrs.installPhase or ""}
+          ${installPhase}
           ${attrs.postInstall or ""}
         '';
     in
@@ -110,6 +134,10 @@ let
         "checkPhase"
         "installPhase"
         "doCheck"
+        "makefile"
+        "makeFlags"
+        "buildFlags"
+        "installFlags"
         "preUnpack"
         "postUnpack"
         "preBuild"

@@ -13,11 +13,6 @@ pkgs.stdenv.mkDerivation {
         "mkfile"
       ];
   };
-  buildPhase = "mk";
   doCheck = true;
   checkPhase = "./6.out";
-  installPhase = ''
-    mkdir -p $out/bin
-    mk install 'BIN='$out/bin
-  '';
 }
