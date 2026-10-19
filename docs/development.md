@@ -87,17 +87,22 @@ For your own project, copy [examples/hello](../examples/hello) into the guest an
 run `nix-build` in that directory. It uses the installed package set; the source
 and recipe stay in your project.
 
-[environment.nix](../examples/environment.nix) selects commands with `buildEnv`.
+[environment.nix](../examples/environment.nix) combines packages and configuration with `buildEnv`.
 Copy it into the guest, then build and activate it:
 
 ```rc
 nix-build environment.nix --out-link $roots/environment
 environment=`{cat $roots/environment}
+touch /tmp/nix9.lua
 . $environment/activate
+lua /tmp/nix9.lua
 ```
 
 Source another environment's `activate` file to switch. Command collisions within
 an environment fail the build. Keep a root for each environment you want to reuse.
+The optional `files` attribute maps existing absolute file paths to text.
+Activation binds the generated files in the shell's namespace. Switching away
+reveals the original files.
 
 To activate a rooted environment at login, add this line at the end of `$home/lib/profile`:
 

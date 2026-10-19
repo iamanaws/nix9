@@ -41,6 +41,48 @@ def check_login(guest, packages, environments):
     guest.command(f"rm {root}")
 
 
+def check_configuration(guest, packages, port):
+    guest.command(f"hget -o /tmp/environments.nix http://10.0.2.2:{port}/environments.nix")
+    environments = {}
+    for name in ("configured-one", "configured-two", "config-only", "missing-target", "empty"):
+        root = f"/usr/local/nix/state/gcroots/{name}"
+        guest.command(f"nix-build /tmp/environments.nix --argstr packages {packages} -A {name} --out-link {root}")
+        environments[name] = store_paths(guest.command(f"cat {root}")).pop()
+    guest.command("echo original > /tmp/nix9-config; echo original-extra > /tmp/nix9-extra")
+    first, second = environments["configured-one"], environments["configured-two"]
+    guest.command(f"@{{ . {first}/activate; cat /tmp/nix9-config }}", "one's config")
+    guest.command("cat /tmp/nix9-config", "original")
+    guest.command(f". {first}/activate; nix9-choice", "one")
+    guest.command(f". {first}/activate; cat /tmp/nix9-extra", "extra")
+    result = guest.command(f". {environments['missing-target']}/activate; echo CONFIG-STATUS:$status")
+    if not re.search(r"(?m)^CONFIG-STATUS:.+$", result):
+        raise RuntimeError(f"missing configuration target was not rejected: {result}")
+    guest.command("nix9-choice", "one")
+    guest.command("cat /tmp/nix9-config", "one's config")
+    guest.command(f". {second}/activate; nix9-choice", "two")
+    guest.command("echo -n two > /tmp/expected-config; cmp /tmp/expected-config /tmp/nix9-config")
+    guest.command("cat /tmp/nix9-extra", "original-extra")
+    guest.command("nix-store --gc")
+    guest.command(f"nix-store --verify-path {first}")
+    guest.command(f". {first}/activate; nix9-choice", "one")
+    result = guest.command("cat /tmp/nix9-config")
+    referenced = store_paths(result)
+    if len(referenced) != 1:
+        raise RuntimeError(f"configuration lost its package reference: {result}")
+    data = referenced.pop()
+    guest.command(f"cat {data}/share/message", "retained")
+    guest.command(f". {environments['config-only']}/activate")
+    guest.command("cat /tmp/nix9-config", "configuration without packages")
+    guest.command("test ! -e /bin/nix9-choice")
+    guest.command(f". {environments['empty']}/activate")
+    guest.command("cat /tmp/nix9-config", "original")
+    guest.command("cat /tmp/nix9-extra", "original-extra")
+    for name in environments:
+        guest.command(f"rm /usr/local/nix/state/gcroots/{name}")
+    guest.command("nix-store --gc")
+    guest.command(f"test ! -e {first} && test ! -e {data}")
+
+
 def check_environments(guest, packages, port):
     guest.command(f"hget -o /tmp/environments.nix http://10.0.2.2:{port}/environments.nix")
     guest.command(f"environmentPackages={packages}")
@@ -97,4 +139,5 @@ def check_environments(guest, packages, port):
     guest.command(f"test ! -e {environments['one']} && test ! -e {environments['two']}")
     for package in selected:
         guest.command(f"test ! -e {package}")
-    return "native buildEnv, collisions, activation, login, switching, rollback, closure retention and GC passed"
+    check_configuration(guest, packages, port)
+    return "native buildEnv, configuration files, login, switching, rollback, closure retention and GC passed"

@@ -69,4 +69,24 @@ in
       pkgs.fortune
     ];
   };
+  configured-one = pkgs.buildEnv {
+    name = "configured-one";
+    paths = [ first ];
+    files."/tmp/nix9-config" = "one's config\n${data}/share/message\n";
+    files."/tmp/nix9-extra" = "extra\n";
+  };
+  configured-two = pkgs.buildEnv {
+    name = "configured-two";
+    paths = [ second ];
+    files."/tmp/nix9-config" = "two";
+  };
+  config-only = pkgs.buildEnv {
+    name = "config-only";
+    files."/tmp/nix9-config" = "configuration without packages\n";
+  };
+  missing-target = pkgs.buildEnv {
+    name = "missing-target";
+    paths = [ second ];
+    files."/tmp/no-such-config-target" = "missing\n";
+  };
 }

@@ -1,7 +1,8 @@
 { mkDerivation }:
 {
   name ? "user-environment",
-  paths,
+  paths ? [ ],
+  files ? { },
 }:
 let
   selected = builtins.foldl' (
@@ -11,16 +12,34 @@ let
   pathList = builtins.concatStringsSep " " (map quote selected);
   bins = map (path: "${path}/bin") selected;
   binList = builtins.concatStringsSep " " (map quote bins);
+  targets = builtins.attrNames files;
+  targetList = builtins.concatStringsSep " " (map quote targets);
+  validTarget =
+    target:
+    builtins.match "/([^/]+/)*[^/]+" target != null
+    && builtins.all (part: part != "." && part != "..") (
+      builtins.filter builtins.isString (builtins.split "/" target)
+    );
   # The worker shares the caller's new namespace, but not its environment group.
   switch = ''
     rfork e
     path=(/$cputype/bin)
     for(package in (${pathList})) test -e $package
+    for(target in (${targetList})) {
+      test -f $target
+      test -f $nix9NextEnvironment/files^$target
+    }
+    for(target in $nix9EnvironmentFileTargets) {
+      /$cputype/bin/unmount $nix9EnvironmentFileRoot^$target $target
+    }
     for(package in $nix9EnvironmentPaths) {
       if(test -d $package/bin) /$cputype/bin/unmount $package/bin /bin
     }
     for(package in (${pathList})) {
       if(test -d $package/bin) /$cputype/bin/bind -b $package/bin /bin
+    }
+    for(target in (${targetList})) {
+      /$cputype/bin/bind $nix9NextEnvironment/files^$target $target
     }
     status='''
   '';
@@ -32,20 +51,30 @@ let
       }
       /$cputype/bin/rc -e -c ${quote switch} && {
         nix9EnvironmentPaths=(${pathList})
+        nix9EnvironmentFileTargets=(${targetList})
+        nix9EnvironmentFileRoot=${if targets == [ ] then "()" else "$nix9NextEnvironment/files"}
+        nix9NextEnvironment=()
         path=(${binList} $nix9BasePath)
+        PATH=$nix9BasePATH
         ${
-          if selected == [ ] then
+          if selected == [ ] && targets == [ ] then
             ''
-              PATH=$nix9BasePATH
               nix9EnvironmentActive=()
               nix9BasePath=()
               nix9BasePATH=()
             ''
           else
             ''
-              PATH=${quote (builtins.concatStringsSep ":" bins)}
-              if(! ~ $#nix9BasePATH 0) {
-                if(! ~ $nix9BasePATH ''') PATH=$PATH^:^$nix9BasePATH
+              ${
+                if selected == [ ] then
+                  ""
+                else
+                  ''
+                    PATH=${quote (builtins.concatStringsSep ":" bins)}
+                    if(! ~ $#nix9BasePATH 0) {
+                      if(! ~ $nix9BasePATH ''') PATH=$PATH^:^$nix9BasePATH
+                    }
+                  ''
               }
               nix9EnvironmentActive=1
             ''
@@ -55,6 +84,7 @@ let
     }
   '';
 in
+assert builtins.all validTarget targets;
 mkDerivation {
   inherit name;
   buildCommand = ''
@@ -74,6 +104,13 @@ mkDerivation {
         status='''
       }
     }
-    echo ${quote activate} > $out/activate
+    ${builtins.concatStringsSep "\n" (
+      map (target: ''
+        mkdir -p $out/files^${quote (builtins.dirOf target)}
+        echo -n ${quote files.${target}} > $out/files^${quote target}
+      '') targets
+    )}
+    ${if targets == [ ] then "" else "echo 'nix9NextEnvironment='$out > $out/activate"}
+    echo ${quote activate} >> $out/activate
   '';
 }

@@ -7,4 +7,7 @@ pkgs.buildEnv {
     pkgs.lua
     pkgs.fortune
   ];
+  files."/tmp/nix9.lua" = ''
+    print("Hello from nix9")
+  '';
 }
