@@ -164,6 +164,8 @@
                 ./tests/phases.nix
                 ./tests/native_inputs.py
                 ./tests/inputs.nix
+                ./tests/native_environments.py
+                ./tests/environments.nix
                 ./tests/native_recovery.py
                 ./tests/native_transfer.py
                 ./tests/native_cache.py

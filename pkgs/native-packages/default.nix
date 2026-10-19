@@ -23,6 +23,7 @@ in
     mkDerivation
     fetchurl
     ;
+  buildEnv = import ./build-env.nix { inherit mkDerivation; };
   lua = import ./pkgs/lua.nix {
     inherit
       mkDerivation

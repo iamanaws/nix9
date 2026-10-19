@@ -12,6 +12,7 @@ runCommand "native-packages" { } ''
   cp -r ${fortuneSource} "$out/fortune-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
+  cp ${../../lib/build-env.nix} "$out/build-env.nix"
   cp ${../libsec/native.nix} "$out/pkgs/libsec.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"

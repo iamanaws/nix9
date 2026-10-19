@@ -17,6 +17,7 @@ from native_fortune import check_fortune
 from native_project import check_project
 from native_phases import check_phases
 from native_inputs import check_inputs
+from native_environments import check_environments
 from native_recovery import interrupt_build, recover_build
 from native_transfer import export_closure, check_transfer
 
@@ -36,6 +37,7 @@ with tempfile.TemporaryDirectory() as directory:
         shutil.copyfile(Path(project_source) / name, root / "project" / name)
     shutil.copyfile(Path(__file__).with_name("phases.nix"), root / "phases.nix")
     shutil.copyfile(Path(__file__).with_name("inputs.nix"), root / "inputs.nix")
+    shutil.copyfile(Path(__file__).with_name("environments.nix"), root / "environments.nix")
     fetch_fixtures(root)
     with source_server(root, lua_archive) as tls_port, \
             ArtifactServer(root, root / "closure.export") as server:
@@ -60,6 +62,7 @@ with tempfile.TemporaryDirectory() as directory:
                 fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
                 fetching = check_fetch(guest, packages, server.server_port)
                 sources = check_sources(guest, packages, server.server_port, tls_port)
+                environments = check_environments(guest, packages, server.server_port)
                 closure = export_closure(guest, sources["package"], server.server_port)
                 if not server.received.is_set():
                     raise RuntimeError("guest did not upload the closure")
@@ -129,6 +132,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "standalone-project": project,
     "phases": phases,
     "inputs": inputs,
+    "environments": environments,
     "fetching": fetching,
     "sources": sources,
     "native-build": "passed",
