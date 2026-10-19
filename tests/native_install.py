@@ -14,6 +14,7 @@ from artifacts import ArtifactServer
 from native_fetch import fetch_fixtures, check_fetch
 from native_sources import source_server, check_sources
 from native_fortune import check_fortune
+from libsec import check_native as check_crypto
 from native_project import check_project
 from native_phases import check_phases, check_overrides, check_mk_phases
 from native_inputs import check_inputs, check_shell
@@ -40,6 +41,7 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copyfile(Path(__file__).with_name("overrides.nix"), root / "overrides.nix")
     shutil.copyfile(Path(__file__).with_name("inputs.nix"), root / "inputs.nix")
     shutil.copyfile(Path(__file__).with_name("environments.nix"), root / "environments.nix")
+    shutil.copytree(Path(__file__).with_name("libsec"), root / "libsec")
     fetch_fixtures(root)
     with source_server(root, lua_archive) as tls_port, \
             ArtifactServer(root, root / "closure.export") as server:
@@ -65,6 +67,7 @@ with tempfile.TemporaryDirectory() as directory:
                 shell = check_shell(guest, packages, server.server_port)
                 project = check_project(guest, server.server_port)
                 fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
+                crypto = check_crypto(guest, packages, server.server_port)
                 fetching = check_fetch(guest, packages, server.server_port)
                 sources = check_sources(guest, packages, server.server_port, tls_port)
                 environments = check_environments(guest, packages, server.server_port)
@@ -134,6 +137,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "output": package,
     "installation": "passed",
     "fortune": fortune,
+    "crypto": crypto,
     "standalone-project": project,
     "phases": phases,
     "mk-phases": mk_phases,

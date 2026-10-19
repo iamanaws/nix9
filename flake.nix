@@ -164,6 +164,9 @@
                 ./tests/native_fetch.py
                 ./tests/native_sources.py
                 ./tests/native_fortune.py
+                ./tests/libsec.py
+                ./tests/libsec/native.nix
+                ./tests/libsec/mp.c
                 ./tests/native_project.py
                 ./tests/native_phases.py
                 ./tests/phases.nix

@@ -20,6 +20,7 @@ runCommand "native-packages" { } ''
   cp ${../../lib/build-env.nix} "$out/build-env.nix"
   cp ${../../lib/profile.rc} "$out/profile"
   cp ${../libsec/native.nix} "$out/pkgs/libsec.nix"
+  cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"
   cp ${../libregexp/native.nix} "$out/pkgs/libregexp.nix"

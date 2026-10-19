@@ -5,6 +5,10 @@ let
     initialPath = [ mk ];
   };
   inherit (stdenv) mkDerivation;
+  libmp = import ./pkgs/libmp.nix {
+    inherit mkDerivation;
+    src = ./libsec-source;
+  };
   libsec = import ./pkgs/libsec.nix {
     inherit mkDerivation;
     src = ./libsec-source;
@@ -31,6 +35,7 @@ let
 in
 {
   inherit
+    libmp
     libsec
     libbio
     libregexp

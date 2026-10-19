@@ -10,6 +10,20 @@ import threading
 from guest import boot
 
 
+def check_native(guest, packages, port):
+    guest.command("mkdir -p /tmp/crypto-tests")
+    for name in ("native.nix", "mp.c"):
+        guest.command(f"hget -o /tmp/crypto-tests/{name} http://10.0.2.2:{port}/libsec/{name}")
+    root = "/usr/local/nix/state/gcroots/crypto-tests"
+    command = f"nix-build /tmp/crypto-tests/native.nix --argstr packages {packages} --out-link {root}"
+    guest.command(command)
+    guest.command(f"cat `{{cat {root}}}", "passed")
+    if "building '" in guest.command(command):
+        raise RuntimeError("unchanged crypto tests were rebuilt")
+    guest.command(f"rm {root}")
+    return "native libsec and libmp, six crypto suites and build reuse passed"
+
+
 def main():
     qemu, disk, tests, output_dir = sys.argv[1:]
     results = {}
