@@ -14,8 +14,10 @@ no-GC mode for short-lived runs. Native `fetchurl` uses 9front's `webfs` and ver
 the content hash. Its HTTPS transport does not validate server certificates.
 Content integrity relies on the pinned hash. Signed `file://` and read-only HTTP(S)
 caches support native substitution and repair. Network caches use mounted webfs
-with the same TLS limitation. `builtins.fetchurl` downloads HTTP(S) files during
-evaluation. Flakes and evaluator tarball/Git fetchers remain unported.
+with the same TLS limitation. `builtins.fetchurl` and `builtins.fetchTarball`
+download evaluator inputs. Archive trees are held in memory and support regular
+files and directories; links and duplicate files are rejected.
+Flakes and Git fetching remain unported.
 
 See the [toolchains](development.md#toolchains) used for cross-builds.
 

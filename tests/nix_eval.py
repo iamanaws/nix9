@@ -92,5 +92,5 @@ def check_nix_eval(guest):
         if "flakes are not supported on 9front" not in output or not re.search(r"(?m)^EVAL-STATUS:.*cc9exit=1$", output):
             raise RuntimeError(f"expected unsupported flake error: {output}")
     return ["host JSON comparison", "language", "builtins", "local imports", "derivation paths",
-            "strict errors", "unsupported fetching and flakes", "store environment",
+            "strict errors", "lookup failures and unsupported flakes", "store environment",
             "upstream arguments, attribute selection, stdin and lookup paths"]

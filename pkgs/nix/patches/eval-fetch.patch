@@ -17,14 +17,14 @@
  static void fetch(
      EvalState & state,
      const PosIdx pos,
-@@ -534,6 +537,7 @@
-     .impl = prim_fetchurl,
+@@ -584,6 +587,7 @@
+     .impl = prim_fetchTarball,
  });
  
 +#ifndef __plan9__
- static void prim_fetchTarball(EvalState & state, const PosIdx pos, Value ** args, Value & v)
+ static void prim_fetchGit(EvalState & state, const PosIdx pos, Value ** args, Value & v)
  {
-     fetch(state, pos, args, v, "fetchTarball", true, "source");
+     fetchTree(
 @@ -800,4 +804,6 @@
      .impl = prim_fetchGit,
  });

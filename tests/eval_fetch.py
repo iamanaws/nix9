@@ -8,6 +8,8 @@ import re
 import ssl
 import threading
 
+from eval_tarball import check_eval_tarball
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -89,6 +91,7 @@ def check_eval_fetch(guest, root):
             result = guest.command("pureFetch; echo FETCH-ERROR:$status")
             if "requires a 'sha256'" not in result or not re.search(r"(?m)^FETCH-ERROR:.+$", result):
                 raise RuntimeError(f"pure evaluation accepted an unpinned fetch: {result}")
+            check_eval_tarball(guest, root, base, f"https://10.0.2.2:{secure.server_port}")
         finally:
             for server in servers:
                 server.shutdown()
@@ -97,10 +100,12 @@ def check_eval_fetch(guest, root):
     # Pinned lookup must work without a fetcher cache or network service.
     guest.command("XDG_CACHE_HOME=/tmp/nix9-eval-fetch-empty-cache; unmount /mnt/web")
     guest.command("pinnedFetch -A answer", "42")
+    guest.command("evalTarball -A answer", "42")
+    guest.command("pureTarball", "42")
     guest.command("XDG_CACHE_HOME=/tmp/nix9-eval-fetch-cache")
     guest.command("evalFetch -A answer", "42")
-    guest.command("nix-store --gc; nix-store --verify-path $evalSource")
-    guest.command("rm /usr/local/nix/state/gcroots/eval-source; nix-store --gc")
-    guest.command("test ! -e $evalSource")
+    guest.command("nix-store --gc; nix-store --verify-path $evalSource $tarballTree")
+    guest.command("rm /usr/local/nix/state/gcroots/eval-source /usr/local/nix/state/gcroots/eval-tree; nix-store --gc")
+    guest.command("test ! -e $evalSource && test ! -e $tarballTree")
     guest.command("XDG_CACHE_HOME=$previousEvalCache")
-    return "evaluator HTTP/HTTPS fetching, hashes, redirects, imports, context, pure evaluation, offline reuse and GC passed"
+    return "evaluator file/archive fetching, hashes, imports, permissions, unsafe members, pure evaluation, offline reuse and GC passed"
