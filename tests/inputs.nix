@@ -128,15 +128,29 @@ let
         cp answer $out/bin/answer
       '';
     };
+  shellNative = (program false).overrideAttrs (_: {
+    nativeBuildInputs = [ (builtins.elemAt generators 1) ];
+    buildCommand = "exit 'inputsFrom package must not be built'";
+    shellHook = "NIX9_SHELL_HOOK=$NIX9_SHELL_HOOK^native";
+  });
+  shellApe = (program true).overrideAttrs (old: {
+    buildInputs = [ shellNative ] ++ old.buildInputs;
+    buildCommand = "exit 'inputsFrom package must not be built'";
+    shellHook = "NIX9_SHELL_HOOK=ape";
+  });
 in
 {
   native = program false;
   ape = program true;
   shell = mkShell {
     name = "input-shell";
-    nativeBuildInputs = generators;
-    buildInputs = libraries;
+    inputsFrom = [
+      shellNative
+      shellApe
+    ];
+    nativeBuildInputs = [ generator ];
     shellHook = ''
+      NIX9_SHELL_HOOK=$NIX9_SHELL_HOOK^shell
       shellSource=${(program false).src}
       apeShellSource=${(program true).src}
       NIX9_SHELL_TEST=ready

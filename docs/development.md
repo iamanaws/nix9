@@ -95,8 +95,9 @@ nix-shell
 
 Run `mk` to build and `mk clean` to remove build outputs. Exit to restore the
 original namespace, or use `nix-shell --run 'mk'` for one command.
-The shell keeps its dependencies rooted until it exits. `mkShell` accepts `nativeBuildInputs`,
-`buildInputs` and an rc `shellHook`.
+The shell keeps its dependencies rooted until it exits. `mkShell` accepts
+`nativeBuildInputs`, `buildInputs` and an rc `shellHook`. Use `inputsFrom` to reuse
+a derivation's build dependencies and shell hook.
 
 [environment.nix](../examples/environment.nix) combines packages and configuration with `buildEnv`.
 Copy it into the guest, then build and activate it:

@@ -14,6 +14,7 @@ def check_shell(guest, packages, port):
     guest.child.expect(r"(?m)^NIX9-SHELL-READY\r*$")
     guest.child.expect(r"(?m)^term% ")
     guest.command("echo $NIX9_SHELL_TEST", "ready")
+    guest.command("echo $NIX9_SHELL_HOOK", "apenativeshell")
     guest.command("echo $IN_NIX_SHELL", "impure")
     result = guest.command("ls /usr/local/nix/state/gcroots/nix-shell-*")
     roots = re.findall(r"(?m)^/usr/local/nix/state/gcroots/nix-shell-[^\s]+$", result)
@@ -36,6 +37,7 @@ def check_shell(guest, packages, port):
     guest.command("test ! -e /bin/generate && test ! -e /sys/include/answer.h")
     guest.command("test ! -e /sys/include/ape/answer.h && test ! -e /amd64/lib/libanswer.a")
     guest.command("test ! -e /amd64/lib/ape/libanswer.a && ~ $#NIX9_SHELL_TEST 0")
+    guest.command("~ $#NIX9_SHELL_HOOK 0")
     for variable, original in (("path", "outsidePath"), ("PATH", "outsidePATH")):
         result = guest.command(f"echo ${variable}; echo ${original}")
         lines = [line for line in result.splitlines() if line.startswith("/")]
