@@ -1,18 +1,23 @@
 { packages }:
 let
   inherit (import packages) mkDerivation callPackage;
-  dependency = mkDerivation {
-    name = "override-dependency";
-    buildCommand = ''
-      mkdir -p $out/include
-      echo dependency > $out/include/override.h
-    '';
-  };
+  makeDependency =
+    message:
+    mkDerivation {
+      name = "override-${message}";
+      buildCommand = ''
+        mkdir -p $out/include
+        echo ${message} > $out/include/override.h
+      '';
+    };
+  dependency = makeDependency "dependency";
+  replacement = makeDependency "replacement";
   recipe =
     {
       mkDerivation,
       version ? "1",
       message ? "original",
+      dependency ? null,
     }:
     mkDerivation {
       pname = "override-example";
@@ -20,14 +25,34 @@ let
       src = builtins.toFile "message" "${message}\n";
       unpackPhase = "";
       sourceRoot = ".";
+      buildInputs = if dependency == null then [ ] else [ dependency ];
       buildPhase = "cp $src message";
       installPhase = ''
         mkdir -p $out
         cp message $out/message
       '';
-      postInstall = "echo original >> $out/hooks";
+      postInstall =
+        "echo original >> $out/hooks"
+        + (
+          if dependency == null then
+            ""
+          else
+            ''
+
+              cat /sys/include/override.h > $out/argument
+            ''
+        );
     };
   original = callPackage recipe { };
+  called = callPackage recipe {
+    version = "5";
+    message = "called";
+    inherit dependency;
+  };
+  arguments = called.override {
+    version = "6";
+    dependency = replacement;
+  };
   changed = original.overrideAttrs (old: {
     version = "2";
     src = builtins.toFile "message" "changed\n";
@@ -41,11 +66,22 @@ let
   });
 in
 {
-  inherit original changed;
-  called = callPackage recipe {
-    version = "5";
-    message = "called";
-  };
+  inherit
+    original
+    changed
+    called
+    arguments
+    ;
+  argumentChain = arguments.override (old: {
+    version = "7";
+    message = old.message + " chained";
+  });
+  mixed =
+    (arguments.overrideAttrs (old: {
+      version = "8";
+      postInstall = old.postInstall + "\necho attrs >> $out/hooks";
+    })).override
+      { message = "mixed"; };
   injection =
     assert callPackage ({ mkDerivation }: mkDerivation) { mkDerivation = "explicit"; } == "explicit";
     assert
@@ -62,5 +98,8 @@ in
     version = "4";
     src = builtins.toFile "message" "direct\n";
   };
-  unchanged = original.drvPath == (original.overrideAttrs (_: { })).drvPath;
+  unchanged =
+    original.drvPath == (original.overrideAttrs (_: { })).drvPath
+    && original.drvPath == (original.override { }).drvPath
+    && original.drvPath == (original.override (_: { })).drvPath;
 }

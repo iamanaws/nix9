@@ -39,6 +39,9 @@ def check_overrides(guest, packages, port):
         ("chained", "3", "changed", "original\nchanged\nchained"),
         ("direct", "4", "direct", "original"),
         ("called", "5", "called", "original"),
+        ("arguments", "6", "called", "original"),
+        ("argumentChain", "7", "called chained", "original"),
+        ("mixed", "8", "mixed", "original\nattrs"),
     ):
         root = f"/usr/local/nix/state/gcroots/override-{name}"
         guest.command(f"overrides {name} {root}")
@@ -58,9 +61,15 @@ def check_overrides(guest, packages, port):
             guest.command(f"dependency=`{{cat {package}/dependency}}; cat $dependency/include/override.h", "dependency")
         else:
             guest.command(f"test ! -e {package}/dependency")
+        if name in ("arguments", "argumentChain", "mixed"):
+            guest.command(f"cat {package}/argument", "replacement")
+        elif name == "called":
+            guest.command(f"cat {package}/argument", "dependency")
+        else:
+            guest.command(f"test ! -e {package}/argument")
         guest.command(f"rm /usr/local/nix/state/gcroots/override-{name}")
     guest.command(f"cat {outputs['original']}/message", "original")
-    return "callPackage injection, defaults, explicit arguments and overrideAttrs sources, dependencies, hooks and chaining passed"
+    return "callPackage injection, defaults, argument overrides, dependency replacement, overrideAttrs and mixed chaining passed"
 
 
 def check_phases(guest, packages, port):

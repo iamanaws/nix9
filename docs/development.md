@@ -153,7 +153,8 @@ Each phase accepts `pre` and `post` hooks, such as `preBuild` and `postInstall`.
 Directory sources are copied to `source`; tar archives need an explicit
 `sourceRoot`. Override
 `unpackPhase` for other formats, or use `buildCommand` for a single script.
-Customize a package with `package.overrideAttrs (old: { version = "2"; })`.
+Use `package.override { dependency = replacement; }` to change `callPackage` arguments,
+or `package.overrideAttrs (old: { version = "2"; })` to change derivation attributes.
 Each builder gets a private namespace for its tools, headers,
 and libraries. Other host files remain accessible.
 `nativeBuildInputs` adds commands to rc's `path` and POSIX `PATH`.
