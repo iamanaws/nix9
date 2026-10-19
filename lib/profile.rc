@@ -1,0 +1,14 @@
+if(~ $#* 1 && test -r $1) {
+	nix9Profile=`{cat $1}
+	if(~ $#nix9Profile 1 && test -f $nix9Profile/activate) {
+		. $nix9Profile/activate
+	}
+	if not {
+		echo 'invalid environment root:' $1 >[1=2]
+		status='invalid environment root'
+	}
+}
+if not {
+	echo 'expected a readable environment root' >[1=2]
+	status='invalid environment root'
+}

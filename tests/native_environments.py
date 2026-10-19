@@ -7,6 +7,40 @@ def store_paths(result):
     return set(re.findall(r"/usr/local/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+", result))
 
 
+def check_login(guest, packages, environments):
+    root = "/usr/local/nix/state/gcroots/login-environment"
+    guest.command("mkdir -p /tmp/nix9-login/lib")
+    guest.command(f"echo '. {packages}/profile {root}' > /tmp/nix9-login/lib/profile")
+    for name, message, present, absent in (
+        ("one", "one", "old", "new"),
+        ("two", "two", "new", "old"),
+        ("one", "one", "old", "new"),
+    ):
+        guest.command(f"nix-store --realise --add-root {root} {environments[name]}")
+        script = f"nix9-choice && nix9-{present}-only && test ! -e /bin/nix9-{absent}-only"
+        guest.command(f"@{{ home=/tmp/nix9-login; rc -el -c '{script}' }}", message)
+    # Reread the same profile in an existing shell after changing its root.
+    guest.command(f". {packages}/profile {root}; nix9-choice", "one")
+    guest.command(f"nix-store --realise --add-root {root} {environments['two']}")
+    guest.command(f". {packages}/profile {root}; nix9-choice", "two")
+    guest.command("test ! -e /bin/nix9-old-only")
+    for contents in (None, "", "not-a-store-path", environments["one"] + " " + environments["two"]):
+        if contents is None:
+            argument = "/tmp/no-such-environment-root"
+        else:
+            guest.command(f"echo '{contents}' > /tmp/invalid-environment-root")
+            argument = "/tmp/invalid-environment-root"
+        result = guest.command(f". {packages}/profile {argument}; echo PROFILE-STATUS:$status")
+        if not re.search(r"(?m)^PROFILE-STATUS:invalid environment root$", result):
+            raise RuntimeError(f"invalid login root was not rejected: {result}")
+        guest.command("nix9-choice", "two")
+    result = guest.command(f". {packages}/profile; echo PROFILE-STATUS:$status")
+    if not re.search(r"(?m)^PROFILE-STATUS:invalid environment root$", result):
+        raise RuntimeError(f"missing login root argument was not rejected: {result}")
+    guest.command(f". {environments['empty']}/activate")
+    guest.command(f"rm {root}")
+
+
 def check_environments(guest, packages, port):
     guest.command(f"hget -o /tmp/environments.nix http://10.0.2.2:{port}/environments.nix")
     guest.command(f"environmentPackages={packages}")
@@ -56,10 +90,11 @@ def check_environments(guest, packages, port):
         lines = [line for line in result.splitlines() if line.startswith("/")]
         if len(lines) != 2 or lines[0] != lines[1]:
             raise RuntimeError(f"{variable} was not restored: {result}")
+    check_login(guest, packages, environments)
     for name in environments:
         guest.command(f"rm /usr/local/nix/state/gcroots/environment-{name}")
     guest.command("nix-store --gc")
     guest.command(f"test ! -e {environments['one']} && test ! -e {environments['two']}")
     for package in selected:
         guest.command(f"test ! -e {package}")
-    return "native buildEnv, collisions, private activation, switching, rollback, closure retention and GC passed"
+    return "native buildEnv, collisions, activation, login, switching, rollback, closure retention and GC passed"

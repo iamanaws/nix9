@@ -99,7 +99,16 @@ environment=`{cat $roots/environment}
 Source another environment's `activate` file to switch. Command collisions within
 an environment fail the build. Keep a root for each environment you want to reuse.
 
-The store persists at `/usr/local/nix/store`. Activate the environment after login.
+To activate a rooted environment at login, add this line at the end of `$home/lib/profile`:
+
+```rc
+. /usr/local/pkg/native-packages/profile /usr/local/nix/state/gcroots/environment
+```
+
+Rebuild with the same `--out-link` to change the environment for future logins.
+Source the profile helper again to switch the current shell.
+
+The store persists at `/usr/local/nix/store`.
 `nix-build` evaluates and builds the selected package. Its default root is
 `state/gcroots/result`; use `--no-out-link` to leave no permanent root.
 Roots are files containing store paths, not symlinks. Remove a root file to release
