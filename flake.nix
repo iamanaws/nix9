@@ -101,7 +101,7 @@
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
           amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test \
-          amd64/bin/mk amd64/bin/rm amd64/bin/mv amd64/bin/pwd \
+          amd64/bin/mk amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr \
           amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
@@ -121,6 +121,7 @@
         cp ${./pkgs/libsec/native.nix} "$out/libsec.nix"
         cp ${./pkgs/sha1sum/native.nix} "$out/sha1sum.nix"
         cp ${./lib/mk-derivation.nix} "$out/mk-derivation.nix"
+        cp ${./lib/setup-environment.nix} "$out/setup-environment.nix"
         cp ${sha1sum.source} "$out/sha1sum.c"
         cp ${sha1sum}/bin/sha1sum "$out/cross"
       '';

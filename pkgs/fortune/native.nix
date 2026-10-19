@@ -5,13 +5,21 @@
 }:
 mkDerivation {
   name = "fortune";
-  inherit src libbio;
-  buildCommand = ''
-    $tools/bin/sed 's,/sys/games/lib,'^$out^'/share/fortune,g' $src/sys/src/cmd/fortune.c > fortune.c
-    $tools/bin/6c -I $tools/sys/include -I $tools/amd64/include -o fortune.6 fortune.c
-    $tools/bin/mkdir -p $out/bin $out/share/fortune
-    $tools/bin/6l -s -l -E _main -o $out/bin/fortune fortune.6 $libbio/lib/libbio.a $tools/amd64/lib/libc.a
-    $tools/bin/cp $src/sys/games/lib/fortunes $out/share/fortune/fortunes
+  inherit src;
+  buildInputs = [ libbio ];
+  sourceRoot = "source/sys/src/cmd";
+  postUnpack = ''
+    sed 's,/sys/games/lib,'^$out^'/share/fortune,g' fortune.c > fortune.tmp
+    mv fortune.tmp fortune.c
+  '';
+  buildPhase = ''
+    6c fortune.c
+    6l -s -o fortune fortune.6
+  '';
+  installPhase = ''
+    mkdir -p $out/bin $out/share/fortune
+    cp fortune $out/bin/fortune
+    cp ../../games/lib/fortunes $out/share/fortune/fortunes
     $out/bin/fortune > /dev/null
   '';
 }
