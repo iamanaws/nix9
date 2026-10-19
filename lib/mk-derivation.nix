@@ -48,11 +48,26 @@ let
     );
   script =
     attrs.buildCommand or ''
+      ${attrs.preUnpack or ""}
       ${unpackPhase}
       cd $sourceRoot
+      ${attrs.postUnpack or ""}
+      ${attrs.preBuild or ""}
       ${attrs.buildPhase or ""}
-      ${if attrs.doCheck or false then attrs.checkPhase or "" else ""}
+      ${attrs.postBuild or ""}
+      ${
+        if attrs.doCheck or false then
+          ''
+            ${attrs.preCheck or ""}
+            ${attrs.checkPhase or ""}
+            ${attrs.postCheck or ""}
+          ''
+        else
+          ""
+      }
+      ${attrs.preInstall or ""}
       ${attrs.installPhase or ""}
+      ${attrs.postInstall or ""}
     '';
 in
 derivation (
@@ -109,5 +124,13 @@ derivation (
     "checkPhase"
     "installPhase"
     "doCheck"
+    "preUnpack"
+    "postUnpack"
+    "preBuild"
+    "postBuild"
+    "preCheck"
+    "postCheck"
+    "preInstall"
+    "postInstall"
   ]
 )

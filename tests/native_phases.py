@@ -14,6 +14,9 @@ def check_phases(guest, packages, port):
         ("", "unpack\nbuild\ncheck\ninstall"),
         ("--arg doCheck false", "unpack\nbuild\ninstall"),
         ("--arg customUnpack true", "custom-unpack\nbuild\ncheck\ninstall"),
+        ("--arg hooks true", "preUnpack\nunpack\npostUnpack\npreBuild\nbuild\npostBuild\npreCheck\ncheck\npostCheck\npreInstall\ninstall\npostInstall"),
+        ("--arg hooks true --arg doCheck false", "preUnpack\nunpack\npostUnpack\npreBuild\nbuild\npostBuild\npreInstall\ninstall\npostInstall"),
+        ("--arg hooks true --arg singleCommand true --argstr fail preUnpack", "single-command"),
     ):
         guest.command(f"phases {options} --out-link /usr/local/nix/state/gcroots/phases")
         result = guest.command("cat `{cat /usr/local/nix/state/gcroots/phases}")
@@ -23,5 +26,9 @@ def check_phases(guest, packages, port):
         result = guest.command(f"phases --argstr fail {phase} --no-out-link; echo PHASE-STATUS:$status")
         if not re.search(r"(?m)^PHASE-STATUS:.*cc9exit=100$", result) or f"phase-failure-{phase}" not in result:
             raise RuntimeError(f"{phase} failure was not reported: {result}")
+    for hook in ("preUnpack", "postUnpack", "preBuild", "postBuild", "preCheck", "postCheck", "preInstall", "postInstall"):
+        result = guest.command(f"phases --arg hooks true --argstr fail {hook} --no-out-link; echo PHASE-STATUS:$status")
+        if not re.search(r"(?m)^PHASE-STATUS:.*cc9exit=100$", result) or f"phase-failure-{hook}" not in result:
+            raise RuntimeError(f"{hook} failure was not reported: {result}")
     guest.command("rm /usr/local/nix/state/gcroots/phases")
-    return "phase order, optional checks, unpack override and failures passed"
+    return "phase and hook order, optional checks, unpack override, buildCommand and failures passed"

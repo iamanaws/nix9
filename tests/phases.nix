@@ -3,12 +3,23 @@
   fail ? "",
   doCheck ? true,
   customUnpack ? false,
+  hooks ? false,
+  singleCommand ? false,
 }:
 let
   pkgs = import packages;
   stop =
     phase:
     if fail == phase then "echo phase-failure-${phase}; test -e /nix9-missing-phase-fixture" else "";
+  hook =
+    phase:
+    if hooks then
+      ''
+        ${stop phase}
+        echo ${phase} >> $TMPDIR/phase-order
+      ''
+    else
+      "";
 in
 pkgs.mkDerivation (
   {
@@ -16,24 +27,46 @@ pkgs.mkDerivation (
     version = "1";
     src = ./phase-source;
     inherit doCheck;
+    preUnpack = ''
+      ${hook "preUnpack"}
+      hookState=shared
+    '';
+    postUnpack = ''
+      test $hookState '=' shared
+      cat trace >> $TMPDIR/phase-order
+      ${hook "postUnpack"}
+    '';
+    preBuild = hook "preBuild";
+    postBuild = hook "postBuild";
+    preCheck = hook "preCheck";
+    postCheck = hook "postCheck";
+    preInstall = hook "preInstall";
+    postInstall =
+      if hooks then
+        ''
+          ${stop "postInstall"}
+          echo postInstall >> $out
+        ''
+      else
+        "";
     buildPhase = ''
       test -s trace
       echo patched > nested/.message
       test `{cat $src/nested/.message} '=' original
       ${stop "build"}
-      echo build >> trace
+      echo build >> $TMPDIR/phase-order
       echo built > built
     '';
     checkPhase = ''
       test -s built
       ${stop "check"}
-      echo check >> trace
+      echo check >> $TMPDIR/phase-order
     '';
     installPhase = ''
       test -s built
       ${stop "install"}
-      echo install >> trace
-      cp trace $out
+      echo install >> $TMPDIR/phase-order
+      cp $TMPDIR/phase-order $out
     '';
   }
   // (
@@ -49,4 +82,5 @@ pkgs.mkDerivation (
     else
       { }
   )
+  // (if singleCommand then { buildCommand = "echo single-command > $out"; } else { })
 )
