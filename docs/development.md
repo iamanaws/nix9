@@ -83,6 +83,10 @@ result=`{cat $roots/package}
 $result/bin/fortune
 ```
 
+For your own project, copy [examples/hello](../examples/hello) into the guest and
+run `nix-build` in that directory. It uses the installed package set; the source
+and recipe stay in your project.
+
 The store persists at `/usr/local/nix/store`. Activate the environment after login.
 `nix-build` evaluates and builds the selected package. Its default root is
 `state/gcroots/result`; use `--no-out-link` to leave no permanent root.

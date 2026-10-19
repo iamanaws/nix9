@@ -14,11 +14,12 @@ from artifacts import ArtifactServer
 from native_fetch import fetch_fixtures, check_fetch
 from native_sources import source_server, check_sources
 from native_fortune import check_fortune
+from native_project import check_project
 from native_recovery import interrupt_build, recover_build
 from native_transfer import export_closure, check_transfer
 
 
-qemu, image, archive, prefix, packages_archive, packages, output, lua_archive, probe, elf2aout = sys.argv[1:]
+qemu, image, archive, prefix, packages_archive, packages, output, lua_archive, probe, elf2aout, project_source = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     disk = root / "persistent.qcow2"
@@ -28,6 +29,8 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copyfile(packages_archive, root / "packages.tar")
     shutil.copyfile(Path(__file__).with_name("recovery.nix"), root / "recovery.nix")
     subprocess.run([sys.executable, elf2aout, probe, str(root / "store-probe")], check=True)
+    for name in ("default.nix", "hello.c"):
+        shutil.copyfile(Path(project_source) / name, root / name)
     fetch_fixtures(root)
     with source_server(root, lua_archive) as tls_port, \
             ArtifactServer(root, root / "closure.export") as server:
@@ -46,6 +49,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"test ! -e {prefix}/share/nix9")
                 guest.command(f"hget -o /tmp/packages.tar http://10.0.2.2:{server.server_port}/packages.tar")
                 guest.command("cd / && tar xf /tmp/packages.tar && rm /tmp/packages.tar")
+                project = check_project(guest, server.server_port)
                 fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
                 fetching = check_fetch(guest, packages, server.server_port)
                 sources = check_sources(guest, packages, server.server_port, tls_port)
@@ -115,6 +119,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "output": package,
     "installation": "passed",
     "fortune": fortune,
+    "standalone-project": project,
     "fetching": fetching,
     "sources": sources,
     "native-build": "passed",
