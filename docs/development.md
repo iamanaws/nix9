@@ -111,19 +111,30 @@ lua /tmp/nix9.lua
 ```
 
 Source another environment's `activate` file to switch. Command collisions within
-an environment fail the build. Keep a root for each environment you want to reuse.
+an environment fail the build.
 The optional `files` attribute maps existing absolute file paths to text.
 Activation binds the generated files in the shell's namespace. Switching away
 reveals the original files.
 
-To activate a rooted environment at login, add this line at the end of `$home/lib/profile`:
+To keep generations and roll back:
+
+```rc
+profile=/usr/local/pkg/native-packages/bin/nix-profile
+$profile $roots/environment set $environment
+$profile $roots/environment list
+```
+
+`set` retains the previous environment. `rollback` selects the preceding generation.
+`delete NUMBER` releases an inactive generation for GC.
+Selecting a retained environment reuses its generation.
+Add this line at the end of `$home/lib/profile` to activate the selected environment at login:
 
 ```rc
 . /usr/local/pkg/native-packages/profile /usr/local/nix/state/gcroots/environment
 ```
 
-Rebuild with the same `--out-link` to change the environment for future logins.
-Source the profile helper again to switch the current shell.
+Source that line again after `set` or `rollback` to switch the current shell.
+Build updates with a separate `--out-link`, then use `set` to select them.
 
 The store persists at `/usr/local/nix/store`.
 `nix-build` evaluates and builds the selected package. Its default root is

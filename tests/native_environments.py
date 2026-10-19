@@ -83,6 +83,54 @@ def check_configuration(guest, packages, port):
     guest.command(f"test ! -e {first} && test ! -e {data}")
 
 
+def check_generations(guest, packages, environments):
+    root = "/usr/local/nix/state/gcroots/profile-test"
+    guest.command(f"fn profileTest {{ {packages}/bin/nix-profile {root} $* }}")
+    command = "profileTest"
+    first, second = environments["one"], environments["two"]
+    guest.command(f"{command} set {first}")
+    guest.command(f"cat {root}.generations/1", first)
+    guest.command(f"rm {root} {root}.generations/1 {root}.generations")
+    # Adopting an existing login root must preserve its old environment.
+    guest.command(f"nix-store --realise --add-root {root} {first}")
+    guest.command(f"{command} set {second}")
+    result = guest.command(f"{command} list")
+    for number, marker, path in ((1, "", first), (2, r"\*", second)):
+        if not re.search(rf"(?m)^{number}\s+{marker}\s*{re.escape(path)}$", result):
+            raise RuntimeError(f"missing profile generation: {result}")
+    guest.command("nix-store --gc")
+    guest.command(f"nix-store --verify-path {first} {second}")
+    guest.command(f"{command} rollback")
+    guest.command(f". {packages}/profile {root} && nix9-choice", "one")
+    # Selecting a retained environment reuses its generation.
+    guest.command(f"{command} set {second} && {command} set {second}")
+    guest.command(f"test ! -e {root}.generations/3")
+    guest.command(f". {packages}/profile {root} && nix9-choice", "two")
+    guest.command("mkdir -p /tmp/not-a-store-environment; touch /tmp/not-a-store-environment/activate")
+    for arguments in (
+        "delete 2", "delete ../profile-test", "set /tmp/no-environment",
+        "set /tmp/not-a-store-environment", "unknown",
+    ):
+        result = guest.command(f"{command} {arguments}; echo PROFILE-ERROR:$status")
+        if not re.search(r"(?m)^PROFILE-ERROR:.+$", result):
+            raise RuntimeError(f"invalid profile operation succeeded: {result}")
+        guest.command(f"cat {root}", second)
+        guest.command("test ! -e '#s/nix9-profile'")
+    guest.command("@{ status='' } > '#s/nix9-profile'")
+    result = guest.command(f"{command} rollback; echo PROFILE-ERROR:$status")
+    if "profiles are locked" not in result or not re.search(r"(?m)^PROFILE-ERROR:.+$", result):
+        raise RuntimeError(f"concurrent profile operation was not rejected: {result}")
+    guest.command("rm '#s/nix9-profile'")
+    guest.command(f"{command} delete 1")
+    guest.command("nix-store --gc")
+    guest.command(f"test ! -e {first} && nix-store --verify-path {second}")
+    result = guest.command(f"{command} rollback; echo PROFILE-ERROR:$status")
+    if "no previous generation" not in result or not re.search(r"(?m)^PROFILE-ERROR:.+$", result):
+        raise RuntimeError(f"rollback without a generation succeeded: {result}")
+    guest.command(f". {environments['empty']}/activate")
+    guest.command(f"rm {root} {root}.generations/2 {root}.generations")
+
+
 def check_environments(guest, packages, port):
     guest.command(f"hget -o /tmp/environments.nix http://10.0.2.2:{port}/environments.nix")
     guest.command(f"environmentPackages={packages}")
@@ -134,10 +182,13 @@ def check_environments(guest, packages, port):
             raise RuntimeError(f"{variable} was not restored: {result}")
     check_login(guest, packages, environments)
     for name in environments:
-        guest.command(f"rm /usr/local/nix/state/gcroots/environment-{name}")
+        if name != "empty":
+            guest.command(f"rm /usr/local/nix/state/gcroots/environment-{name}")
+    check_generations(guest, packages, environments)
+    guest.command("rm /usr/local/nix/state/gcroots/environment-empty")
     guest.command("nix-store --gc")
     guest.command(f"test ! -e {environments['one']} && test ! -e {environments['two']}")
     for package in selected:
         guest.command(f"test ! -e {package}")
     check_configuration(guest, packages, port)
-    return "native buildEnv, configuration files, login, switching, rollback, closure retention and GC passed"
+    return "native buildEnv, configuration files, login, profile generations, rollback, closure retention and GC passed"

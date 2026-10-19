@@ -1,0 +1,81 @@
+#!/bin/rc -e
+
+fn fail {
+	echo nix-profile: $* >[1=2]
+	exit 'nix-profile failed'
+}
+if(! ~ $#* 2 3)
+	fail 'usage: nix-profile ROOT {set ENVIRONMENT | list | rollback | delete NUMBER}'
+root=$1
+action=$2
+switch($action) {
+case set delete
+	if(! ~ $#* 3) fail 'expected one argument for' $action
+case list rollback
+	if(! ~ $#* 2) fail 'unexpected argument for' $action
+case *
+	fail 'unknown action:' $action
+}
+if(! ~ $root /*) fail 'expected an absolute root path'
+
+# Use the kernel service namespace: hjfs can create duplicate names concurrently.
+lock='#s/nix9-profile'
+@{ status='' } > $lock || fail 'profiles are locked; remove this file if interrupted:' $lock
+fn sigexit { rm $lock }
+generations=$root^.generations
+mkdir -p $generations
+current=()
+if(test -e $root) {
+	current=`{cat $root}
+	if(! ~ $#current 1) fail 'invalid environment root:' $root
+	if(! test -f $current/activate) fail 'invalid environment root:' $root
+}
+highest=0
+selected=0
+ids=()
+for(file in $generations/*) {
+	if(test -f $file) {
+		id=`{basename $file | awk '/^[1-9][0-9]*$/'}
+		if(! ~ $#id 1) fail 'invalid generation:' $file
+		ids=($ids $id)
+		if(test $id -gt $highest) highest=$id
+		if(~ $#current 1 && ~ `{cat $file} $current) selected=$id
+	}
+}
+fn retain {
+	highest=`{echo $highest | awk '{print $1 + 1}'}
+	nix-store --realise --add-root $generations/$highest $1 > /dev/null
+	ids=($ids $highest)
+}
+switch($action) {
+case set
+	if(! test -f $3/activate) fail 'expected a built environment:' $3
+	# Preserve an existing login root when starting its generation history.
+	if(~ $selected 0 && ~ $#current 1) retain $current
+	target=()
+	for(id in $ids) {
+		if(~ `{cat $generations/$id} $3) target=$id
+	}
+	if(~ $#target 0) {
+		retain $3
+	}
+	nix-store --realise --add-root $root $3 > /dev/null
+case list
+	for(id in $ids) {
+		mark=' '
+		if(~ $id $selected) mark='*'
+		echo $id $mark `{cat $generations/$id}
+	} | sort -n
+case rollback
+	previous=0
+	for(id in $ids) {
+		if(test $id -lt $selected && test $id -gt $previous) previous=$id
+	}
+	if(~ $previous 0) fail 'no previous generation'
+	nix-store --realise --add-root $root `{cat $generations/$previous} > /dev/null
+case delete
+	if(! ~ $3 $ids) fail 'unknown generation:' $3
+	if(~ $3 $selected) fail 'cannot delete the current generation'
+	rm $generations/$3
+}
+exit ''

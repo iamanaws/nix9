@@ -7,7 +7,7 @@
   sha1sum,
 }:
 runCommand "native-packages" { } ''
-  mkdir -p "$out/pkgs"
+  mkdir -p "$out/pkgs" "$out/bin"
   cp -r ${nativeTools} "$out/tools"
   cp -r ${secSource} "$out/libsec-source"
   cp -r ${fortuneSource} "$out/fortune-source"
@@ -19,6 +19,8 @@ runCommand "native-packages" { } ''
   cp ${../../lib/mk-shell.nix} "$out/mk-shell.nix"
   cp ${../../lib/build-env.nix} "$out/build-env.nix"
   cp ${../../lib/profile.rc} "$out/profile"
+  cp ${../../lib/nix-profile.rc} "$out/bin/nix-profile"
+  chmod +x "$out/bin/nix-profile"
   cp ${../libsec/native.nix} "$out/pkgs/libsec.nix"
   cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
