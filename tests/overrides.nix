@@ -1,6 +1,6 @@
 { packages }:
 let
-  inherit (import packages) mkDerivation;
+  inherit (import packages) mkDerivation callPackage;
   dependency = mkDerivation {
     name = "override-dependency";
     buildCommand = ''
@@ -8,19 +8,26 @@ let
       echo dependency > $out/include/override.h
     '';
   };
-  original = mkDerivation {
-    pname = "override-example";
-    version = "1";
-    src = builtins.toFile "message" "original\n";
-    unpackPhase = "";
-    sourceRoot = ".";
-    buildPhase = "cp $src message";
-    installPhase = ''
-      mkdir -p $out
-      cp message $out/message
-    '';
-    postInstall = "echo original >> $out/hooks";
-  };
+  recipe =
+    {
+      mkDerivation,
+      version ? "1",
+      message ? "original",
+    }:
+    mkDerivation {
+      pname = "override-example";
+      inherit version;
+      src = builtins.toFile "message" "${message}\n";
+      unpackPhase = "";
+      sourceRoot = ".";
+      buildPhase = "cp $src message";
+      installPhase = ''
+        mkdir -p $out
+        cp message $out/message
+      '';
+      postInstall = "echo original >> $out/hooks";
+    };
+  original = callPackage recipe { };
   changed = original.overrideAttrs (old: {
     version = "2";
     src = builtins.toFile "message" "changed\n";
@@ -35,6 +42,18 @@ let
 in
 {
   inherit original changed;
+  called = callPackage recipe {
+    version = "5";
+    message = "called";
+  };
+  injection =
+    assert callPackage ({ mkDerivation }: mkDerivation) { mkDerivation = "explicit"; } == "explicit";
+    assert
+      callPackage ({ libsec, missing }@args: builtins.attrNames args) { missing = true; } == [
+        "libsec"
+        "missing"
+      ];
+    true;
   chained = changed.overrideAttrs (old: {
     version = "3";
     postInstall = old.postInstall + "\necho chained >> $out/hooks";

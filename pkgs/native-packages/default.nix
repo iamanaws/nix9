@@ -2,67 +2,37 @@ let
   bootstrapStdenv = import ./stdenv.nix { tools = ./tools; };
   stdenv = import ./stdenv.nix {
     tools = ./tools;
-    initialPath = [ mk ];
+    initialPath = [ pkgs.mk ];
   };
-  inherit (stdenv) mkDerivation;
-  libmp = import ./pkgs/libmp.nix {
-    inherit mkDerivation;
-    src = ./libsec-source;
-  };
-  libsec = import ./pkgs/libsec.nix {
-    inherit mkDerivation;
-    src = ./libsec-source;
-  };
-  libbio = import ./pkgs/libbio.nix {
-    mkDerivation = bootstrapStdenv.mkDerivation;
-    src = ./fortune-source/sys/src/libbio;
-  };
-  libregexp = import ./pkgs/libregexp.nix {
-    mkDerivation = bootstrapStdenv.mkDerivation;
-    src = ./mk-source/sys/src/libregexp;
-  };
-  mk = import ./pkgs/mk.nix {
-    inherit libbio libregexp;
-    mkDerivation = bootstrapStdenv.mkDerivation;
-    src = ./mk-source/sys/src/cmd/mk;
-  };
-  fetchurl = import ./pkgs/fetchurl.nix { inherit mkDerivation; };
   upstream = import ./pkgs/lua-source.nix;
-  liblua = import ./pkgs/liblua.nix {
-    inherit mkDerivation fetchurl upstream;
-    config = ./pkgs/lua-ape-config.h;
+  pkgs = rec {
+    inherit stdenv;
+    inherit (stdenv) mkDerivation;
+    callPackage = import ./call-package.nix pkgs;
+    libmp = callPackage ./pkgs/libmp.nix { src = ./libsec-source; };
+    libsec = callPackage ./pkgs/libsec.nix { src = ./libsec-source; };
+    libbio = callPackage ./pkgs/libbio.nix {
+      mkDerivation = bootstrapStdenv.mkDerivation;
+      src = ./fortune-source/sys/src/libbio;
+    };
+    libregexp = callPackage ./pkgs/libregexp.nix {
+      mkDerivation = bootstrapStdenv.mkDerivation;
+      src = ./mk-source/sys/src/libregexp;
+    };
+    mk = callPackage ./pkgs/mk.nix {
+      mkDerivation = bootstrapStdenv.mkDerivation;
+      src = ./mk-source/sys/src/cmd/mk;
+    };
+    fetchurl = callPackage ./pkgs/fetchurl.nix { };
+    liblua = callPackage ./pkgs/liblua.nix {
+      inherit upstream;
+      config = ./pkgs/lua-ape-config.h;
+    };
+    buildEnv = callPackage ./build-env.nix { };
+    mkShell = callPackage ./mk-shell.nix { };
+    lua = callPackage ./pkgs/lua.nix { inherit upstream; };
+    sha1sum = callPackage ./pkgs/sha1sum.nix { src = ./sha1sum.c; };
+    fortune = callPackage ./pkgs/fortune.nix { src = ./fortune-source; };
   };
 in
-{
-  inherit
-    libmp
-    libsec
-    libbio
-    libregexp
-    mk
-    liblua
-    mkDerivation
-    stdenv
-    fetchurl
-    ;
-  buildEnv = import ./build-env.nix { inherit mkDerivation; };
-  mkShell = import ./mk-shell.nix {
-    inherit stdenv;
-  };
-  lua = import ./pkgs/lua.nix {
-    inherit
-      mkDerivation
-      fetchurl
-      upstream
-      liblua
-      ;
-  };
-  sha1sum = import ./pkgs/sha1sum.nix {
-    inherit mkDerivation libsec;
-    src = ./sha1sum.c;
-  };
-  fortune = import ./pkgs/fortune.nix {
-    inherit mkDerivation libbio;
-    src = ./fortune-source;
-  };
-}
+pkgs

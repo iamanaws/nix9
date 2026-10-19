@@ -30,13 +30,15 @@ def check_overrides(guest, packages, port):
     guest.command(f"hget -o /tmp/overrides.nix http://10.0.2.2:{port}/overrides.nix")
     guest.command(f"overridePackages={packages}")
     guest.command("fn overrides { nix-build /tmp/overrides.nix --argstr packages $overridePackages -A $1 --out-link $2 }")
-    guest.command("nix-instantiate --eval /tmp/overrides.nix --argstr packages $overridePackages -A unchanged", "true")
+    for attribute in ("unchanged", "injection"):
+        guest.command(f"nix-instantiate --eval /tmp/overrides.nix --argstr packages $overridePackages -A {attribute}", "true")
     outputs = {}
     for name, version, message, hooks in (
         ("original", "1", "original", "original"),
         ("changed", "2", "changed", "original\nchanged"),
         ("chained", "3", "changed", "original\nchanged\nchained"),
         ("direct", "4", "direct", "original"),
+        ("called", "5", "called", "original"),
     ):
         root = f"/usr/local/nix/state/gcroots/override-{name}"
         guest.command(f"overrides {name} {root}")
@@ -58,7 +60,7 @@ def check_overrides(guest, packages, port):
             guest.command(f"test ! -e {package}/dependency")
         guest.command(f"rm /usr/local/nix/state/gcroots/override-{name}")
     guest.command(f"cat {outputs['original']}/message", "original")
-    return "overrideAttrs sources, dependencies, hook extension, chaining, direct attributes and no-op identity passed"
+    return "callPackage injection, defaults, explicit arguments and overrideAttrs sources, dependencies, hooks and chaining passed"
 
 
 def check_phases(guest, packages, port):

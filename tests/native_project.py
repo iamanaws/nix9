@@ -20,7 +20,7 @@ def check_project(guest, port):
     if closure != {native_mk}:
         raise RuntimeError(f"native mk retains build dependencies: {closure}")
     guest.command("mkdir /tmp/hello")
-    for name in ("default.nix", "shell.nix", "hello.c", "mkfile"):
+    for name in ("default.nix", "package.nix", "shell.nix", "hello.c", "mkfile"):
         guest.command(f"hget -o /tmp/hello/{name} http://10.0.2.2:{port}/project/{name}")
     guest.command("cd /tmp/hello")
     guest.command("nix-build --out-link /usr/local/nix/state/gcroots/hello")

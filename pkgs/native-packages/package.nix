@@ -14,6 +14,7 @@ runCommand "native-packages" { } ''
   cp -r ${mkSource} "$out/mk-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
+  cp ${../../lib/call-package.nix} "$out/call-package.nix"
   cp ${../../lib/stdenv.nix} "$out/stdenv.nix"
   cp ${../../lib/setup-environment.nix} "$out/setup-environment.nix"
   cp ${../../lib/mk-shell.nix} "$out/mk-shell.nix"

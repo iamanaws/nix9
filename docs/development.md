@@ -86,6 +86,7 @@ $result/bin/fortune
 For your own project, copy [examples/hello](../examples/hello) into the guest and
 run `nix-build` in that directory. Its mkfile uses the standard build rules.
 The source and recipe stay in your project.
+`pkgs.callPackage ./package.nix { }` supplies recipe dependencies; explicit arguments override them.
 
 For an interactive C development shell in that project:
 

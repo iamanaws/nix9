@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copyfile(Path(__file__).with_name("recovery.nix"), root / "recovery.nix")
     subprocess.run([sys.executable, elf2aout, probe, str(root / "store-probe")], check=True)
     (root / "project").mkdir()
-    for name in ("default.nix", "shell.nix", "hello.c", "mkfile"):
+    for name in ("default.nix", "package.nix", "shell.nix", "hello.c", "mkfile"):
         shutil.copyfile(Path(project_source) / name, root / "project" / name)
     shutil.copyfile(Path(__file__).with_name("phases.nix"), root / "phases.nix")
     shutil.copyfile(Path(__file__).with_name("mk-phases.nix"), root / "mk-phases.nix")
