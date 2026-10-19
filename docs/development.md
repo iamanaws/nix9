@@ -125,6 +125,7 @@ and bootstrap tools. Recipes can use `pname`/`version`, `buildPhase` and
 `pre` and `post` hooks, such as `preBuild` and `postInstall`. Directory sources
 are copied to `source`; tar archives need an explicit `sourceRoot`. Override
 `unpackPhase` for other formats, or use `buildCommand` for a single script.
+Customize a package with `package.overrideAttrs (old: { version = "2"; })`.
 Each builder gets a private namespace for its tools, headers,
 and libraries. Other host files remain accessible.
 `nativeBuildInputs` adds commands to rc's `path` and POSIX `PATH`.

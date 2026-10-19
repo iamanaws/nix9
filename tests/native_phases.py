@@ -3,6 +3,41 @@
 import re
 
 
+def check_overrides(guest, packages, port):
+    guest.command(f"hget -o /tmp/overrides.nix http://10.0.2.2:{port}/overrides.nix")
+    guest.command(f"overridePackages={packages}")
+    guest.command("fn overrides { nix-build /tmp/overrides.nix --argstr packages $overridePackages -A $1 --out-link $2 }")
+    guest.command("nix-instantiate --eval /tmp/overrides.nix --argstr packages $overridePackages -A unchanged", "true")
+    outputs = {}
+    for name, version, message, hooks in (
+        ("original", "1", "original", "original"),
+        ("changed", "2", "changed", "original\nchanged"),
+        ("chained", "3", "changed", "original\nchanged\nchained"),
+        ("direct", "4", "direct", "original"),
+    ):
+        root = f"/usr/local/nix/state/gcroots/override-{name}"
+        guest.command(f"overrides {name} {root}")
+        result = guest.command(f"cat {root}")
+        paths = re.findall(rf"(?m)^/usr/local/nix/store/[a-z0-9]{{32}}-override-example-{version}$", result)
+        if len(paths) != 1:
+            raise RuntimeError(f"missing overridden package: {result}")
+        package = outputs[name] = paths[0]
+        guest.command(f"cat {package}/message", message)
+        result = guest.command(f"cat {package}/hooks")
+        if hooks + "\n" not in result:
+            raise RuntimeError(f"incorrect overridden hooks: {result}")
+    guest.command("nix-store --gc")
+    for name, package in outputs.items():
+        guest.command(f"nix-store --verify-path {package}")
+        if name in ("changed", "chained"):
+            guest.command(f"dependency=`{{cat {package}/dependency}}; cat $dependency/include/override.h", "dependency")
+        else:
+            guest.command(f"test ! -e {package}/dependency")
+        guest.command(f"rm /usr/local/nix/state/gcroots/override-{name}")
+    guest.command(f"cat {outputs['original']}/message", "original")
+    return "overrideAttrs sources, dependencies, hook extension, chaining, direct attributes and no-op identity passed"
+
+
 def check_phases(guest, packages, port):
     guest.command("mkdir /tmp/phase-source /tmp/phase-source/nested")
     guest.command("echo unpack > /tmp/phase-source/trace")

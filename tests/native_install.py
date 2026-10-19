@@ -15,7 +15,7 @@ from native_fetch import fetch_fixtures, check_fetch
 from native_sources import source_server, check_sources
 from native_fortune import check_fortune
 from native_project import check_project
-from native_phases import check_phases
+from native_phases import check_phases, check_overrides
 from native_inputs import check_inputs
 from native_environments import check_environments
 from native_recovery import interrupt_build, recover_build
@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory() as directory:
     for name in ("default.nix", "hello.c"):
         shutil.copyfile(Path(project_source) / name, root / "project" / name)
     shutil.copyfile(Path(__file__).with_name("phases.nix"), root / "phases.nix")
+    shutil.copyfile(Path(__file__).with_name("overrides.nix"), root / "overrides.nix")
     shutil.copyfile(Path(__file__).with_name("inputs.nix"), root / "inputs.nix")
     shutil.copyfile(Path(__file__).with_name("environments.nix"), root / "environments.nix")
     fetch_fixtures(root)
@@ -57,6 +58,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"hget -o /tmp/packages.tar http://10.0.2.2:{server.server_port}/packages.tar")
                 guest.command("cd / && tar xf /tmp/packages.tar && rm /tmp/packages.tar")
                 phases = check_phases(guest, packages, server.server_port)
+                overrides = check_overrides(guest, packages, server.server_port)
                 inputs = check_inputs(guest, packages, server.server_port)
                 project = check_project(guest, server.server_port)
                 fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
@@ -131,6 +133,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "fortune": fortune,
     "standalone-project": project,
     "phases": phases,
+    "overrides": overrides,
     "inputs": inputs,
     "environments": environments,
     "fetching": fetching,
