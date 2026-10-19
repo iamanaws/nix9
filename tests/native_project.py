@@ -6,7 +6,7 @@ import re
 def check_project(guest, port):
     guest.command("mkdir /tmp/hello")
     for name in ("default.nix", "hello.c"):
-        guest.command(f"hget -o /tmp/hello/{name} http://10.0.2.2:{port}/{name}")
+        guest.command(f"hget -o /tmp/hello/{name} http://10.0.2.2:{port}/project/{name}")
     guest.command("cd /tmp/hello")
     guest.command("nix-build --out-link /usr/local/nix/state/gcroots/hello")
     result = guest.command("cat /usr/local/nix/state/gcroots/hello")

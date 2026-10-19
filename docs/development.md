@@ -94,7 +94,11 @@ Roots are files containing store paths, not symlinks. Remove a root file to rele
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root. Close other store clients before collection.
 Packages use [mkDerivation](../lib/mk-derivation.nix) with store-provided sources
-and bootstrap tools. Each builder gets a private namespace for its tools, headers,
+and bootstrap tools. Recipes can use `pname`/`version`, `buildPhase` and
+`installPhase`, with `checkPhase` enabled by `doCheck = true`. Directory sources
+are copied to `source`; tar archives need an explicit `sourceRoot`. Override
+`unpackPhase` for other formats, or use `buildCommand` for a single script.
+Each builder gets a private namespace for its tools, headers,
 and libraries. Other host files remain accessible.
 
 The package set includes `fetchurl { url = "…"; hash = "sha256-…"; }` for downloads

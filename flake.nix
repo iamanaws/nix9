@@ -100,7 +100,7 @@
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
-          amd64/bin/cat amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test rc/lib/rcmain
+          amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
         cp amd64/bin/* "$out/bin/"
@@ -160,6 +160,8 @@
                 ./tests/native_sources.py
                 ./tests/native_fortune.py
                 ./tests/native_project.py
+                ./tests/native_phases.py
+                ./tests/phases.nix
                 ./tests/native_recovery.py
                 ./tests/native_transfer.py
                 ./tests/native_cache.py

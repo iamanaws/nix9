@@ -5,17 +5,23 @@
   liblua,
 }:
 mkDerivation {
-  name = "lua-${upstream.version}";
+  pname = "lua";
+  version = upstream.version;
   src = fetchurl upstream.src;
   inherit liblua;
-  buildCommand = ''
-    $tools/bin/gunzip -c $src > source.tar
-    $tools/bin/tar xf source.tar
-    cd lua-${upstream.version}/src
+  sourceRoot = "lua-${upstream.version}/src";
+  buildPhase = ''
     $tools/bin/cp $liblua/include/*.h .
     objtype=amd64
-    $tools/bin/mkdir -p $out/bin
     $tools/bin/pcc -c lua.c
-    $tools/bin/pcc -o $out/bin/lua lua.6 $liblua/lib/liblua.a
+    $tools/bin/pcc -o lua lua.6 $liblua/lib/liblua.a
+  '';
+  doCheck = true;
+  checkPhase = ''
+    ./lua -e 'assert(6 * 7 == 42)'
+  '';
+  installPhase = ''
+    $tools/bin/mkdir -p $out/bin
+    $tools/bin/cp lua $out/bin/lua
   '';
 }
