@@ -87,6 +87,17 @@ For your own project, copy [examples/hello](../examples/hello) into the guest an
 run `nix-build` in that directory. It uses the installed package set; the source
 and recipe stay in your project.
 
+For an interactive C development shell in that project:
+
+```rc
+nix-build shell.nix --out-link $roots/development
+development=`{cat $roots/development}
+$development/shell
+```
+
+Exit to restore the original namespace. `mkShell` accepts `nativeBuildInputs`,
+`buildInputs` and an rc `shellHook`.
+
 [environment.nix](../examples/environment.nix) combines packages and configuration with `buildEnv`.
 Copy it into the guest, then build and activate it:
 

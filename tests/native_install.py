@@ -16,7 +16,7 @@ from native_sources import source_server, check_sources
 from native_fortune import check_fortune
 from native_project import check_project
 from native_phases import check_phases, check_overrides
-from native_inputs import check_inputs
+from native_inputs import check_inputs, check_shell
 from native_environments import check_environments
 from native_recovery import interrupt_build, recover_build
 from native_transfer import export_closure, check_transfer
@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copyfile(Path(__file__).with_name("recovery.nix"), root / "recovery.nix")
     subprocess.run([sys.executable, elf2aout, probe, str(root / "store-probe")], check=True)
     (root / "project").mkdir()
-    for name in ("default.nix", "hello.c"):
+    for name in ("default.nix", "shell.nix", "hello.c"):
         shutil.copyfile(Path(project_source) / name, root / "project" / name)
     shutil.copyfile(Path(__file__).with_name("phases.nix"), root / "phases.nix")
     shutil.copyfile(Path(__file__).with_name("overrides.nix"), root / "overrides.nix")
@@ -60,6 +60,7 @@ with tempfile.TemporaryDirectory() as directory:
                 phases = check_phases(guest, packages, server.server_port)
                 overrides = check_overrides(guest, packages, server.server_port)
                 inputs = check_inputs(guest, packages, server.server_port)
+                shell = check_shell(guest, packages, server.server_port)
                 project = check_project(guest, server.server_port)
                 fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
                 fetching = check_fetch(guest, packages, server.server_port)
@@ -135,6 +136,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "phases": phases,
     "overrides": overrides,
     "inputs": inputs,
+    "shell": shell,
     "environments": environments,
     "fetching": fetching,
     "sources": sources,

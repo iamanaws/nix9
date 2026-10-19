@@ -1,6 +1,6 @@
 { packages }:
 let
-  inherit (import packages) mkDerivation;
+  inherit (import packages) mkDerivation mkShell;
   generator = mkDerivation {
     name = "native-generator";
     src = builtins.toFile "generate.c" ''
@@ -112,4 +112,29 @@ in
 {
   native = program false;
   ape = program true;
+  shell = mkShell {
+    name = "input-shell";
+    nativeBuildInputs = [
+      generator
+      (generator.overrideAttrs (_: {
+        name = "other-generator";
+        src = builtins.toFile "generate.c" ''
+          #include <u.h>
+          #include <libc.h>
+          void main(void) { print("#define BUILD_NUMBER 99\n"); exits(nil); }
+        '';
+      }))
+    ];
+    buildInputs = libraries;
+    shellHook = ''
+      shellSource=${(program false).src}
+      apeShellSource=${(program true).src}
+      NIX9_SHELL_TEST=ready
+      echo NIX9-SHELL-READY
+    '';
+  };
+  failedShell = mkShell {
+    name = "failed-shell";
+    shellHook = "test -e /no-such-shell-hook-fixture";
+  };
 }
