@@ -1,0 +1,4 @@
+#!/bin/rc
+flag e +
+rfork e
+exec `{/bin/basename -d $0}^/nix-build --run-env $*

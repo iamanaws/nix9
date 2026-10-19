@@ -15,7 +15,7 @@ foreach command : ['store', 'instantiate', 'build']
   else
     sources += ['src/libcmd/common-eval-args.cc']
     if command == 'build'
-      sources += ['src/libcmd/network-proxy.cc']
+      sources += ['src/libcmd/network-proxy.cc', 'shell.cc']
       args += '-DNIX_BUILD'
     else
       args += '-DNIX_INSTANTIATE'

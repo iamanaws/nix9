@@ -10,7 +10,33 @@
  #include "nix/store/globals.hh"
  #include "nix/store/realisation.hh"
  #include "nix/store/derivations.hh"
-@@ -147,6 +150,9 @@
+@@ -30,6 +33,13 @@
+ #include "nix/cmd/compatibility-settings.hh"
+ #include "nix/util/fun.hh"
+ #include "man-pages.hh"
++
++#ifdef __plan9__
++namespace nix {
++[[noreturn]] void runDevelopmentShell(LocalStore &, const StorePath &,
++    const std::filesystem::path &, const std::optional<std::string> &);
++}
++#endif
+ 
+ using namespace nix;
+ using namespace std::string_literals;
+@@ -125,6 +135,11 @@
+ {
+     auto dryRun = false;
+     auto isNixShell = std::regex_search(argv[0], std::regex("nix-shell$"));
++#ifdef __plan9__
++    // The small rc entry point selects shell mode without a second CLI binary.
++    isNixShell |= argc > 1 && std::string_view(argv[1]) == "--run-env";
++    std::optional<std::string> shellCommand;
++#endif
+     auto pure = false;
+     auto fromArgs = false;
+     auto packages = false;
+@@ -147,6 +162,9 @@
      AutoDelete tmpDir(createTempDir("", myName));
  
      std::string outLink = "./result";
@@ -20,7 +46,30 @@
  
      // List of environment variables kept for --pure
      StringSet keepVars{
-@@ -219,8 +225,14 @@
+@@ -197,6 +215,10 @@
+         }
+     }
+ 
++#ifdef __plan9__
++    if (inShebang) throw UsageError("nix-shell shebangs are not supported");
++#endif
++
+     struct MyArgs : LegacyArgs, MixEvalArgs
+     {
+         using LegacyArgs::LegacyArgs;
+@@ -208,6 +230,11 @@
+     };
+ 
+     MyArgs myArgs(myName, [&](Strings::iterator & arg, const Strings::iterator & end) {
++#ifdef __plan9__
++        if (isNixShell && (*arg == "--pure" || *arg == "--keep" || *arg == "--exclude"
++            || *arg == "-p" || *arg == "--packages" || *arg == "--command"))
++            throw UsageError("'%s' is not supported by the rc development shell", *arg);
++#endif
+         if (*arg == "--help") {
+             deletePath(tmpDir);
+             showManPage(myName);
+@@ -219,8 +246,14 @@
          else if (*arg == "--add-drv-link" || *arg == "--indirect")
              ; // obsolete
  
@@ -36,7 +85,7 @@
  
          else if (*arg == "--attr" || *arg == "-A")
              attrPaths.push_back(getArg(*arg, arg, end));
-@@ -228,8 +240,13 @@
+@@ -228,8 +261,13 @@
          else if (*arg == "--drv-link")
              getArg(*arg, arg, end); // obsolete
  
@@ -51,26 +100,63 @@
  
          else if (*arg == "--dry-run")
              dryRun = true;
-@@ -317,7 +334,18 @@
+@@ -240,7 +278,11 @@
+         else if (isNixShell && (*arg == "--command" || *arg == "--run")) {
+             if (*arg == "--run")
+                 interactive = false;
++#ifdef __plan9__
++            shellCommand = getArg(*arg, arg, end);
++#else
+             envCommand = getArg(*arg, arg, end) + "\nexit";
++#endif
+         }
+ 
+         else if (*arg == "--check")
+@@ -317,7 +359,20 @@
      if (packages && fromArgs)
          throw UsageError("'-p' and '-E' are mutually exclusive");
  
 +#ifdef __plan9__
-+    if (isNixShell) throw UsageError("nix-shell is not supported on Plan 9");
++    if (isNixShell && explicitOutLink)
++        throw UsageError("nix-shell manages its own output root");
 +#endif
      auto store = openStore();
 +#ifdef __plan9__
 +    auto local = store.dynamic_pointer_cast<LocalStore>();
 +    if (!local) throw UsageError("nix-build requires a local store on Plan 9");
 +    auto roots = canonPath(local->config->stateDir.get() / "gcroots");
-+    if (!explicitOutLink) outLink = (roots / "result").string();
++    if (isNixShell) outLink.clear();
++    else if (!explicitOutLink) outLink = (roots / "result").string();
 +    if (!outLink.empty() && !isInDir(canonPath(absPath(outLink)), roots))
 +        throw UsageError("output roots must be files below %s", PathFmt(roots));
 +#endif
      auto evalStore = myArgs.evalStoreUrl ? openStore(StoreReference{*myArgs.evalStoreUrl}) : store;
  
      auto state = std::make_shared<EvalState>(myArgs.lookupPath, evalStore, fetchSettings, evalSettings, store);
-@@ -734,7 +762,10 @@
+@@ -453,6 +508,11 @@
+             store->buildPaths(paths, buildMode, evalStore);
+     };
+ 
++#ifdef __plan9__
++    if (isNixShell && drvs.size() != 1)
++        throw UsageError("nix-shell requires a single mkShell derivation");
++#endif
++#ifndef __plan9__
+     if (isNixShell) {
+         if (drvs.size() != 1)
+             throw UsageError("nix-shell requires a single derivation");
+@@ -681,7 +741,9 @@
+         throw SysError("executing shell '%s'", *shell);
+     }
+ 
+-    else {
++    else
++#endif
++    {
+ 
+         std::vector<DerivedPath> pathsToBuild;
+         std::vector<std::pair<StorePath, std::string>> pathsToBuildOrdered;
+@@ -734,12 +796,24 @@
                  std::string symlink = drvPrefix;
                  if (outputName != "out")
                      symlink += "-" + outputName;
@@ -82,6 +168,20 @@
              }
  
              outPaths.push_back(outputPath);
+         }
+ 
++#ifdef __plan9__
++        if (isNixShell) {
++            if (outPaths.size() != 1)
++                throw UsageError("nix-shell requires a single shell output");
++            auto root = roots / tmpDir.path().filename();
++            deletePath(tmpDir);
++            runDevelopmentShell(*local, outPaths.front(), root, shellCommand);
++        }
++#endif
+         logger->stop();
+ 
+         for (auto & path : outPaths)
 --- a/src/libcmd/network-proxy.cc
 +++ b/src/libcmd/network-proxy.cc
 @@ -1,6 +1,7 @@

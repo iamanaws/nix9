@@ -90,13 +90,12 @@ The source and recipe stay in your project.
 For an interactive C development shell in that project:
 
 ```rc
-nix-build shell.nix --out-link $roots/development
-development=`{cat $roots/development}
-$development/shell
+nix-shell
 ```
 
 Run `mk` to build and `mk clean` to remove build outputs. Exit to restore the
-original namespace. `mkShell` accepts `nativeBuildInputs`,
+original namespace, or use `nix-shell --run 'mk'` for one command.
+The shell keeps its dependencies rooted until it exits. `mkShell` accepts `nativeBuildInputs`,
 `buildInputs` and an rc `shellHook`.
 
 [environment.nix](../examples/environment.nix) combines packages and configuration with `buildEnv`.

@@ -111,6 +111,7 @@ runCommand "nix-${version}-9front-libraries"
     mkdir library-project/cli
     cp ${./meson.build} library-project/cli/meson.build
     cp ${./main.cc} library-project/cli/main.cc
+    cp ${./shell.cc} library-project/cli/shell.cc
     ln -s "$nixSource/src" library-project/cli/src
     for part in util store fetchers expr main; do
       ln -s "$nixSource/src/lib$part" "library-project/subprojects/nix-$part"

@@ -15,4 +15,6 @@ runCommand "nix-${nixUtil.version}-9front"
       ${python3}/bin/python ${nixUtil.cc9.elf2aout} ${nixUtil}/$command.elf "$out/bin/$command"
       chmod +x "$out/bin/$command"
     done
+    cp ${./shell.rc} "$out/bin/nix-shell"
+    chmod +x "$out/bin/nix-shell"
   ''

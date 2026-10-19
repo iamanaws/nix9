@@ -32,12 +32,9 @@ def check_project(guest, port):
     result = guest.command("nix-build --out-link /usr/local/nix/state/gcroots/hello")
     if "building '" in result:
         raise RuntimeError(f"unchanged project was rebuilt: {result}")
-    guest.command("nix-build shell.nix --out-link /usr/local/nix/state/gcroots/hello-shell")
-    guest.command("development=`{cat /usr/local/nix/state/gcroots/hello-shell}")
-    guest.command("$development/shell -c 'whatis mk'", native_mk + "/bin/mk")
-    guest.command("$development/shell -c 'mk && ./6.out && mk clean'", "hello from nix9")
+    guest.command("nix-shell --run 'whatis mk'", native_mk + "/bin/mk")
+    guest.command("nix-shell --run 'mk && ./6.out && mk clean'", "hello from nix9")
     guest.command("test ! -e hello.6 && test ! -e 6.out")
-    guest.command("rm /usr/local/nix/state/gcroots/hello-shell")
     guest.command("echo invalid-c-source > hello.c")
     result = guest.command("nix-build --no-out-link; echo MK-STATUS:$status")
     if not re.search(r"(?m)^MK-STATUS:.*cc9exit=100$", result):
