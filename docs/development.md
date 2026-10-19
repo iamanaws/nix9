@@ -84,8 +84,8 @@ $result/bin/fortune
 ```
 
 For your own project, copy [examples/hello](../examples/hello) into the guest and
-run `nix-build` in that directory. It uses the installed package set; the source
-and recipe stay in your project.
+run `nix-build` in that directory. Its mkfile uses the standard build rules.
+The source and recipe stay in your project.
 
 For an interactive C development shell in that project:
 
@@ -95,7 +95,8 @@ development=`{cat $roots/development}
 $development/shell
 ```
 
-Exit to restore the original namespace. `mkShell` accepts `nativeBuildInputs`,
+Run `mk` to build and `mk clean` to remove build outputs. Exit to restore the
+original namespace. `mkShell` accepts `nativeBuildInputs`,
 `buildInputs` and an rc `shellHook`.
 
 [environment.nix](../examples/environment.nix) combines packages and configuration with `buildEnv`.

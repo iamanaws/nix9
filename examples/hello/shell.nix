@@ -3,5 +3,5 @@
 }:
 pkgs.mkShell {
   name = "hello-shell";
-  shellHook = "echo 'Build with: 6c -o hello.6 hello.c; 6l -o hello hello.6'";
+  shellHook = "echo 'Build with: mk'";
 }

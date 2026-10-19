@@ -3,10 +3,21 @@
 }:
 pkgs.mkDerivation {
   name = "hello";
-  src = ./hello.c;
-  buildCommand = ''
-    6c -o hello.6 $src
+  src = builtins.path {
+    path = ./.;
+    name = "hello-source";
+    filter =
+      path: type:
+      builtins.elem (builtins.baseNameOf path) [
+        "hello.c"
+        "mkfile"
+      ];
+  };
+  buildPhase = "mk";
+  doCheck = true;
+  checkPhase = "./6.out";
+  installPhase = ''
     mkdir -p $out/bin
-    6l -s -o $out/bin/hello hello.6
+    mk install 'BIN='$out/bin
   '';
 }

@@ -4,8 +4,12 @@ import re
 
 
 def check_project(guest, port):
+    includes = ("/amd64/mkfile", "/sys/src/mkfile.proto", "/sys/src/cmd/mkone", "/sys/src/cmd/mklib", "/sys/src/cmd/mkmany")
+    guest.command("echo host-mkfile-unavailable > /tmp/host-mkfile")
+    for file in includes:
+        guest.command(f"bind /tmp/host-mkfile {file}")
     guest.command("mkdir /tmp/hello")
-    for name in ("default.nix", "shell.nix", "hello.c"):
+    for name in ("default.nix", "shell.nix", "hello.c", "mkfile"):
         guest.command(f"hget -o /tmp/hello/{name} http://10.0.2.2:{port}/project/{name}")
     guest.command("cd /tmp/hello")
     guest.command("nix-build --out-link /usr/local/nix/state/gcroots/hello")
@@ -19,11 +23,19 @@ def check_project(guest, port):
         raise RuntimeError(f"unchanged project was rebuilt: {result}")
     guest.command("nix-build shell.nix --out-link /usr/local/nix/state/gcroots/hello-shell")
     guest.command("development=`{cat /usr/local/nix/state/gcroots/hello-shell}")
-    guest.command("$development/shell -c '6c -o hello.6 hello.c && 6l -o hello hello.6 && ./hello'", "hello from nix9")
+    guest.command("$development/shell -c 'mk && ./6.out && mk clean'", "hello from nix9")
+    guest.command("test ! -e hello.6 && test ! -e 6.out")
     guest.command("rm /usr/local/nix/state/gcroots/hello-shell")
+    guest.command("echo invalid-c-source > hello.c")
+    result = guest.command("nix-build --no-out-link; echo MK-STATUS:$status")
+    if not re.search(r"(?m)^MK-STATUS:.*cc9exit=100$", result):
+        raise RuntimeError(f"mk failure did not fail the derivation: {result}")
+    for file in includes:
+        guest.command(f"cat {file}", "host-mkfile-unavailable")
+        guest.command(f"unmount /tmp/host-mkfile {file}")
     guest.command("cd /; rm -r /tmp/hello; nix-store --gc")
     guest.command(f"{package}/bin/hello", "hello from nix9")
     guest.command(f"nix-store --verify-path {package}")
     guest.command("rm /usr/local/nix/state/gcroots/hello; nix-store --gc")
     guest.command(f"test ! -e {package}")
-    return "standalone build, reuse and garbage collection passed"
+    return "mkfile build, install, shell, clean, bundled includes, failures, reuse and GC passed"

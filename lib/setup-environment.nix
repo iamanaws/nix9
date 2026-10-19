@@ -17,6 +17,12 @@ in
   $tools/bin/bind $tools/sys/include /sys/include
   $tools/bin/bind $tools/amd64/include /amd64/include
   $tools/bin/bind $tools/amd64/lib /amd64/lib
+  objtype=amd64
+  $tools/bin/bind $tools/amd64/mkfile /amd64/mkfile
+  $tools/bin/bind $tools/sys/src/mkfile.proto /sys/src/mkfile.proto
+  for(file in mkone mklib mkmany) {
+    $tools/bin/bind $tools/sys/src/cmd/$file /sys/src/cmd/$file
+  }
   nativeBuildInputs=( ${inputList nativeBuildInputs} )
   buildInputs=( ${inputList buildInputs} )
   path=( ${inputList searchPath} ${if interactive then "$path" else ""} )
