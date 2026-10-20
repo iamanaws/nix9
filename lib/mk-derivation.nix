@@ -15,6 +15,24 @@ let
       propagatedBuildInputs = attrs.propagatedBuildInputs or [ ];
       quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
       flags = values: builtins.concatStringsSep " " (map quote values);
+      upperFirst =
+        value:
+        builtins.replaceStrings
+          (builtins.genList (index: builtins.substring index 1 "abcdefghijklmnopqrstuvwxyz") 26)
+          (builtins.genList (index: builtins.substring index 1 "ABCDEFGHIJKLMNOPQRSTUVWXYZ") 26)
+          (builtins.substring 0 1 value)
+        + builtins.substring 1 (builtins.stringLength value) value;
+      phaseHooks =
+        phase:
+        let
+          match = builtins.match "(.+)Phase" phase;
+          stem = if match == null then phase else builtins.head match;
+          suffix = upperFirst stem;
+        in
+        [
+          "pre${suffix}"
+          "post${suffix}"
+        ];
       propagate =
         file: inputs:
         if inputs == [ ] then
@@ -85,29 +103,36 @@ let
           else
             ""
         );
-      script =
-        attrs.buildCommand or ''
-          ${attrs.preUnpack or ""}
-          ${unpackPhase}
-          cd $sourceRoot
-          ${attrs.postUnpack or ""}
-          ${attrs.preBuild or ""}
-          ${buildPhase}
-          ${attrs.postBuild or ""}
-          ${
-            if attrs.doCheck or false then
-              ''
-                ${attrs.preCheck or ""}
-                ${attrs.checkPhase or ""}
-                ${attrs.postCheck or ""}
-              ''
-            else
-              ""
-          }
-          ${attrs.preInstall or ""}
-          ${installPhase}
-          ${attrs.postInstall or ""}
-        '';
+      defaultPhases = [
+        "unpackPhase"
+        "buildPhase"
+        "checkPhase"
+        "installPhase"
+      ];
+      phases = attrs.phases or defaultPhases;
+      phaseAttrs = defaultPhases ++ phases;
+      defaults = {
+        inherit unpackPhase buildPhase installPhase;
+        checkPhase = "";
+      };
+      runPhase =
+        phase:
+        let
+          hooks = phaseHooks phase;
+          body = attrs.${phase} or (defaults.${phase} or (throw "unknown build phase '${phase}'"));
+        in
+        (
+          if phase == "checkPhase" && !(attrs.doCheck or false) then
+            ""
+          else
+            ''
+              ${attrs.${builtins.elemAt hooks 0} or ""}
+              ${body}${if phase == "unpackPhase" then "\ncd $sourceRoot" else ""}
+              ${attrs.${builtins.elemAt hooks 1} or ""}
+            ''
+        )
+        + (if phase == "checkPhase" then "\n" else "");
+      script = attrs.buildCommand or (builtins.concatStringsSep "" (map runPhase phases));
     in
     derivation (
       {
@@ -149,34 +174,27 @@ let
           ''
         ];
       }
-      // builtins.removeAttrs attrs [
-        "name"
-        "meta"
-        "passthru"
-        "sourceRoot"
-        "nativeBuildInputs"
-        "buildInputs"
-        "propagatedNativeBuildInputs"
-        "propagatedBuildInputs"
-        "buildCommand"
-        "unpackPhase"
-        "buildPhase"
-        "checkPhase"
-        "installPhase"
-        "doCheck"
-        "makefile"
-        "makeFlags"
-        "buildFlags"
-        "installFlags"
-        "preUnpack"
-        "postUnpack"
-        "preBuild"
-        "postBuild"
-        "preCheck"
-        "postCheck"
-        "preInstall"
-        "postInstall"
-      ]
+      // builtins.removeAttrs attrs (
+        [
+          "name"
+          "meta"
+          "passthru"
+          "sourceRoot"
+          "nativeBuildInputs"
+          "buildInputs"
+          "propagatedNativeBuildInputs"
+          "propagatedBuildInputs"
+          "buildCommand"
+          "phases"
+          "doCheck"
+          "makefile"
+          "makeFlags"
+          "buildFlags"
+          "installFlags"
+        ]
+        ++ phaseAttrs
+        ++ builtins.concatMap phaseHooks phaseAttrs
+      )
     )
     // {
       inherit meta passthru;

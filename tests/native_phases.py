@@ -82,6 +82,7 @@ def check_phases(guest, packages, port):
     guest.command(f"hget -o /tmp/phases.nix http://10.0.2.2:{port}/phases.nix")
     guest.command(f"phasePackages={packages}")
     guest.command("fn phases { nix-build /tmp/phases.nix --argstr packages $phasePackages $* }")
+    custom = "--arg phases '[\"unpackPhase\" \"generatePhase\" \"buildPhase\" \"checkPhase\" \"installPhase\"]'"
     for options, expected in (
         ("", "unpack\nbuild\ncheck\ninstall"),
         ("--arg doCheck false", "unpack\nbuild\ninstall"),
@@ -89,6 +90,12 @@ def check_phases(guest, packages, port):
         ("--arg hooks true", "preUnpack\nunpack\npostUnpack\npreBuild\nbuild\npostBuild\npreCheck\ncheck\npostCheck\npreInstall\ninstall\npostInstall"),
         ("--arg hooks true --arg doCheck false", "preUnpack\nunpack\npostUnpack\npreBuild\nbuild\npostBuild\npreInstall\ninstall\npostInstall"),
         ("--arg hooks true --arg singleCommand true --argstr fail preUnpack", "single-command"),
+        (custom, "unpack\ngenerate\nbuild\ncheck\ninstall"),
+        (custom + " --arg doCheck false", "unpack\ngenerate\nbuild\ninstall"),
+        (custom + " --arg hooks true", "preUnpack\nunpack\npostUnpack\npreGenerate\ngenerate\npostGenerate\npreBuild\nbuild\npostBuild\npreCheck\ncheck\npostCheck\npreInstall\ninstall\npostInstall"),
+        ("--arg phases '[\"unpackPhase\" \"generatePhase\" \"installPhase\"]' --argstr fail build", "unpack\ngenerate\ninstall"),
+        ("--arg phases '[\"unpackPhase\" \"generatePhase\" \"checkPhase\" \"buildPhase\" \"installPhase\"]'", "unpack\ngenerate\ncheck\nbuild\ninstall"),
+        ("--arg phases '[\"missingPhase\"]' --arg singleCommand true", "single-command"),
     ):
         guest.command(f"phases {options} --out-link /usr/local/nix/state/gcroots/phases")
         result = guest.command("cat `{cat /usr/local/nix/state/gcroots/phases}")
@@ -102,5 +109,12 @@ def check_phases(guest, packages, port):
         result = guest.command(f"phases --arg hooks true --argstr fail {hook} --no-out-link; echo PHASE-STATUS:$status")
         if not re.search(r"(?m)^PHASE-STATUS:.*cc9exit=100$", result) or f"phase-failure-{hook}" not in result:
             raise RuntimeError(f"{hook} failure was not reported: {result}")
+    for phase in ("generate", "preGenerate", "postGenerate"):
+        result = guest.command(f"phases {custom} --arg hooks true --argstr fail {phase} --no-out-link; echo PHASE-STATUS:$status")
+        if not re.search(r"(?m)^PHASE-STATUS:.*cc9exit=100$", result) or f"phase-failure-{phase}" not in result:
+            raise RuntimeError(f"{phase} failure was not reported: {result}")
+    result = guest.command("phases --arg phases '[\"missingPhase\"]' --no-out-link; echo PHASE-STATUS:$status")
+    if "unknown build phase 'missingPhase'" not in result or not re.search(r"(?m)^PHASE-STATUS:.+$", result):
+        raise RuntimeError(f"unknown phase was not rejected: {result}")
     guest.command("rm /usr/local/nix/state/gcroots/phases")
-    return "phase and hook order, optional checks, unpack override, buildCommand and failures passed"
+    return "default/custom phase order, hooks, shared state, skipped phases, optional checks, unpack override, buildCommand and failures passed"

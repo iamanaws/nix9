@@ -5,6 +5,7 @@
   customUnpack ? false,
   hooks ? false,
   singleCommand ? false,
+  phases ? null,
 }:
 let
   pkgs = import packages;
@@ -38,6 +39,8 @@ pkgs.mkDerivation (
     '';
     preBuild = hook "preBuild";
     postBuild = hook "postBuild";
+    preGenerate = hook "preGenerate";
+    postGenerate = hook "postGenerate";
     preCheck = hook "preCheck";
     postCheck = hook "postCheck";
     preInstall = hook "preInstall";
@@ -51,11 +54,25 @@ pkgs.mkDerivation (
         "";
     buildPhase = ''
       test -s trace
+      ${
+        if phases != null && builtins.elem "generatePhase" phases then
+          "test $generationState '=' shared"
+        else
+          ""
+      }
       echo patched > nested/.message
       test `{cat $src/nested/.message} '=' original
       ${stop "build"}
       echo build >> $TMPDIR/phase-order
       echo built > built
+    '';
+    generatePhase = ''
+      test -s trace
+      test $hookState '=' shared
+      ${stop "generate"}
+      echo generate >> $TMPDIR/phase-order
+      generationState=shared
+      echo generated > built
     '';
     checkPhase = ''
       test -s built
@@ -83,4 +100,5 @@ pkgs.mkDerivation (
       { }
   )
   // (if singleCommand then { buildCommand = "echo single-command > $out"; } else { })
+  // (if phases == null then { } else { inherit phases; })
 )
