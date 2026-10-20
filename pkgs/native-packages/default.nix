@@ -23,6 +23,7 @@ let
       mkDerivation = bootstrapStdenv.mkDerivation;
       src = ./mk-source/sys/src/cmd/mk;
     };
+    yacc = callPackage ./pkgs/yacc.nix { src = ./yacc-source; };
     fetchurl = callPackage ./pkgs/fetchurl.nix { };
     liblua = callPackage ./pkgs/liblua.nix {
       inherit upstream;

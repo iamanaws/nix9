@@ -183,6 +183,9 @@
                 ./tests/libsec/native.nix
                 ./tests/libsec/mp.c
                 ./tests/native_project.py
+                ./tests/native_yacc.py
+                ./tests/yacc.nix
+                ./tests/yacc
                 ./tests/native_phases.py
                 ./tests/phases.nix
                 ./tests/mk-phases.nix
@@ -328,6 +331,21 @@
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
+      yaccSource = pkgs.runCommand "9front-yacc-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/yacc.c sys/lib/yaccpar sys/lib/yaccpars
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+        test -s "$out/sys/src/cmd/yacc.c"
+        test -s "$out/sys/lib/yaccpar"
+        test -s "$out/sys/lib/yaccpars"
+      '';
       libmp = pkgs.callPackage ./pkgs/libmp {
         inherit cTools sysroot;
         source = secSource;
@@ -375,6 +393,7 @@
           secSource
           fortuneSource
           mkSource
+          yaccSource
           sha1sum
           ;
       };
