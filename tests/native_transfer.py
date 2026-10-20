@@ -9,22 +9,14 @@ import threading
 
 from artifacts import ArtifactServer
 from guest import boot
-from native_cache import cache_fixture, check_cache, verify_published, interrupt_repair, recover_repair
+from cache_publish import verify_published
+from native_cache import cache_fixture, check_cache, interrupt_repair, recover_repair
 from native_cache_network import check_network_cache
 from native_cache_http import check_http_cache
 
 
 def store_paths(output):
     return set(re.findall(r"(?m)^/usr/local/nix/store/[a-z0-9]{32}-[^\s]+$", output))
-
-
-def export_closure(guest, package, port):
-    guest.command(f"package={package}")
-    paths = store_paths(guest.command("nix-store -qR $package"))
-    guest.command("nix-store --export `{nix-store -qR $package} > /tmp/closure.export")
-    guest.command("size=`{ls -l /tmp/closure.export | awk '{print $6}'}")
-    guest.command(f"hget -r 'Content-Length: '^$size -P http://10.0.2.2:{port}/closure.export < /tmp/closure.export")
-    return paths
 
 
 def check_transfer(qemu, image, root, archive, prefix, sources, expected):

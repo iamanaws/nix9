@@ -6,7 +6,7 @@ import threading
 
 from artifacts import ArtifactServer
 from guest import files_guest
-from native_cache import publish_cache, verify_published
+from cache_publish import publish_cache, verify_published
 
 
 def check_program(guest, package):

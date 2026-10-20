@@ -108,4 +108,5 @@ def check_eval_fetch(guest, root):
     guest.command("rm /usr/local/nix/state/gcroots/eval-source /usr/local/nix/state/gcroots/eval-tree; nix-store --gc")
     guest.command("test ! -e $evalSource && test ! -e $tarballTree")
     guest.command("XDG_CACHE_HOME=$previousEvalCache")
+    guest.command("webfs -m /mnt/web -T 60000")
     return "evaluator file/archive fetching, hashes, imports, permissions, unsafe members, pure evaluation, offline reuse and GC passed"

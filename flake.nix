@@ -125,8 +125,8 @@
         cp ${sha1sum.source} "$out/sha1sum.c"
         cp ${sha1sum}/bin/sha1sum "$out/cross"
       '';
-      nixUtilTests =
-        pkgs.runCommand "nix-util-tests"
+      nixCoreTests =
+        pkgs.runCommand "nix-core-tests"
           {
             SODIUM_LIBRARY = "${pkgs.libsodium}/lib/libsodium.so";
             requiredSystemFeatures = [ "kvm" ];
@@ -158,6 +158,18 @@
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
               ${nixUtil.cc9.elf2aout} ${nixProbe}/probe.elf ${nixUtil}/nix-store.elf ${nixUtil}/nix-instantiate.elf ${nixUtil}/nix-build.elf \
               ${./pkgs/hello-c-cross} ${./tests/c-abi} ${nativePackages} ${nativeTools} "$out"
+          '';
+      nixNativeTests =
+        pkgs.runCommand "nix-native-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [
+              pkgs.nix
+              pkgs.openssl
+            ];
+          }
+          ''
+            mkdir -p "$out"
             ${python}/bin/python ${
               testSupport [
                 ./tests/native_install.py
@@ -166,6 +178,7 @@
                 ./tests/eval_tarball.py
                 ./tests/native_sources.py
                 ./tests/native_fortune.py
+                ./tests/cache_publish.py
                 ./tests/libsec.py
                 ./tests/libsec/native.nix
                 ./tests/libsec/mp.c
@@ -179,10 +192,6 @@
                 ./tests/native_environments.py
                 ./tests/environments.nix
                 ./tests/native_recovery.py
-                ./tests/native_transfer.py
-                ./tests/native_cache.py
-                ./tests/native_cache_network.py
-                ./tests/native_cache_http.py
                 ./tests/artifacts.py
                 ./tests/recovery.nix
                 ./tests/sources.nix
@@ -197,6 +206,33 @@
               ${nativePackagesArchive} ${nativePackagesArchive.guestPrefix} "$out" ${lua.archive} \
               ${nixProbe}/probe.elf ${nixUtil.cc9.elf2aout} ${./examples/hello}
           '';
+      nixStoreTests =
+        pkgs.runCommand "nix-store-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [ pkgs.nix ];
+          }
+          ''
+            mkdir -p "$out"
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_store.py
+                ./tests/cache_publish.py
+                ./tests/native_transfer.py
+                ./tests/native_cache.py
+                ./tests/native_cache_network.py
+                ./tests/native_cache_http.py
+                ./tests/artifacts.py
+              ]
+            }/native_store.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nixPackage} ${nixPackage.guestPrefix} ${nixNativeTests}/closure \
+              ${nixProbe}/probe.elf ${nixUtil.cc9.elf2aout} "$out"
+          '';
+      nixUtilTests = pkgs.runCommand "nix-util-tests" { } ''
+        mkdir -p "$out"
+        cp ${nixCoreTests}/results.json ${nixNativeTests}/native-install.json ${nixStoreTests}/native-store.json "$out/"
+      '';
       mkPlan9Program = import ./lib/mk-plan9-program.nix {
         inherit
           pkgs
@@ -481,6 +517,9 @@
         inherit lua;
         native-tools = nativeTools;
         nix-util = nixUtil;
+        nix-core-tests = nixCoreTests;
+        nix-native-tests = nixNativeTests;
+        nix-store-tests = nixStoreTests;
         nix-util-tests = nixUtilTests;
         lua-package = luaPackage;
         sha1sum-package = sha1sumPackage;

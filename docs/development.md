@@ -171,7 +171,9 @@ Use `builtins.fetchTarball` for archives; its `sha256` is the unpacked tree's NA
 hash. It strips a single enclosing directory. Pinned files and trees can be reused offline.
 Native `lua` builds against `liblua`. Both fetch the same pinned archive and
 compile with APE.
-`nix-util-tests` checks fetching, isolated builds and reuse after reboot.
+Use `nix-native-tests` for native packages and shells, `nix-core-tests` for libraries
+and commands, or `nix-store-tests` for transfers and caches. Store tests reuse the
+native suite's exported closure. `nix-util-tests` runs all three.
 
 For a trusted transfer between machines using the same store path, export the
 package and its dependencies, then import the file on the destination:

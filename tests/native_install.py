@@ -21,7 +21,15 @@ from native_phases import check_phases, check_overrides, check_mk_phases
 from native_inputs import check_inputs, check_shell
 from native_environments import check_environments
 from native_recovery import interrupt_build, recover_build
-from native_transfer import export_closure, check_transfer
+
+
+def export_closure(guest, package, port):
+    guest.command(f"package={package}")
+    paths = set(re.findall(r"(?m)^/usr/local/nix/store/[^\s]+$", guest.command("nix-store -qR $package")))
+    guest.command("nix-store --export `{nix-store -qR $package} > /tmp/closure.export")
+    guest.command("size=`{ls -l /tmp/closure.export | awk '{print $6}'}")
+    guest.command(f"hget -r 'Content-Length: '^$size -P http://10.0.2.2:{port}/closure.export < /tmp/closure.export")
+    return paths
 
 
 qemu, image, archive, prefix, packages_archive, packages, output, lua_archive, probe, elf2aout, project_source = sys.argv[1:]
@@ -131,7 +139,13 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command(f"{sources['package']}/bin/lua -e 'print(6 * 7)'", "42")
         guest.command("rm /usr/local/nix/state/gcroots/lua; nix-store --gc")
         guest.command(f"test ! -e {sources['package']} && test ! -e {sources['library']}")
-    transfer = check_transfer(qemu, image, root, archive, prefix, sources, closure)
+    fixture = Path(output, "closure")
+    fixture.mkdir()
+    for name in ("closure.export", "cert.pem", "key.pem"):
+        shutil.copyfile(root / name, fixture / name)
+    (fixture / "info.json").write_text(json.dumps({
+        "package": sources["package"], "library": sources["library"], "paths": sorted(closure),
+    }) + "\n")
 
 Path(output, "native-install.json").write_text(json.dumps({
     "prefix": prefix,
@@ -155,6 +169,5 @@ Path(output, "native-install.json").write_text(json.dumps({
     "reuse-after-reboot": "passed",
     "permanent-roots-and-gc": "passed",
     "interrupted-build-recovery": recovery,
-    "closure-transfer": transfer,
 }, indent=2) + "\n")
 print("PASS: installed native Nix builds, reuses packages and recovers an interrupted build")
