@@ -30,11 +30,12 @@ def check_overrides(guest, packages, port):
     guest.command(f"hget -o /tmp/overrides.nix http://10.0.2.2:{port}/overrides.nix")
     guest.command(f"overridePackages={packages}")
     guest.command("fn overrides { nix-build /tmp/overrides.nix --argstr packages $overridePackages -A $1 --out-link $2 }")
-    for attribute in ("unchanged", "injection"):
+    for attribute in ("unchanged", "injection", "metadata"):
         guest.command(f"nix-instantiate --eval /tmp/overrides.nix --argstr packages $overridePackages -A {attribute}", "true")
     outputs = {}
     for name, version, message, hooks in (
         ("original", "1", "original", "original"),
+        ("annotated", "1", "original", "original"),
         ("changed", "2", "changed", "original\nchanged"),
         ("chained", "3", "changed", "original\nchanged\nchained"),
         ("direct", "4", "direct", "original"),
@@ -54,6 +55,8 @@ def check_overrides(guest, packages, port):
         result = guest.command(f"cat {package}/hooks")
         if hooks + "\n" not in result:
             raise RuntimeError(f"incorrect overridden hooks: {result}")
+    if outputs["annotated"] != outputs["original"]:
+        raise RuntimeError("metadata changed the build output")
     guest.command("nix-store --gc")
     for name, package in outputs.items():
         guest.command(f"nix-store --verify-path {package}")
@@ -69,7 +72,7 @@ def check_overrides(guest, packages, port):
             guest.command(f"test ! -e {package}/argument")
         guest.command(f"rm /usr/local/nix/state/gcroots/override-{name}")
     guest.command(f"cat {outputs['original']}/message", "original")
-    return "callPackage injection, defaults, argument overrides, dependency replacement, overrideAttrs and mixed chaining passed"
+    return "callPackage injection, defaults, argument overrides, dependency replacement, metadata, passthru, overrideAttrs and mixed chaining passed"
 
 
 def check_phases(guest, packages, port):

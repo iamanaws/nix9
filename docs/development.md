@@ -155,6 +155,8 @@ Directory sources are copied to `source`; tar archives need an explicit
 `unpackPhase` for other formats, or use `buildCommand` for a single script.
 Use `package.override { dependency = replacement; }` to change `callPackage` arguments,
 or `package.overrideAttrs (old: { version = "2"; })` to change derivation attributes.
+`meta` holds package metadata; `passthru` exposes extra package attributes.
+Neither enters the build environment.
 Each builder gets a private namespace for its tools, headers,
 and libraries. Other host files remain accessible.
 `nativeBuildInputs` adds commands to rc's `path` and POSIX `PATH`.

@@ -7,6 +7,8 @@ let
     attrs:
     let
       name = attrs.name or "${attrs.pname}-${attrs.version}";
+      meta = attrs.meta or { };
+      passthru = attrs.passthru or { };
       nativeBuildInputs = attrs.nativeBuildInputs or [ ];
       buildInputs = attrs.buildInputs or [ ];
       propagatedNativeBuildInputs = attrs.propagatedNativeBuildInputs or [ ];
@@ -149,6 +151,8 @@ let
       }
       // builtins.removeAttrs attrs [
         "name"
+        "meta"
+        "passthru"
         "sourceRoot"
         "nativeBuildInputs"
         "buildInputs"
@@ -175,9 +179,11 @@ let
       ]
     )
     // {
+      inherit meta passthru;
       overrideAttrs =
         overrides:
         mkDerivation (attrs // (if builtins.isFunction overrides then overrides attrs else overrides));
-    };
+    }
+    // passthru;
 in
 mkDerivation

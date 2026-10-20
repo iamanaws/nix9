@@ -28,6 +28,9 @@ let
       buildInputs = if dependency == null then [ ] else [ dependency ];
       buildPhase = "cp $src message";
       installPhase = ''
+        test ! -e /env/meta
+        test ! -e /env/passthru
+        test ! -e /env/label
         mkdir -p $out
         cp message $out/message
       '';
@@ -44,6 +47,26 @@ let
         );
     };
   original = callPackage recipe { };
+  annotated = original.overrideAttrs {
+    meta = {
+      description = "Override example";
+      license.spdxId = "MIT";
+    };
+    passthru = {
+      label = "example";
+      inherit dependency;
+      identity = value: value;
+      unused = throw "unused passthru must stay lazy";
+    };
+  };
+  reannotated = annotated.overrideAttrs (old: {
+    meta = old.meta // {
+      description = "Changed description";
+    };
+    passthru = old.passthru // {
+      label = old.passthru.label + " changed";
+    };
+  });
   called = callPackage recipe {
     version = "5";
     message = "called";
@@ -68,10 +91,23 @@ in
 {
   inherit
     original
+    annotated
     changed
     called
     arguments
     ;
+  metadata =
+    assert original.meta == { } && original.passthru == { };
+    assert annotated.meta.description == "Override example";
+    assert annotated.meta.license.spdxId == "MIT";
+    assert annotated.label == "example" && annotated.passthru.label == annotated.label;
+    assert annotated.identity 42 == 42 && annotated.dependency.drvPath == dependency.drvPath;
+    assert reannotated.meta.description == "Changed description";
+    assert
+      reannotated.label == "example changed" && reannotated.dependency.drvPath == dependency.drvPath;
+    assert (annotated.override { message = "overridden"; }).label == annotated.label;
+    assert reannotated.drvPath == original.drvPath && annotated.drvPath == original.drvPath;
+    true;
   argumentChain = arguments.override (old: {
     version = "7";
     message = old.message + " chained";
