@@ -84,13 +84,6 @@ For your own project, copy `$nix9/hello` to a writable directory and
 run `nix-build` there. Its mkfile uses the standard build rules.
 The source and recipe stay in your project.
 
-The archive also includes a [ramfs example](../examples/ramfs). It mounts a memory filesystem in a
-private namespace, writes a file and unmounts it:
-
-```rc
-nix-build $nix9/ramfs --out-link $roots/ramfs
-rc $nix9/ramfs/run.rc `{cat $roots/ramfs}
-```
 `pkgs.callPackage ./package.nix { }` supplies recipe dependencies; explicit arguments override them.
 
 For an interactive C development shell in that project:
@@ -121,6 +114,20 @@ an environment fail the build.
 The optional `files` attribute maps existing absolute file paths to text.
 Activation binds the generated files in the shell's namespace. Switching away
 reveals the original files.
+
+Run `$environment/session COMMAND ARGS...` for a private session, or omit the
+command for an interactive rc shell. The optional `namespace` rc snippet runs
+after activation. Mounts made there disappear when the session's last process
+exits. Sourcing `activate` does not run the snippet.
+
+The bootstrap includes a [ramfs example](../examples/ramfs) that writes and reads
+a file in a private memory filesystem:
+
+```rc
+nix-build $nix9/ramfs --out-link $roots/ramfs
+environment=`{cat $roots/ramfs}
+$environment/session rc $nix9/ramfs/run.rc
+```
 
 To keep generations and roll back:
 

@@ -3,6 +3,7 @@
   name ? "user-environment",
   paths ? [ ],
   files ? { },
+  namespace ? "",
 }:
 let
   selected = builtins.foldl' (
@@ -112,5 +113,16 @@ mkDerivation {
     )}
     ${if targets == [ ] then "" else "echo 'nix9NextEnvironment='$out > $out/activate"}
     echo ${quote activate} >> $out/activate
+    echo ${quote ''
+      #!/bin/rc -e
+      rfork ne
+    ''} > $out/session
+    echo '. '$out^'/activate' >> $out/session
+    echo ${quote ''
+      ${namespace}
+      if(~ $#* 0) exec /bin/rc -i
+      if not exec $*
+    ''} >> $out/session
+    chmod +x $out/session
   '';
 }

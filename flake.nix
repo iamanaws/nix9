@@ -582,6 +582,7 @@
         ${python}/bin/python ${
           testSupport [
             ./tests/native_ramfs.py
+            ./tests/sessions.nix
           ]
         }/native_ramfs.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"

@@ -22,7 +22,7 @@ def wait_for_servers(guest, expected):
 
 
 qemu, image, archive, output = sys.argv[1:]
-fixtures = {"bootstrap.tar": archive}
+fixtures = {"bootstrap.tar": archive, "sessions.nix": Path(__file__).with_name("sessions.nix")}
 roots = "/usr/local/nix/state/gcroots"
 with files_guest(qemu, image, fixtures) as guest:
     guest.child.timeout = 600
@@ -36,17 +36,20 @@ with files_guest(qemu, image, fixtures) as guest:
         guest.command(f"nix-build '<nix9>' -A {name} --check --no-out-link")
     before = servers(guest.command("ps"))
     namespace = guest.command("cat /proc/$pid/ns")
-    result = guest.command("@{ rfork ne; . $environment/activate; ramfs -m /mnt; ps; unmount /mnt }")
+    guest.child.timeout = 30
+    if servers(guest.command("@{ . $environment/activate; ps }")) != before:
+        raise RuntimeError("activation started a session")
+    result = guest.command("$environment/session rc -c ps")
     if len(servers(result) - before) != 1:
         raise RuntimeError(f"missing live ramfs server: {result}")
     wait_for_servers(guest, before)
     for _ in range(2):
-        guest.command("rc $nix9/ramfs/run.rc $environment", "Hello from ramfs")
+        guest.command("$environment/session rc $nix9/ramfs/run.rc", "Hello from ramfs")
         guest.command("test ! -f /mnt/hello")
         if guest.command("cat /proc/$pid/ns") != namespace:
             raise RuntimeError("service changed the parent namespace")
         wait_for_servers(guest, before)
-    result = guest.command("@{ rfork ne; . $environment/activate; ramfs -m /mnt; ps; exit deliberate }; echo SERVICE-STATUS:$status")
+    result = guest.command("$environment/session rc -c 'ps; exit deliberate'; echo SERVICE-STATUS:$status")
     if not re.search(r"(?m)^SERVICE-STATUS:.*deliberate$", result):
         raise RuntimeError(f"missing service failure: {result}")
     if len(servers(result) - before) != 1:
@@ -56,7 +59,44 @@ with files_guest(qemu, image, fixtures) as guest:
         raise RuntimeError("failed service changed the parent namespace")
     guest.command("test ! -f /mnt/hello")
 
+    guest.command("$environment/session rc -c 'echo $pid > /tmp/nix9-session.pid; exec sleep 600' > /tmp/nix9-session.log &")
+    guest.command("job=$apid; for(i in 1 2 3 4 5) if(! test -f /tmp/nix9-session.pid) sleep 1; test -f /tmp/nix9-session.pid")
+    if len(servers(guest.command("ps")) - before) != 1:
+        raise RuntimeError("missing live ramfs server before interruption")
+    guest.command("echo interrupt > /proc/^$job^/note")
+    guest.command("wait $job; test ! -e /proc/^$job")
+    wait_for_servers(guest, before)
+    if guest.command("cat /proc/$pid/ns") != namespace:
+        raise RuntimeError("interrupted service changed the parent namespace")
+
+    for name in ("configured", "failed"):
+        guest.command(f"nix-build /tmp/sessions.nix --argstr packages $nix9/packages -A {name} --out-link {roots}/{name}")
+        guest.command(f"{name}=`{{cat {roots}/{name}}}")
+    guest.command("echo original > /tmp/nix9-session.conf")
+    guest.command("$configured/session rc -c 'cat /tmp/nix9-session.conf; echo private > /mnt/hello'", "session configuration")
+    guest.command("cat /tmp/nix9-session.conf", "original")
+    guest.command("test ! -f /mnt/hello")
+    result = guest.command("$failed/session rc -c 'echo unexpected > /tmp/nix9-started'; echo SERVICE-STATUS:$status")
+    if not re.search(r"(?m)^SERVICE-STATUS:.*setup-failed$", result):
+        raise RuntimeError(f"session setup failure was not propagated: {result}")
+    guest.command("test ! -e /tmp/nix9-started")
+    wait_for_servers(guest, before)
+    if guest.command("cat /proc/$pid/ns") != namespace:
+        raise RuntimeError("session setup changed the parent namespace")
+
+    guest.child.sendline("$environment/session")
+    guest.child.expect(r"(?m)^term% ")
+    guest.child.sendline("echo interactive > /mnt/hello; cat /mnt/hello")
+    guest.child.expect(r"(?m)^interactive\r*$")
+    guest.child.expect(r"(?m)^term% ")
+    guest.child.sendline("exit")
+    guest.child.expect(r"(?m)^term% ")
+    wait_for_servers(guest, before)
+    guest.command("test ! -f /mnt/hello")
+    if guest.command("cat /proc/$pid/ns") != namespace:
+        raise RuntimeError("interactive session changed the parent namespace")
+
 Path(output).mkdir()
 Path(output, "results.json").write_text(json.dumps({
-    "ramfs": "native build, private mount, read/write, unmount and namespace exit passed",
+    "ramfs": "native build, commands, interactive shell, configuration, failure and interruption cleanup passed",
 }, indent=2) + "\n")
