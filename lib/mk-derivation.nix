@@ -147,6 +147,7 @@ let
           propagatedBuildInputs
           ;
         system = "x86_64-plan9";
+        SOURCE_DATE_EPOCH = "1";
         builder = "${tools}/bin/rc";
         args = [
           "-m"
@@ -155,6 +156,13 @@ let
           "-c"
           ''
             rfork n
+            # Keep compiler history independent of the temporary directory name.
+            $tools/bin/bind -c $TMPDIR /mnt/temp
+            cd /mnt/temp
+            TMPDIR=/mnt/temp
+            TMP=/mnt/temp
+            TEMP=/mnt/temp
+            NIX_BUILD_TOP=/mnt/temp
             $tools/bin/mkdir .nix-empty .nix-rc
             $tools/bin/cp $tools/rcmain .nix-rc/rcmain
             $tools/bin/bind $tools/bin /bin

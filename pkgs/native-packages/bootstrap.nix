@@ -1,11 +1,22 @@
 let
-  seedStdenv = import ./stdenv.nix { tools = ./tools; };
+  rawStdenv = import ./stdenv.nix { tools = ./tools; };
+  seedStdenv = import ./stdenv.nix {
+    tools = ./tools;
+    initialPath = [ bootstrap.ar ];
+  };
   bootstrap = rec {
     stdenv = import ./stdenv.nix {
       tools = ./tools;
-      initialPath = [ mk ];
+      initialPath = [
+        mk
+        ar
+      ];
     };
     callPackage = import ./call-package.nix bootstrap;
+    ar = callPackage ./pkgs/ar.nix {
+      mkDerivation = rawStdenv.mkDerivation;
+      src = ./ar.c;
+    };
     libbio = callPackage ./pkgs/libbio.nix {
       mkDerivation = seedStdenv.mkDerivation;
       src = ./fortune-source/sys/src/libbio;

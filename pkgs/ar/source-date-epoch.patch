@@ -1,0 +1,47 @@
+--- a/ar.c
++++ b/ar.c
+@@ -93,6 +93,7 @@
+ char	*file;				/* current file or member being worked on */
+ Biobuf	bout;
+ Biobuf bar;
++long	epoch = -1;
+ 
+ void	arcopy(Biobuf*, Arfile*, Armember*);
+ int	arcreate(char*);
+@@ -140,7 +141,17 @@
+ void
+ main(int argc, char *argv[])
+ {
+-	char *cp;
++	char *cp, *end;
++	ulong value;
++
++	cp = getenv("SOURCE_DATE_EPOCH");
++	if(cp != nil){
++		value = strtoul(cp, &end, 10);
++		if(*cp == 0 || *end != 0 || value > 0x7fffffffUL)
++			sysfatal("invalid SOURCE_DATE_EPOCH");
++		epoch = value;
++		free(cp);
++	}
+ 
+ 	Binit(&bout, 1, OWRITE);
+ 	if(argc < 3)
+@@ -731,7 +742,7 @@
+ 	for (cp = strchr(bp->hdr.name, 0);		/* blank pad on right */
+ 		cp < bp->hdr.name+sizeof(bp->hdr.name); cp++)
+ 			*cp = ' ';
+-	sprint(bp->hdr.date, "%-12ld", d->mtime);
++	sprint(bp->hdr.date, "%-12ld", epoch < 0 ? d->mtime : epoch);
+ 	sprint(bp->hdr.uid, "%-6d", 0);
+ 	sprint(bp->hdr.gid, "%-6d", 0);
+ 	sprint(bp->hdr.mode, "%-8lo", d->mode);
+@@ -829,7 +840,7 @@
+ 	len = symdefsize;
+ 	if(len&01)
+ 		len++;
+-	sprint(a.date, "%-12ld", time(0));
++	sprint(a.date, "%-12ld", epoch < 0 ? time(0) : epoch);
+ 	sprint(a.uid, "%-6d", 0);
+ 	sprint(a.gid, "%-6d", 0);
+ 	sprint(a.mode, "%-8lo", 0644L);

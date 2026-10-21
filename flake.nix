@@ -102,6 +102,7 @@
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
           amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test \
           amd64/bin/mk amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr amd64/bin/ed amd64/bin/date \
+          amd64/lib/libbio.a amd64/lib/libmach.a \
           amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
@@ -112,6 +113,7 @@
         cp amd64/mkfile "$out/amd64/"
         cp -r sys/src "$out/sys/"
         cp ${libc}/lib/libc.a "$out/amd64/lib/"
+        cp amd64/lib/libbio.a amd64/lib/libmach.a "$out/amd64/lib/"
         mkdir -p "$out/amd64/lib/ape"
         cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
       '';
@@ -362,7 +364,7 @@
           ]
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
-          sys/src/cmd/cc sys/src/cmd/6a sys/src/cmd/6c sys/src/cmd/6l
+          sys/src/cmd/cc sys/src/cmd/6a sys/src/cmd/6c sys/src/cmd/6l sys/src/cmd/ar.c
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
         for command in cc 6a 6c 6l; do
@@ -496,6 +498,24 @@
               ]
             }/native_releases.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+          '';
+      nativeReproducibilityTests =
+        pkgs.runCommand "native-reproducibility-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [ pkgs.nix ];
+          }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_reproducibility.py
+                ./tests/reproducibility.nix
+                ./tests/artifacts.py
+              ]
+            }/native_reproducibility.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nixPackage} ${nixPackage.guestPrefix} \
+              ${nativePackagesArchive} ${nativePackagesArchive.guestPrefix} "$out"
           '';
       guestEnvironment = mkGuestEnvironment {
         name = "default";
@@ -643,6 +663,7 @@
         native-bootstrap = nativeBootstrap;
         native-bootstrap-tests = nativeBootstrapTests;
         native-release-tests = nativeReleaseTests;
+        native-reproducibility-tests = nativeReproducibilityTests;
         guest-development-tests = developmentTests;
         inherit libbz2;
         inherit libbsd;

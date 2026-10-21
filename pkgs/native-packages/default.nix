@@ -3,12 +3,18 @@ let
   buildStdenv = import ./stdenv.nix {
     tools = ./tools;
     inherit (bootstrap) cc libc;
-    initialPath = [ bootstrap.mk ];
+    initialPath = [
+      bootstrap.mk
+      bootstrap.ar
+    ];
   };
   stdenv = import ./stdenv.nix {
     tools = ./tools;
     inherit (pkgs) cc libc;
-    initialPath = [ pkgs.mk ];
+    initialPath = [
+      pkgs.mk
+      pkgs.ar
+    ];
   };
   upstream = import ./pkgs/lua-source.nix;
   pkgs = rec {
@@ -16,6 +22,7 @@ let
     inherit (stdenv) mkDerivation;
     callPackage = import ./call-package.nix pkgs;
     cc = bootstrap.cc;
+    ar = bootstrap.ar;
     libc = callPackage ./pkgs/libc.nix {
       stdenv = buildStdenv;
       src = ./libc-source;
