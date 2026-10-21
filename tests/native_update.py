@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory() as directory:
                   if inspect then builtins.listToAttrs (map (name: {
                     inherit name;
                     value = pkgs.${name}.drvPath;
-                  }) [ "cc" "ar" "rc" "patch" "libc" "libmp" "libsec" "libbio" "libregexp"
+                  }) [ "cc" "ar" "rc" "patch" "libc" "libmp" "libsec" "libbio" "libmach" "libregexp"
                        "mk" "yacc" "lex" "libl" "liblua" "lua" "fortune" "sha1sum" ])
                   else pkgs.buildEnv {''')
                 (root / f"{name}.nix").write_text(expression.replace(hashes["one"], digest))

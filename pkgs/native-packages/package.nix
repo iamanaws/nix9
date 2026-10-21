@@ -9,6 +9,7 @@
   yaccSource,
   lexSource,
   rcSource,
+  machSource,
   patchSource,
   sha1sum,
 }:
@@ -25,6 +26,7 @@ runCommand "native-packages" { } ''
   cp -r ${yaccSource} "$out/yacc-source"
   cp -r ${lexSource} "$out/lex-source"
   cp -r ${rcSource}/sys/src/cmd/rc "$out/rc-source"
+  cp -r ${machSource} "$out/libmach-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
   cp ${../../lib/call-package.nix} "$out/call-package.nix"
@@ -38,6 +40,7 @@ runCommand "native-packages" { } ''
   cp ${../libsec/native.nix} "$out/pkgs/libsec.nix"
   cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
+  cp ${../libmach/native.nix} "$out/pkgs/libmach.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"
   cp ${../libc/native.nix} "$out/pkgs/libc.nix"
   cp ${../cc/native.nix} "$out/pkgs/cc.nix"

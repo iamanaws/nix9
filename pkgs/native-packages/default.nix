@@ -26,7 +26,17 @@ let
     inherit (stdenv) mkDerivation;
     callPackage = import ./call-package.nix pkgs;
     cc = bootstrap.cc;
-    ar = bootstrap.ar;
+    ar =
+      (callPackage ./pkgs/ar.nix {
+        mkDerivation = buildStdenv.mkDerivation;
+        src = ./ar.c;
+      }).overrideAttrs
+        (_: {
+          buildInputs = [
+            libbio
+            libmach
+          ];
+        });
     patch = bootstrap.patch;
     rc = callPackage ./pkgs/rc.nix {
       stdenv = buildStdenv;
@@ -42,6 +52,10 @@ let
     libbio = callPackage ./pkgs/libbio.nix {
       mkDerivation = buildStdenv.mkDerivation;
       src = ./fortune-source/sys/src/libbio;
+    };
+    libmach = callPackage ./pkgs/libmach.nix {
+      mkDerivation = buildStdenv.mkDerivation;
+      src = ./libmach-source;
     };
     libregexp = callPackage ./pkgs/libregexp.nix {
       mkDerivation = buildStdenv.mkDerivation;

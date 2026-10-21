@@ -401,6 +401,24 @@
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
+      machSource = pkgs.runCommand "9front-libmach-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/libmach \
+          sys/src/cmd/2c/2.out.h sys/src/cmd/5c/5.out.h sys/src/cmd/6c/6.out.h \
+          sys/src/cmd/7c/7.out.h sys/src/cmd/8c/8.out.h sys/src/cmd/kc/k.out.h \
+          sys/src/cmd/qc/q.out.h sys/src/cmd/vc/v.out.h \
+          386/include/ureg.h 68020/include/ureg.h amd64/include/ureg.h \
+          arm/include/ureg.h arm64/include/ureg.h mips/include/ureg.h \
+          power/include/ureg.h power64/include/ureg.h sparc/include/ureg.h sparc64/include/ureg.h
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
       lexSource = pkgs.runCommand "9front-lex-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -469,6 +487,7 @@
           yaccSource
           lexSource
           rcSource
+          machSource
           patchSource
           sha1sum
           ;
