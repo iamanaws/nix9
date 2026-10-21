@@ -401,6 +401,18 @@
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
+      ramfsSource = pkgs.runCommand "9front-ramfs-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/ramfs.c sys/man/4/ramfs sys/src/lib9p sys/src/libauth sys/src/libthread
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
       machSource = pkgs.runCommand "9front-libmach-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -488,6 +500,7 @@
           lexSource
           rcSource
           machSource
+          ramfsSource
           patchSource
           sha1sum
           ;
@@ -514,7 +527,7 @@
       nativeBootstrapBuild =
         let
           revision = builtins.substring 0 12 (
-            builtins.hashString "sha256" "${nativeNix} ${nativePackageSet} ${./pkgs/native-bootstrap} ${./examples/hello}"
+            builtins.hashString "sha256" "${nativeNix} ${nativePackageSet} ${./pkgs/native-bootstrap} ${./examples/hello} ${./examples/ramfs}"
           );
         in
         pkgs.runCommand "nix9-${revision}-bootstrap.tar"
@@ -531,7 +544,7 @@
               ]
             }/native_publish.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-              ${nativeNix} ${nativePackageSet} ${./pkgs/native-bootstrap} ${./examples/hello} \
+              ${nativeNix} ${nativePackageSet} ${./pkgs/native-bootstrap} ${./examples/hello} ${./examples/ramfs} \
               /usr/local/pkg/nix9-${revision} "$out"
           '';
       # The archive is self-contained; embedded host debug paths need no GC roots.
@@ -563,6 +576,14 @@
             ./tests/patches.nix
           ]
         }/native_patches.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+      '';
+      nativeRamfsTests = pkgs.runCommand "native-ramfs-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/native_ramfs.py
+          ]
+        }/native_ramfs.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
       '';
       nativeReleaseTests =
@@ -752,6 +773,7 @@
         native-bootstrap = nativeBootstrap;
         native-bootstrap-tests = nativeBootstrapTests;
         native-patch-tests = nativePatchTests;
+        native-ramfs-tests = nativeRamfsTests;
         native-release-tests = nativeReleaseTests;
         native-update-tests = nativeUpdateTests;
         native-reproducibility-tests = nativeReproducibilityTests;

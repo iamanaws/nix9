@@ -83,6 +83,14 @@ $result/bin/fortune
 For your own project, copy `$nix9/hello` to a writable directory and
 run `nix-build` there. Its mkfile uses the standard build rules.
 The source and recipe stay in your project.
+
+The archive also includes a [ramfs example](../examples/ramfs). It mounts a memory filesystem in a
+private namespace, writes a file and unmounts it:
+
+```rc
+nix-build $nix9/ramfs --out-link $roots/ramfs
+rc $nix9/ramfs/run.rc `{cat $roots/ramfs}
+```
 `pkgs.callPackage ./package.nix { }` supplies recipe dependencies; explicit arguments override them.
 
 For an interactive C development shell in that project:

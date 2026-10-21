@@ -10,6 +10,7 @@
   lexSource,
   rcSource,
   machSource,
+  ramfsSource,
   patchSource,
   sha1sum,
 }:
@@ -26,6 +27,7 @@ runCommand "native-packages" { } ''
   cp -r ${yaccSource} "$out/yacc-source"
   cp -r ${lexSource} "$out/lex-source"
   cp -r ${rcSource}/sys/src/cmd/rc "$out/rc-source"
+  cp -r ${ramfsSource} "$out/ramfs-source"
   cp -r ${machSource} "$out/libmach-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
@@ -41,6 +43,10 @@ runCommand "native-packages" { } ''
   cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libmach/native.nix} "$out/pkgs/libmach.nix"
+  cp ${../lib9p/native.nix} "$out/pkgs/lib9p.nix"
+  cp ${../libauth/native.nix} "$out/pkgs/libauth.nix"
+  cp ${../libthread/native.nix} "$out/pkgs/libthread.nix"
+  cp ${../ramfs/native.nix} "$out/pkgs/ramfs.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"
   cp ${../libc/native.nix} "$out/pkgs/libc.nix"
   cp ${../cc/native.nix} "$out/pkgs/cc.nix"

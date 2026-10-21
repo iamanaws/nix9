@@ -21,7 +21,7 @@ def rooted(guest, root):
     return paths[0]
 
 
-qemu, image, nix, packages, recipes, project, prefix, output = sys.argv[1:]
+qemu, image, nix, packages, recipes, project, ramfs, prefix, output = sys.argv[1:]
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)
     payload = work / "root" / prefix.lstrip("/")
@@ -31,6 +31,7 @@ with tempfile.TemporaryDirectory() as directory:
     for name in ("environment.nix", "shell.nix", "release.nix", "activate.rc"):
         shutil.copyfile(Path(recipes) / name, payload / name)
     shutil.copytree(project, payload / "hello")
+    shutil.copytree(ramfs, payload / "ramfs")
     for path in payload.rglob("*"):
         path.chmod(path.stat().st_mode | 0o200)
     # Keep the example tied to this archive's package set.

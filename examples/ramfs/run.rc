@@ -1,0 +1,8 @@
+#!/bin/rc
+flag e +
+rfork ne
+. $1/activate
+ramfs -m /mnt
+echo 'Hello from ramfs' > /mnt/hello
+cat /mnt/hello
+unmount /mnt
