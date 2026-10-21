@@ -87,7 +87,7 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None):
 
 
 @contextlib.contextmanager
-def files_guest(qemu, disk, files):
+def files_guest(qemu, disk, files, *, snapshot=True):
     """Boot a guest and copy host fixtures into /tmp."""
     with tempfile.TemporaryDirectory() as directory:
         for name, source in files.items():
@@ -97,7 +97,7 @@ def files_guest(qemu, disk, files):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                with boot(qemu, disk) as guest:
+                with boot(qemu, disk, snapshot=snapshot) as guest:
                     guest.child.timeout = 300
                     for name in files:
                         guest.command(f"hget -o /tmp/{name} http://10.0.2.2:{server.server_port}/{name}")

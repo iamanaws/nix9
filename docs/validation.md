@@ -24,6 +24,7 @@ one loopback-only port for read-only 9P and checks reuse after the server stops.
 HTTP(S) cache tests check signatures, damaged downloads, redirects and repair.
 The `native-bootstrap-tests` target checks the signed cache in a clean VM, then builds
 a C project and tests environment updates and rollback after GC.
+`native-release-tests` checks complete release selection, offline reboots and rollback.
 Evaluator fetch tests cover file and archive hashes, relative imports, executable
 bits, malformed archives, path confinement, pure evaluation and offline reuse.
 The builds and tests work with the Nix sandbox enabled.

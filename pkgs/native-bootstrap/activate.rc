@@ -1,0 +1,18 @@
+fn nix9KeepPath {
+	for(directory in $*) {
+		if(~ $#nix9 0) echo $directory
+		if not if(! ~ $directory $nix9/bin) echo $directory
+	}
+}
+nix9Path=`{nix9KeepPath $path}
+if(! ~ $#nix9EnvironmentActive 0)
+	nix9BasePath=($nix9Next/bin `{nix9KeepPath $nix9BasePath})
+path=($nix9Next/bin $nix9Path)
+nix9=$nix9Next
+nix9Next=()
+nix9Path=()
+fn nix9KeepPath
+NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'
+NIX_PATH='nix9='^$nix9/packages
+NIX_CONF_DIR=$nix9
+status=''

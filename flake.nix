@@ -486,6 +486,17 @@
             ${python}/bin/python ${testSupport [ ./tests/native_bootstrap.py ]}/native_bootstrap.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
           '';
+      nativeReleaseTests =
+        pkgs.runCommand "native-release-tests" { requiredSystemFeatures = [ "kvm" ]; }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_releases.py
+                ./tests/releases.nix
+              ]
+            }/native_releases.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+          '';
       guestEnvironment = mkGuestEnvironment {
         name = "default";
         packages = [
@@ -631,6 +642,7 @@
         native-packages = nativePackagesArchive;
         native-bootstrap = nativeBootstrap;
         native-bootstrap-tests = nativeBootstrapTests;
+        native-release-tests = nativeReleaseTests;
         guest-development-tests = developmentTests;
         inherit libbz2;
         inherit libbsd;

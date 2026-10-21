@@ -134,8 +134,18 @@ Add these lines at the end of `$home/lib/profile` to activate the selected envir
 
 Source the second line again after `set` or `rollback` to switch the current shell.
 Build updates with a separate `--out-link`, then use `set` to select them.
-To update nix9 itself, install a new bootstrap archive and source its activation file.
-Each archive keeps its package set in a separate versioned directory.
+To retain complete releases of Nix and its package set:
+
+```rc
+nix-build /usr/local/pkg/nix9/release.nix --out-link $roots/release
+nix-profile $roots/nix9 set `{cat $roots/release}
+. /usr/local/pkg/nix9/activate
+```
+
+After installing a new bootstrap archive, repeat these commands to upgrade.
+Installation leaves the selected release unchanged.
+Use `nix-profile $roots/nix9 rollback`, then source the activation file again to
+switch back. Release generations retain their files through GC, just like environments.
 
 The store persists at `/usr/local/nix/store`.
 `nix-build` evaluates and builds the selected package. Its default root is

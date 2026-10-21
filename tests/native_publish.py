@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copytree(nix, payload)
     payload.chmod(0o755)
     shutil.copytree(packages, payload / "packages")
-    for name in ("environment.nix", "shell.nix"):
+    for name in ("environment.nix", "shell.nix", "release.nix", "activate.rc"):
         shutil.copyfile(Path(recipes) / name, payload / name)
     shutil.copytree(project, payload / "hello")
     for path in payload.rglob("*"):
@@ -38,18 +38,18 @@ with tempfile.TemporaryDirectory() as directory:
         path = payload / "hello" / name
         path.write_text(path.read_text().replace("/usr/local/pkg/native-packages", "<nix9>"))
     shutil.copy(payload / "packages" / "bin" / "nix-profile", payload / "bin" / "nix-profile")
-    activate = (
-        f"nix9={prefix}\n"
-        "path=($nix9/bin $path)\n"
-        "NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'\n"
-        "NIX_PATH='nix9='^$nix9/packages\n"
-        "NIX_CONF_DIR=$nix9\n"
-        "status=''\n"
-    )
+    activate = f"nix9Next={prefix}\n" + (payload / "activate.rc").read_text()
     (payload / "activate").write_text(activate)
     selector = work / "root/usr/local/pkg/nix9"
     selector.mkdir()
-    (selector / "activate").write_text(f". {prefix}/activate\n")
+    shutil.copyfile(payload / "packages" / "profile", selector / "profile")
+    (selector / "activate").write_text(
+        "if(test -r /usr/local/nix/state/gcroots/nix9) {\n"
+        "\t. /usr/local/pkg/nix9/profile /usr/local/nix/state/gcroots/nix9\n"
+        "}\n"
+        f"if not . {prefix}/activate\n"
+    )
+    (selector / "release.nix").write_text(f"import {prefix}/release.nix\n")
 
     def archive(destination):
         with tarfile.open(destination, "w", format=tarfile.USTAR_FORMAT) as tar:
@@ -79,6 +79,7 @@ with tempfile.TemporaryDirectory() as directory:
             verify_published(work, [environment, shell], closure)
             shutil.move(work / "published", payload / "cache")
             key = (work / "published.pub").read_text().strip()
+            (payload / "cache.pub").write_text(key + "\n")
             (payload / "nix.conf").write_text(
                 f"substituters = file://{prefix}/cache?store=/usr/local/nix/store\n"
                 f"trusted-public-keys = {key}\n"
