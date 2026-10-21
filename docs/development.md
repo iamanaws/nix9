@@ -215,6 +215,9 @@ through 9front's `webfs`. Configure networking in the guest before fetching.
 evaluation. Mount webfs first with `webfs -m /mnt/web -T 60000`.
 Use `builtins.fetchTarball` for archives; its `sha256` is the unpacked tree's NAR
 hash. It strips a single enclosing directory. Pinned files and trees can be reused offline.
+For Git sources, use `fetchgit { url = "…"; rev = "…"; hash = "sha256-…"; }`.
+The revision must be a full 40-character commit hash reachable from the remote's refs.
+The hash covers the exported tree. Symlinks and submodules are rejected.
 Native `lua` builds against `liblua`. Both fetch the same pinned archive and
 compile with APE.
 Use `nix-native-tests` for native packages and shells, `nix-core-tests` for libraries

@@ -69,6 +69,11 @@ let
       stdenv = buildStdenv;
       src = ./libc-source;
     };
+    libflate = callPackage ./pkgs/libflate.nix { src = ./git-source/sys/src/libflate; };
+    git = callPackage ./pkgs/git.nix {
+      src = ./git-source/sys/src/cmd/git;
+      exporter = ./pkgs/git-export-tree.c;
+    };
     lib9p = callPackage ./pkgs/lib9p.nix { src = ./ramfs-source/sys/src/lib9p; };
     libauth = callPackage ./pkgs/libauth.nix { src = ./ramfs-source/sys/src/libauth; };
     libthread = callPackage ./pkgs/libthread.nix { src = ./ramfs-source/sys/src/libthread; };
@@ -100,6 +105,7 @@ let
       src = ./lex-source/sys/src/ape/lib/l;
       header = ./lex-source/sys/include/ape/libl.h;
     };
+    fetchgit = callPackage ./pkgs/fetchgit.nix { };
     fetchurl = callPackage ./pkgs/fetchurl.nix { };
     liblua = callPackage ./pkgs/liblua.nix {
       inherit upstream;

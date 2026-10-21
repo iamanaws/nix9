@@ -17,7 +17,7 @@ caches support native substitution and repair. Network caches use mounted webfs
 with the same TLS limitation. `builtins.fetchurl` and `builtins.fetchTarball`
 download evaluator inputs. Archive trees are held in memory and support regular
 files and directories; links and duplicate files are rejected.
-Flakes and Git fetching remain unported.
+Flakes and `builtins.fetchGit` remain unported.
 
 See the [toolchains](development.md#toolchains) used for cross-builds.
 

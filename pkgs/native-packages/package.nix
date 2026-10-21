@@ -11,6 +11,7 @@
   rcSource,
   machSource,
   ramfsSource,
+  gitSource,
   patchSource,
   sha1sum,
 }:
@@ -27,6 +28,7 @@ runCommand "native-packages" { } ''
   cp -r ${yaccSource} "$out/yacc-source"
   cp -r ${lexSource} "$out/lex-source"
   cp -r ${rcSource}/sys/src/cmd/rc "$out/rc-source"
+  cp -r ${gitSource} "$out/git-source"
   cp -r ${ramfsSource} "$out/ramfs-source"
   cp -r ${machSource} "$out/libmach-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
@@ -43,6 +45,10 @@ runCommand "native-packages" { } ''
   cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libmach/native.nix} "$out/pkgs/libmach.nix"
+  cp ${../libflate/native.nix} "$out/pkgs/libflate.nix"
+  cp ${../git/native.nix} "$out/pkgs/git.nix"
+  cp ${../git/export-tree.c} "$out/pkgs/git-export-tree.c"
+  cp ${../fetchgit/native.nix} "$out/pkgs/fetchgit.nix"
   cp ${../lib9p/native.nix} "$out/pkgs/lib9p.nix"
   cp ${../libauth/native.nix} "$out/pkgs/libauth.nix"
   cp ${../libthread/native.nix} "$out/pkgs/libthread.nix"

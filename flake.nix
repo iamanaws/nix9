@@ -401,6 +401,18 @@
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
+      gitSource = pkgs.runCommand "9front-git-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/git sys/src/libflate sys/man/1/git
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
       ramfsSource = pkgs.runCommand "9front-ramfs-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -501,6 +513,7 @@
           rcSource
           machSource
           ramfsSource
+          gitSource
           patchSource
           sha1sum
           ;
@@ -587,6 +600,24 @@
         }/native_ramfs.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
       '';
+      nativeGitTests =
+        pkgs.runCommand "native-git-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [
+              pkgs.git
+              pkgs.nix
+            ];
+          }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_git.py
+                ./tests/git.nix
+              ]
+            }/native_git.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+          '';
       nativeReleaseTests =
         pkgs.runCommand "native-release-tests" { requiredSystemFeatures = [ "kvm" ]; }
           ''
@@ -775,6 +806,7 @@
         native-bootstrap-tests = nativeBootstrapTests;
         native-patch-tests = nativePatchTests;
         native-ramfs-tests = nativeRamfsTests;
+        native-git-tests = nativeGitTests;
         native-release-tests = nativeReleaseTests;
         native-update-tests = nativeUpdateTests;
         native-reproducibility-tests = nativeReproducibilityTests;
