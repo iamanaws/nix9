@@ -18,6 +18,7 @@ from native_fortune import check_fortune
 from libsec import check_native as check_crypto
 from native_project import check_project
 from native_yacc import check_yacc
+from native_lex import check_lex
 from native_phases import check_phases, check_overrides, check_mk_phases
 from native_inputs import check_inputs, check_shell
 from native_environments import check_environments
@@ -54,6 +55,8 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copytree(Path(__file__).with_name("libsec"), root / "libsec")
     shutil.copyfile(Path(__file__).with_name("yacc.nix"), root / "yacc.nix")
     shutil.copytree(Path(__file__).with_name("yacc"), root / "yacc")
+    shutil.copyfile(Path(__file__).with_name("lex.nix"), root / "lex.nix")
+    shutil.copytree(Path(__file__).with_name("lex"), root / "lex")
     fetch_fixtures(root)
     with source_server(root, lua_archive) as tls_port, \
             ArtifactServer(root, root / "closure.export") as server:
@@ -73,6 +76,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"hget -o /tmp/packages.tar http://10.0.2.2:{server.server_port}/packages.tar")
                 guest.command("cd / && tar xf /tmp/packages.tar && rm /tmp/packages.tar")
                 yacc = check_yacc(guest, packages, server.server_port)
+                lex = check_lex(guest, packages, server.server_port)
                 phases = check_phases(guest, packages, server.server_port)
                 mk_phases = check_mk_phases(guest, packages, server.server_port)
                 overrides = check_overrides(guest, packages, server.server_port)
@@ -160,6 +164,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "crypto": crypto,
     "standalone-project": project,
     "yacc": yacc,
+    "lex": lex,
     "phases": phases,
     "mk-phases": mk_phases,
     "overrides": overrides,

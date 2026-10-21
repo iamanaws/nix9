@@ -24,6 +24,11 @@ let
       src = ./mk-source/sys/src/cmd/mk;
     };
     yacc = callPackage ./pkgs/yacc.nix { src = ./yacc-source; };
+    lex = callPackage ./pkgs/lex.nix { src = ./lex-source/sys/src/cmd/lex; };
+    libl = callPackage ./pkgs/libl.nix {
+      src = ./lex-source/sys/src/ape/lib/l;
+      header = ./lex-source/sys/include/ape/libl.h;
+    };
     fetchurl = callPackage ./pkgs/fetchurl.nix { };
     liblua = callPackage ./pkgs/liblua.nix {
       inherit upstream;

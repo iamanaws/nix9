@@ -186,6 +186,9 @@
                 ./tests/native_yacc.py
                 ./tests/yacc.nix
                 ./tests/yacc
+                ./tests/native_lex.py
+                ./tests/lex.nix
+                ./tests/lex
                 ./tests/native_phases.py
                 ./tests/phases.nix
                 ./tests/mk-phases.nix
@@ -346,6 +349,22 @@
         test -s "$out/sys/lib/yaccpar"
         test -s "$out/sys/lib/yaccpars"
       '';
+      lexSource = pkgs.runCommand "9front-lex-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/lex sys/src/ape/lib/l sys/include/ape/libl.h
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+        test -s "$out/sys/src/cmd/lex/mkfile"
+        test -s "$out/sys/src/cmd/lex/ncform"
+        test -s "$out/sys/src/ape/lib/l/yywrap.c"
+        test -s "$out/sys/include/ape/libl.h"
+      '';
       libmp = pkgs.callPackage ./pkgs/libmp {
         inherit cTools sysroot;
         source = secSource;
@@ -394,6 +413,7 @@
           fortuneSource
           mkSource
           yaccSource
+          lexSource
           sha1sum
           ;
       };

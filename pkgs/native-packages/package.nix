@@ -5,6 +5,7 @@
   fortuneSource,
   mkSource,
   yaccSource,
+  lexSource,
   sha1sum,
 }:
 runCommand "native-packages" { } ''
@@ -14,6 +15,7 @@ runCommand "native-packages" { } ''
   cp -r ${fortuneSource} "$out/fortune-source"
   cp -r ${mkSource} "$out/mk-source"
   cp -r ${yaccSource} "$out/yacc-source"
+  cp -r ${lexSource} "$out/lex-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
   cp ${../../lib/call-package.nix} "$out/call-package.nix"
@@ -31,6 +33,8 @@ runCommand "native-packages" { } ''
   cp ${../libregexp/native.nix} "$out/pkgs/libregexp.nix"
   cp ${../mk/native.nix} "$out/pkgs/mk.nix"
   cp ${../yacc/native.nix} "$out/pkgs/yacc.nix"
+  cp ${../lex/native.nix} "$out/pkgs/lex.nix"
+  cp ${../libl/native.nix} "$out/pkgs/libl.nix"
   cp ${../fortune/native.nix} "$out/pkgs/fortune.nix"
   cp ${../fetchurl/native.nix} "$out/pkgs/fetchurl.nix"
   cp ${../lua/native.nix} "$out/pkgs/lua.nix"

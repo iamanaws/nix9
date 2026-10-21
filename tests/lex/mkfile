@@ -1,0 +1,14 @@
+</$objtype/mkfile
+
+TARG=scanner-parser
+OFILES=y.tab.$O lex.yy.$O
+HFILES=y.tab.h
+YFILES=parser.y
+LFILES=scanner.l
+CC=pcc -c
+LD=pcc
+
+</sys/src/cmd/mkone
+
+CFLAGS=-D_RESEARCH_SOURCE
+YFLAGS=-d -S
