@@ -176,6 +176,7 @@ the list attributes `makeFlags`, `buildFlags` and `installFlags` for arguments.
 Recipes can use `pname`/`version` and override `buildPhase` or `installPhase`.
 Enable `checkPhase` with `doCheck = true`.
 Each phase accepts `pre` and `post` hooks, such as `preBuild` and `postInstall`.
+Use `patches = [ ./fix.patch ];` for unified diffs. `patchFlags` defaults to `[ "-p1" ]`.
 `phases` selects their order and can include custom steps such as `generatePhase`.
 Directory sources are copied to `source`; tar archives need an explicit
 `sourceRoot`. Override

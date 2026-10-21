@@ -33,7 +33,7 @@ def archive_dates(path):
 
 
 qemu, image, nix_archive, nix_prefix, packages_archive, packages, output = sys.argv[1:]
-names = ("ar", "cc", "libc", "libbio", "libregexp", "mk", "rc")
+names = ("patch", "ar", "cc", "libc", "libbio", "libregexp", "mk", "rc")
 runs = []
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)

@@ -372,6 +372,18 @@
           test -s "$out/sys/src/cmd/$command/mkfile"
         done
       '';
+      patchSource = pkgs.runCommand "9front-patch-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/patch.c sys/man/1/patch
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
       rcSource = pkgs.runCommand "9front-rc-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -452,6 +464,7 @@
           yaccSource
           lexSource
           rcSource
+          patchSource
           sha1sum
           ;
       };
@@ -518,6 +531,15 @@
             }/native_bootstrap.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
           '';
+      nativePatchTests = pkgs.runCommand "native-patch-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/native_patches.py
+            ./tests/patches.nix
+          ]
+        }/native_patches.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+      '';
       nativeReleaseTests =
         pkgs.runCommand "native-release-tests" { requiredSystemFeatures = [ "kvm" ]; }
           ''
@@ -704,6 +726,7 @@
         native-package-source = nativePackageSource;
         native-bootstrap = nativeBootstrap;
         native-bootstrap-tests = nativeBootstrapTests;
+        native-patch-tests = nativePatchTests;
         native-release-tests = nativeReleaseTests;
         native-update-tests = nativeUpdateTests;
         native-reproducibility-tests = nativeReproducibilityTests;

@@ -68,6 +68,11 @@ let
           mk -f ${quote makefile} 'BIN='$out/bin ${makeFlags} ${flags (attrs.installFlags or [ ])} install
         '');
       sourceRoot = attrs.sourceRoot or (if attrs ? src then "source" else ".");
+      patchPhase = ''
+        for(patchFile in (${flags (attrs.patches or [ ])})) {
+          patch ${flags (attrs.patchFlags or [ "-p1" ])} < $patchFile
+        }
+      '';
       unpackPhase =
         attrs.unpackPhase or (
           if attrs ? src then
@@ -107,6 +112,7 @@ let
         );
       defaultPhases = [
         "unpackPhase"
+        "patchPhase"
         "buildPhase"
         "checkPhase"
         "installPhase"
@@ -114,7 +120,12 @@ let
       phases = attrs.phases or defaultPhases;
       phaseAttrs = defaultPhases ++ phases;
       defaults = {
-        inherit unpackPhase buildPhase installPhase;
+        inherit
+          unpackPhase
+          patchPhase
+          buildPhase
+          installPhase
+          ;
         checkPhase = "";
       };
       runPhase =
@@ -202,6 +213,7 @@ let
           "makeFlags"
           "buildFlags"
           "installFlags"
+          "patchFlags"
         ]
         ++ phaseAttrs
         ++ builtins.concatMap phaseHooks phaseAttrs

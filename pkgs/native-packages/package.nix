@@ -1,6 +1,5 @@
 {
   runCommand,
-  patch,
   nativeTools,
   ccSource,
   libcSource,
@@ -10,6 +9,7 @@
   yaccSource,
   lexSource,
   rcSource,
+  patchSource,
   sha1sum,
 }:
 runCommand "native-packages" { } ''
@@ -17,8 +17,7 @@ runCommand "native-packages" { } ''
   cp -r ${nativeTools} "$out/tools"
   cp -r ${ccSource} "$out/cc-source"
   cp ${ccSource}/sys/src/cmd/ar.c "$out/ar.c"
-  chmod u+w "$out/ar.c"
-  ${patch}/bin/patch "$out/ar.c" < ${../ar/source-date-epoch.patch}
+  cp ${patchSource}/sys/src/cmd/patch.c "$out/patch.c"
   cp -r ${libcSource}/sys/src/libc "$out/libc-source"
   cp -r ${secSource} "$out/libsec-source"
   cp -r ${fortuneSource} "$out/fortune-source"
@@ -43,6 +42,8 @@ runCommand "native-packages" { } ''
   cp ${../libc/native.nix} "$out/pkgs/libc.nix"
   cp ${../cc/native.nix} "$out/pkgs/cc.nix"
   cp ${../ar/native.nix} "$out/pkgs/ar.nix"
+  cp ${../ar/source-date-epoch.patch} "$out/pkgs/source-date-epoch.patch"
+  cp ${../patch/native.nix} "$out/pkgs/patch.nix"
   cp ${../libregexp/native.nix} "$out/pkgs/libregexp.nix"
   cp ${../mk/native.nix} "$out/pkgs/mk.nix"
   cp ${../rc/native.nix} "$out/pkgs/rc.nix"

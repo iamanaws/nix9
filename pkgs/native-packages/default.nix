@@ -6,6 +6,7 @@ let
     initialPath = [
       bootstrap.mk
       bootstrap.ar
+      bootstrap.patch
     ];
   };
   stdenv = import ./stdenv.nix {
@@ -16,6 +17,7 @@ let
       pkgs.mk
       pkgs.ar
       pkgs.rc
+      pkgs.patch
     ];
   };
   upstream = import ./pkgs/lua-source.nix;
@@ -25,6 +27,7 @@ let
     callPackage = import ./call-package.nix pkgs;
     cc = bootstrap.cc;
     ar = bootstrap.ar;
+    patch = bootstrap.patch;
     rc = callPackage ./pkgs/rc.nix {
       stdenv = buildStdenv;
       yacc = bootstrap.yacc;

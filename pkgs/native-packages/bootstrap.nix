@@ -2,7 +2,10 @@ let
   rawStdenv = import ./stdenv.nix { tools = ./tools; };
   seedStdenv = import ./stdenv.nix {
     tools = ./tools;
-    initialPath = [ bootstrap.ar ];
+    initialPath = [
+      bootstrap.ar
+      bootstrap.patch
+    ];
   };
   bootstrap = rec {
     stdenv = import ./stdenv.nix {
@@ -10,9 +13,14 @@ let
       initialPath = [
         mk
         ar
+        patch
       ];
     };
     callPackage = import ./call-package.nix bootstrap;
+    patch = callPackage ./pkgs/patch.nix {
+      mkDerivation = rawStdenv.mkDerivation;
+      src = ./patch.c;
+    };
     ar = callPackage ./pkgs/ar.nix {
       mkDerivation = rawStdenv.mkDerivation;
       src = ./ar.c;
