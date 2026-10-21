@@ -13,8 +13,8 @@ the inputs. Compiler patches are in
   compression, and arithmetic. Generator checks compare output with the guest.
 - Build checks cover executable format and archive handling. Native Nix tests
   cover toolchain bootstrapping, derivation paths, dependency builds, fixed hashes,
-  multiple outputs and partial rebuilds, cancellation cleanup, profile generations,
-  permanent roots and garbage collection.
+  multiple outputs, partial rebuilds and rebuild checks, cancellation cleanup,
+  profile generations, permanent roots and garbage collection.
   Guest development tests build native and POSIX C, including Lua, with the
   image's headers and libraries hidden.
 

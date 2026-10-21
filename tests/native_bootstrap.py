@@ -31,6 +31,7 @@ with files_guest(qemu, image, {"bootstrap.tar": archive}) as guest:
     environment = rooted(guest, roots + "/environment")
     shell = rooted(guest, roots + "/shell")
     guest.command("rm -r $nix9/cache; NIX_CONFIG='substituters ='")
+    guest.command("nix-build $nix9/packages -A sha1sum --check --no-out-link")
     guest.command(f"nix-profile {roots}/profile set {environment}")
     guest.command(f". $nix9/packages/profile {roots}/profile")
     guest.command("echo -n abc | sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")

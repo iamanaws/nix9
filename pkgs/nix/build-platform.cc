@@ -1,6 +1,7 @@
 #include "nix/store/build/derivation-builder.hh"
 #include "nix/store/local-store.hh"
 #include "nix/store/local-settings.hh"
+#include "nix/store/globals.hh"
 #include "nix/store/posix-fs-canonicalise.hh"
 #include "nix/store/path-references.hh"
 #include "nix/store/references.hh"
@@ -52,8 +53,10 @@ public:
         return true;
     }
     std::optional<Descriptor> startBuild() override {
-        if (buildMode != bmNormal)
-            throw Error("only normal builds are supported on 9front");
+        if (buildMode != bmNormal && buildMode != bmCheck)
+            throw Error("only normal and check builds are supported on Plan 9");
+        if (buildMode == bmCheck && store.config->getLocalSettings().getDiffHook())
+            throw Error("diff hooks are not supported on Plan 9");
         for (auto &[name, output] : drv.outputs) {
             if (auto fixed = std::get_if<DerivationOutput::CAFixed>(&output.raw)) {
                 if (fixed->ca.method != ContentAddressMethod::Raw::Flat &&
@@ -74,7 +77,7 @@ public:
         temp = std::make_unique<AutoDelete>(directory);
         for (auto &[name, path] : outputPaths) {
             auto scratch = path;
-            if (store.isValidPath(path)) {
+            if (buildMode == bmCheck || store.isValidPath(path)) {
                 // Like upstream's unsandboxed builder, redirect retained outputs
                 // and rewrite their hashes back in the newly produced outputs.
                 scratch = store.makeStorePath(
@@ -157,11 +160,11 @@ public:
         SingleDrvOutputs result;
         for (auto &[name, path] : outputPaths) {
             auto scratch = scratchOutputs.at(name);
-            if (scratch != path) {
+            if (scratch != path && buildMode != bmCheck) {
                 // Never replace the contents or metadata of an already valid output.
                 infos.emplace(name, *store.queryPathInfo(path));
             } else {
-                auto physical = store.toRealPath(path);
+                auto physical = store.toRealPath(scratch);
                 if (!pathExists(physical))
                     throw BuildError(BuildResult::Failure::OutputRejected, "builder did not produce '%s'", name);
                 if (!outputRewrites.empty()) {
@@ -199,14 +202,43 @@ public:
                 info.deriver = drvPath;
                 info.ultimate = true;
                 infos.emplace(name, info);
-                store.signPathInfo(info);
-                registrations.emplace(path, std::move(info));
+                if (buildMode != bmCheck) {
+                    store.signPathInfo(info);
+                    registrations.emplace(path, std::move(info));
+                }
             }
             result.emplace(name, Realisation{{.outPath = path}, DrvOutput{initialOutputs.at(name).outputHash, name}});
+        }
+        if (buildMode == bmCheck) {
+            for (auto &[name, info] : infos) {
+                if (!store.isValidPath(info.path)) continue;
+                auto oldInfo = *store.queryPathInfo(info.path);
+                if (info.narHash != oldInfo.narHash) {
+                    auto original = store.toRealPath(info.path);
+                    std::string message = fmt("derivation '%s' may not be deterministic: output %s differs",
+                        store.printStorePath(drvPath), PathFmt(original));
+                    if (settings.keepFailed) {
+                        auto saved = original.string() + ".check";
+                        deletePath(saved);
+                        std::filesystem::rename(store.toRealPath(scratchOutputs.at(name)), saved);
+                        message += fmt(" from %s", PathFmt(saved));
+                    }
+                    BuildError error(BuildResult::Failure::NotDeterministic, "%s", message);
+                    error.isNonDeterministic = true;
+                    throw error;
+                }
+                // As upstream does, trust a substituted output after a matching rebuild.
+                if (!oldInfo.ultimate) {
+                    oldInfo.ultimate = true;
+                    store.signPathInfo(oldInfo);
+                    registrations.emplace(oldInfo.path, std::move(oldInfo));
+                }
+            }
         }
         checkOutputs(store, drvPath, drv.outputs, drvOptions.outputChecks, infos);
         // All outputs and their references become valid in one transaction.
         store.registerValidPaths(registrations);
+        if (buildMode == bmCheck) return {};
         for (auto &[name, path] : outputPaths)
             if (scratchOutputs.at(name) == path) cleanupOutputs.at(name)->cancel();
         return result;

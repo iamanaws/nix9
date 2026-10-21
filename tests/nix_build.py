@@ -333,6 +333,10 @@ def check_fixed_outputs(guest, store, expected):
         guest.command(f"{store} --realise {paths['drv']}", paths["out"])
         guest.command(f"{store} --verify-path {paths['out']}")
     guest.command("test `{cat /tmp/n9-fixed-retry-count | wc -l} -eq 2")
+    for name in ("fixedFlat", "fixedTree"):
+        paths = expected[name]
+        guest.command(f"{store} --realise {paths['drv']} --check", paths["out"])
+        guest.command(f"{store} --verify-path {paths['out']}")
     flat, tree = expected["fixedFlat"], expected["fixedTree"]
     guest.command(f"cat {flat['out']}", "fixed")
     guest.command(f"{store} --query --references {flat['out']} > /tmp/fixed-refs")
@@ -342,4 +346,4 @@ def check_fixed_outputs(guest, store, expected):
     # A different derivation with the same name and hash must reuse the output.
     for name in ("fixedFlat", "fixedReuse"):
         guest.command(f"{store} --realise {expected[name]['drv']}", flat["out"])
-    guest.command("test `{cat /tmp/n9-fixed-count | wc -l} -eq 1")
+    guest.command("test `{cat /tmp/n9-fixed-count | wc -l} -eq 2")

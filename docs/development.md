@@ -150,6 +150,7 @@ switch back. Release generations retain their files through GC, just like enviro
 The store persists at `/usr/local/nix/store`.
 `nix-build` evaluates and builds the selected package. Its default root is
 `state/gcroots/result`; use `--no-out-link` to leave no permanent root.
+`nix-build --check` compares a rebuild with the registered output without replacing it.
 Roots are files containing store paths, not symlinks. Remove a root file to release
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root. Close other store clients before collection.

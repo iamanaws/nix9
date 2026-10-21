@@ -59,6 +59,8 @@ with tempfile.TemporaryDirectory() as directory:
                         result = guest.command(f"nix-build {packages} -A {name} --out-link $roots/{name}")
                         if "copying path" in result:
                             raise RuntimeError(f"{name} was substituted during a rebuild")
+                        if run == 0:
+                            guest.command(f"nix-build {packages} -A {name} --check --no-out-link")
                         guest.command(f"cat $roots/{name} > /tmp/outputs/{name}.path")
                         guest.command(f"p=`{{cat $roots/{name}}}; nix-store --dump $p > /tmp/outputs/{name}.nar")
                     guest.command(f"nix-build /tmp/reproducibility.nix --argstr packages {packages} --out-link $roots/epochs")
