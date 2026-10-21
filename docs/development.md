@@ -134,6 +134,21 @@ Add these lines at the end of `$home/lib/profile` to activate the selected envir
 
 Source the second line again after `set` or `rollback` to switch the current shell.
 Build updates with a separate `--out-link`, then use `set` to select them.
+
+To update from published recipes, run `nix build .#native-package-source` on Linux
+and serve its `packages.tar.gz`. Copy the generated `update.nix` into the guest
+and change its URL. It pins the archive's unpacked hash; edit `paths` to select packages.
+With webfs mounted, run:
+
+```rc
+nix-build update.nix --out-link $roots/update &&
+  nix-profile $roots/environment set `{cat $roots/update}
+. $nix9/packages/profile $roots/environment
+```
+
+Use `rollback` to return to the previous environment. Updating recipes keeps the
+installed Nix commands. Fetched recipes can be reused offline until GC removes them.
+
 To retain complete releases of Nix and its package set:
 
 ```rc

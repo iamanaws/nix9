@@ -446,6 +446,17 @@
         name = "native-packages";
         package = nativePackageSet;
       };
+      nativePackageSource =
+        pkgs.runCommand "native-package-source" { nativeBuildInputs = [ pkgs.nix ]; }
+          ''
+            mkdir -p "$out"
+            tar --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner \
+              --hard-dereference --transform='s,^\.,packages,' -C ${nativePackageSet} -cf - . \
+              | gzip -n > "$out/packages.tar.gz"
+            nix --extra-experimental-features nix-command hash path ${nativePackageSet} > "$out/sha256"
+            substitute ${./examples/update.nix} "$out/update.nix" \
+              --replace-fail '@sha256@' "$(cat "$out/sha256")"
+          '';
       nixPackage = mkGuestPackage {
         name = "nix-${nixUtil.version}";
         package = nativeNix;
@@ -499,6 +510,17 @@
               ]
             }/native_releases.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+          '';
+      nativeUpdateTests =
+        pkgs.runCommand "native-update-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [ pkgs.nix ];
+          }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/native_update.py ]}/native_update.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nativeBootstrap} ${nativePackageSource} "$out"
           '';
       nativeReproducibilityTests =
         pkgs.runCommand "native-reproducibility-tests"
@@ -661,9 +683,11 @@
         nix = nativeNix;
         nix-package = nixPackage;
         native-packages = nativePackagesArchive;
+        native-package-source = nativePackageSource;
         native-bootstrap = nativeBootstrap;
         native-bootstrap-tests = nativeBootstrapTests;
         native-release-tests = nativeReleaseTests;
+        native-update-tests = nativeUpdateTests;
         native-reproducibility-tests = nativeReproducibilityTests;
         guest-development-tests = developmentTests;
         inherit libbz2;
