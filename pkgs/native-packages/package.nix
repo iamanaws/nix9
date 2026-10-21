@@ -9,6 +9,7 @@
   mkSource,
   yaccSource,
   lexSource,
+  rcSource,
   sha1sum,
 }:
 runCommand "native-packages" { } ''
@@ -24,6 +25,7 @@ runCommand "native-packages" { } ''
   cp -r ${mkSource} "$out/mk-source"
   cp -r ${yaccSource} "$out/yacc-source"
   cp -r ${lexSource} "$out/lex-source"
+  cp -r ${rcSource}/sys/src/cmd/rc "$out/rc-source"
   cp ${sha1sum.source} "$out/sha1sum.c"
   cp ${../../lib/mk-derivation.nix} "$out/mk-derivation.nix"
   cp ${../../lib/call-package.nix} "$out/call-package.nix"
@@ -43,6 +45,7 @@ runCommand "native-packages" { } ''
   cp ${../ar/native.nix} "$out/pkgs/ar.nix"
   cp ${../libregexp/native.nix} "$out/pkgs/libregexp.nix"
   cp ${../mk/native.nix} "$out/pkgs/mk.nix"
+  cp ${../rc/native.nix} "$out/pkgs/rc.nix"
   cp ${../yacc/native.nix} "$out/pkgs/yacc.nix"
   cp ${../lex/native.nix} "$out/pkgs/lex.nix"
   cp ${../libl/native.nix} "$out/pkgs/libl.nix"

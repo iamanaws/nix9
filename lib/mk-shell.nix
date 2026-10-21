@@ -9,7 +9,12 @@
   shellHook ? "",
 }@attrs:
 let
-  inherit (stdenv) tools initialPath libc;
+  inherit (stdenv)
+    tools
+    shell
+    initialPath
+    libc
+    ;
   mergeInputs =
     name:
     (attrs.${name} or [ ])
@@ -27,7 +32,7 @@ let
   );
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
   script = ''
-    #!/bin/rc
+    #!${shell}
     flag e +
     rfork ne
     tools=${quote tools}
@@ -43,8 +48,8 @@ let
       interactive = true;
     }}
     ${hooks}
-    if(~ $#* 0) exec $tools/bin/rc -m $tools/rcmain -i
-    if not exec $tools/bin/rc -m $tools/rcmain $*
+    if(~ $#* 0) exec ${quote shell} -m $tools/rcmain -i
+    if not exec ${quote shell} -m $tools/rcmain $*
   '';
 in
 stdenv.mkDerivation {

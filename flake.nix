@@ -372,6 +372,18 @@
           test -s "$out/sys/src/cmd/$command/mkfile"
         done
       '';
+      rcSource = pkgs.runCommand "9front-rc-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/rc
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+      '';
       lexSource = pkgs.runCommand "9front-lex-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -439,6 +451,7 @@
           mkSource
           yaccSource
           lexSource
+          rcSource
           sha1sum
           ;
       };
@@ -497,7 +510,12 @@
       nativeBootstrapTests =
         pkgs.runCommand "native-bootstrap-tests" { requiredSystemFeatures = [ "kvm" ]; }
           ''
-            ${python}/bin/python ${testSupport [ ./tests/native_bootstrap.py ]}/native_bootstrap.py \
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_bootstrap.py
+                ./tests/rc.nix
+              ]
+            }/native_bootstrap.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
           '';
       nativeReleaseTests =

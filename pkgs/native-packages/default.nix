@@ -10,10 +10,12 @@ let
   };
   stdenv = import ./stdenv.nix {
     tools = ./tools;
+    shell = "${pkgs.rc}/bin/rc";
     inherit (pkgs) cc libc;
     initialPath = [
       pkgs.mk
       pkgs.ar
+      pkgs.rc
     ];
   };
   upstream = import ./pkgs/lua-source.nix;
@@ -23,6 +25,11 @@ let
     callPackage = import ./call-package.nix pkgs;
     cc = bootstrap.cc;
     ar = bootstrap.ar;
+    rc = callPackage ./pkgs/rc.nix {
+      stdenv = buildStdenv;
+      yacc = bootstrap.yacc;
+      src = ./rc-source;
+    };
     libc = callPackage ./pkgs/libc.nix {
       stdenv = buildStdenv;
       src = ./libc-source;

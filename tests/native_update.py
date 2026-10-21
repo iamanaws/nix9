@@ -63,6 +63,13 @@ with tempfile.TemporaryDirectory() as directory:
                 digest = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" if name == "wrong-hash" else hashes[name]
                 expression = (Path(source) / "update.nix").read_text()
                 expression = expression.replace("https://example.org/packages.tar.gz", f"{base}/{archive}.tar.gz")
+                expression = "{ inspect ? false }:\n" + expression.replace("pkgs.buildEnv {", '''
+                  if inspect then builtins.listToAttrs (map (name: {
+                    inherit name;
+                    value = pkgs.${name}.drvPath;
+                  }) [ "cc" "ar" "rc" "libc" "libmp" "libsec" "libbio" "libregexp"
+                       "mk" "yacc" "lex" "libl" "liblua" "lua" "fortune" "sha1sum" ])
+                  else pkgs.buildEnv {''')
                 (root / f"{name}.nix").write_text(expression.replace(hashes["one"], digest))
             with boot(qemu, image) as guest:
                 guest.child.timeout = 600
@@ -73,7 +80,16 @@ with tempfile.TemporaryDirectory() as directory:
                 for name in ("one", "two", "broken", "wrong-hash"):
                     guest.command(f"hget -o /tmp/{name}.nix {base}/{name}.nix")
                 outputs = {}
+                derivations = {}
                 for name in ("one", "two"):
+                    result = guest.command(f"nix-instantiate /tmp/{name}.nix --eval --strict --json --arg inspect true")
+                    derivations[name] = json.loads(re.findall(r"(?m)^\{.*\}$", result)[0])
+                    if name == "two":
+                        changed = {package: (drv, derivations[name][package])
+                                   for package, drv in derivations["one"].items()
+                                   if drv != derivations[name][package]}
+                        if set(changed) != {"sha1sum"}:
+                            raise RuntimeError(f"recipe edit changed unrelated derivations: {changed}")
                     result = guest.command(f"nix-build /tmp/{name}.nix --out-link {roots}/candidate")
                     if name == "two" and "building '" not in result:
                         raise RuntimeError(f"updated recipe was not built natively: {result}")
@@ -116,6 +132,7 @@ with tempfile.TemporaryDirectory() as directory:
 Path(output).mkdir()
 Path(output, "results.json").write_text(json.dumps({
     "pinned-package-update": "passed",
+    "unchanged-packages-reused": "passed",
     "failed-updates-preserve-profile": "passed",
     "offline-rebuild": "passed",
     "rollback-and-gc": "passed",

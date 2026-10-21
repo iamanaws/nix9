@@ -1,5 +1,6 @@
 {
   tools,
+  shell ? "${tools}/bin/rc",
   initialPath ? [ ],
   libc ? null,
 }:
@@ -148,7 +149,7 @@ let
           ;
         system = "x86_64-plan9";
         SOURCE_DATE_EPOCH = "1";
-        builder = "${tools}/bin/rc";
+        builder = shell;
         args = [
           "-m"
           "${tools}/rcmain"
