@@ -9,6 +9,17 @@ let
       bootstrap.patch
     ];
   };
+  toolchainStdenv = import ./stdenv.nix {
+    tools = ./tools;
+    shell = "${pkgs.rc}/bin/rc";
+    cc = bootstrap.cc;
+    libc = pkgs.libc;
+    initialPath = [
+      pkgs.mk
+      pkgs.ar
+      pkgs.rc
+    ];
+  };
   stdenv = import ./stdenv.nix {
     tools = ./tools;
     shell = "${pkgs.rc}/bin/rc";
@@ -25,11 +36,15 @@ let
     inherit stdenv;
     inherit (stdenv) mkDerivation;
     callPackage = import ./call-package.nix pkgs;
-    cc = bootstrap.cc;
+    cc = callPackage ./pkgs/cc.nix {
+      stdenv = toolchainStdenv;
+      src = ./cc-source;
+    };
     ar =
       (callPackage ./pkgs/ar.nix {
         mkDerivation = buildStdenv.mkDerivation;
         src = ./ar.c;
+        patch = bootstrap.patch;
       }).overrideAttrs
         (_: {
           buildInputs = [
@@ -37,7 +52,14 @@ let
             libmach
           ];
         });
-    patch = bootstrap.patch;
+    patch =
+      (callPackage ./pkgs/patch.nix {
+        mkDerivation = toolchainStdenv.mkDerivation;
+        src = ./patch.c;
+      }).overrideAttrs
+        (_: {
+          buildInputs = [ libbio ];
+        });
     rc = callPackage ./pkgs/rc.nix {
       stdenv = buildStdenv;
       yacc = bootstrap.yacc;
@@ -65,7 +87,10 @@ let
       mkDerivation = buildStdenv.mkDerivation;
       src = ./mk-source/sys/src/cmd/mk;
     };
-    yacc = callPackage ./pkgs/yacc.nix { src = ./yacc-source; };
+    yacc = callPackage ./pkgs/yacc.nix {
+      stdenv = toolchainStdenv;
+      src = ./yacc-source;
+    };
     lex = callPackage ./pkgs/lex.nix { src = ./lex-source/sys/src/cmd/lex; };
     libl = callPackage ./pkgs/libl.nix {
       src = ./lex-source/sys/src/ape/lib/l;

@@ -33,7 +33,7 @@ def archive_dates(path):
 
 
 qemu, image, nix_archive, nix_prefix, packages_archive, packages, output = sys.argv[1:]
-names = ("patch", "ar", "cc", "libc", "libbio", "libmach", "libregexp", "mk", "rc")
+names = ("patch", "ar", "cc", "libc", "libbio", "libmach", "libregexp", "mk", "rc", "yacc")
 runs = []
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)
@@ -63,7 +63,25 @@ with tempfile.TemporaryDirectory() as directory:
                             guest.command(f"nix-build {packages} -A {name} --check --no-out-link")
                         guest.command(f"cat $roots/{name} > /tmp/outputs/{name}.path")
                         guest.command(f"p=`{{cat $roots/{name}}}; nix-store --dump $p > /tmp/outputs/{name}.nar")
-                    guest.command(f"nix-build /tmp/reproducibility.nix --argstr packages {packages} --out-link $roots/epochs")
+                    if run == 0:
+                        for name in names:
+                            command = f"nix-build /tmp/reproducibility.nix --argstr packages {packages}"
+                            result = guest.command(f"{command} -A rebuilt.{name} --out-link $roots/rebuilt-{name}")
+                            if "copying path" in result:
+                                raise RuntimeError(f"{name} was substituted during self rebuild")
+                            guest.command(f"original=`{{cat $roots/{name}}}; rebuilt=`{{cat $roots/rebuilt-{name}}}")
+                            guest.command("test $original '!=' $rebuilt")
+                            if name == "cc":
+                                files = ("bin/6a", "bin/6c", "bin/6l")
+                            elif name == "yacc":
+                                files = ("libexec/yacc",)
+                            elif name.startswith("lib"):
+                                files = (f"lib/{name}.a",)
+                            else:
+                                files = (f"bin/{name}",)
+                            for file in files:
+                                guest.command(f"cmp $original/{file} $rebuilt/{file}")
+                    guest.command(f"nix-build /tmp/reproducibility.nix --argstr packages {packages} -A archives --out-link $roots/epochs")
                     guest.command("ar=`{cat $roots/ar}^/bin/ar")
                     result = guest.command("@{ SOURCE_DATE_EPOCH=invalid; $ar rc /tmp/invalid.a }; echo AR-STATUS:$status")
                     if not re.search(r"(?m)^AR-STATUS:.+", result):
@@ -96,8 +114,8 @@ with tempfile.TemporaryDirectory() as directory:
         hashes = [hashlib.sha256((root / (name + ".nar")).read_bytes()).hexdigest() for root in runs]
         if paths[0] != paths[1] or hashes[0] != hashes[1]:
             raise RuntimeError(f"{name} is not reproducible: {paths}, {hashes}")
-        results[name] = {"output": paths[0], "nar-sha256": hashes[0]}
+        results[name] = {"output": paths[0], "nar-sha256": hashes[0], "self-rebuild": "identical"}
 
 Path(output).mkdir()
 Path(output, "results.json").write_text(json.dumps(results, indent=2) + "\n")
-print("PASS: native toolchain rebuilds have identical paths and NAR hashes")
+print("PASS: native toolchain is reproducible and rebuilds itself with identical binaries and libraries")
