@@ -1,0 +1,25 @@
+--- a/src/libstore/build/entry-points.cc
++++ b/src/libstore/build/entry-points.cc
+@@ -130,14 +130,20 @@
+         auto info = queryPathInfo(path);
+         if (info->deriver && isValidPath(*info->deriver)) {
+             goals.clear();
+-            goals.insert(worker.makeGoal(
++            goal = worker.makeGoal(
+                 DerivedPath::Built{
+                     .drvPath = makeConstantStorePathRef(*info->deriver),
+                     // FIXME: Should just build the specific output we need.
+                     .outputs = OutputsSpec::All{},
+                 },
+-                bmRepair));
++                bmRepair);
++            goals.insert(goal);
+             worker.run(goals);
++            if (goal->exitCode != Goal::ecSuccess) {
++                auto exitStatus = worker.exitStatusFlags.failingExitStatus();
++                goal->buildResult.tryThrowBuildError(exitStatus);
++                throw Error(exitStatus, "cannot repair path '%s'", printStorePath(path));
++            }
+         } else
+             throw Error(worker.exitStatusFlags.failingExitStatus(), "cannot repair path '%s'", printStorePath(path));
+     }

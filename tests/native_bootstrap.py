@@ -32,6 +32,13 @@ with files_guest(qemu, image, {"bootstrap.tar": archive}) as guest:
     shell = rooted(guest, roots + "/shell")
     guest.command("rm -r $nix9/cache; NIX_CONFIG='substituters ='")
     guest.command("nix-build $nix9/packages -A sha1sum --check --no-out-link")
+    guest.command(f"nix-build $nix9/packages -A sha1sum --out-link {roots}/sha1sum")
+    guest.command(f"sum=`{{cat {roots}/sha1sum}}; chmod 666 $sum/bin/sha1sum; echo damaged > $sum/bin/sha1sum")
+    result = guest.command("nix-build $nix9/packages -A sha1sum --repair --no-out-link")
+    if "repairing outputs of" not in result or "copying path" in result:
+        raise RuntimeError(f"damaged package was not rebuilt offline: {result}")
+    guest.command("echo -n abc | $sum/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
+    guest.command(f"nix-store --verify-path $sum; rm {roots}/sha1sum")
     guest.command(f"nix-profile {roots}/profile set {environment}")
     guest.command(f". $nix9/packages/profile {roots}/profile")
     guest.command("echo -n abc | sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")

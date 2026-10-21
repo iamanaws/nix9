@@ -3,6 +3,8 @@
 from pathlib import Path
 import re
 
+from nix_repair import check_repairs
+
 
 def build_cli_fixtures():
     return {"nix-build.nix": Path(__file__).with_name("nix-build.nix")}
@@ -57,8 +59,9 @@ def check_nix_build_cli(guest):
     guest.command("rm $roots/result $roots/custom $roots/multiple-dev; cliStore --gc")
     guest.command("test ! -e $output")
     check_build_checks(guest)
+    check_repairs(guest)
     return ["evaluation and build", "reuse", "root replacement", "file roots", "arguments", "multiple outputs",
-            "dry run", "no output root", "failure status", "rebuild checks", "GC"]
+            "dry run", "no output root", "failure status", "rebuild checks", "offline repair builds", "GC"]
 
 
 def check_build_checks(guest):

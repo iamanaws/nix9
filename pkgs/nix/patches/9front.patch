@@ -274,6 +274,19 @@
  }
  
  void SQLite::exec(const std::string & stmt)
+--- a/src/libstore/build/derivation-building-goal.cc
++++ b/src/libstore/build/derivation-building-goal.cc
+@@ -434,6 +434,10 @@
+            them. */
+         if (auto * localStore = dynamic_cast<LocalFSStore *>(&worker.store)) {
+             for (auto & [_, status] : initialOutputs) {
++#ifdef __plan9__
++                // The native backend keeps old outputs until replacements pass validation.
++                if (buildMode == bmRepair) continue;
++#endif
+                 if (!status.known || status.known->isValid())
+                     continue;
+                 auto storePath = status.known->path;
 --- a/src/libstore/local-store.cc
 +++ b/src/libstore/local-store.cc
 @@ -126,6 +126,16 @@
@@ -457,16 +470,33 @@
              }
  
              outputLock.setDeletion(true);
-@@ -1116,6 +1190,9 @@
-     const StorePathSet & references,
-     RepairFlag repair)
- {
+@@ -1198,6 +1198,26 @@
+     auto dstPath = makeFixedOutputPathFromCA(name, desc);
+ 
+     addTempRoot(dstPath);
 +#ifdef __plan9__
-+    if (repair) throw Error("store repair is not supported on 9front");
++    if (repair) {
++        // Reuse the verified NAR repair path for evaluator inputs as well.
++        if (inMemoryAndDontNeedRestore) {
++            std::tie(tempDir, tempDirFd) = createTempDirInStore();
++            delTempDir = std::make_unique<AutoDelete>(tempDir);
++            tempPath = tempDir / "x";
++            StringSource dumpSource{dump};
++            restorePath(tempPath, dumpSource, dumpMethod, localSettings.fsyncStorePaths);
++        }
++        HashSink narSink{HashAlgorithm::SHA256};
++        dumpPath(tempPath, narSink);
++        auto narHash = narSink.finish();
++        auto info = ValidPathInfo::makeFromCA(*this, name, std::move(desc), narHash.hash);
++        info.narSize = narHash.numBytesDigested;
++        auto narSource = sinkToSource([&](Sink &sink) { dumpPath(tempPath, sink); });
++        addToStore(info, *narSource, Repair, NoCheckSigs);
++        return dstPath;
++    }
 +#endif
-     /* For computing the store path. */
-     auto hashSink = std::make_unique<HashSink>(hashAlgo);
-     TeeSource source{source0, *hashSink};
+ 
+     if (repair || !isValidPath(dstPath)) {
+ 
 @@ -1217,6 +1294,9 @@
          if (repair || !isValidPath(dstPath)) {
  
@@ -547,11 +577,12 @@
  class LocalStore : public virtual IndirectRootStore, public virtual GcStore
  {
  public:
-@@ -184,7 +188,14 @@
+@@ -184,7 +188,15 @@
      /**
       * Lock file used for upgrading.
       */
 +#ifdef __plan9__
++    friend class Plan9Builder;
 +    PathLocks clientLock;
 +    PathLocks lockStore();
 +    void markStoreUsed();

@@ -31,6 +31,50 @@ class Plan9Builder : public DerivationBuilder, private DerivationBuilderParams {
     std::map<std::string, std::unique_ptr<AutoDelete>> cleanupOutputs;
     OutputPathMap outputPaths, scratchOutputs;
     StringMap inputRewrites, outputRewrites;
+    void installRepairedOutputs(const ValidPathInfos &registrations) {
+        auto gate = store.lockStore();
+        store.requireExclusiveStore();
+        struct Replacement {
+            std::filesystem::path destination, scratch, backup;
+            bool saved = false, installed = false;
+        };
+        std::vector<Replacement> replacements;
+        for (auto &[name, path] : outputPaths) {
+            if (!registrations.contains(path)) continue;
+            auto destination = store.toRealPath(path);
+            std::filesystem::path backup;
+            do {
+                backup = makeTempPath(destination.parent_path(), destination.filename().string() + ".old");
+            } while (pathExists(backup));
+            replacements.push_back({destination, store.toRealPath(scratchOutputs.at(name)), backup});
+        }
+        try {
+            for (auto &output : replacements) {
+                if (pathExists(output.destination)) {
+                    std::filesystem::rename(output.destination, output.backup);
+                    output.saved = true;
+                }
+                std::filesystem::rename(output.scratch, output.destination);
+                output.installed = true;
+            }
+            store.registerValidPaths(registrations);
+        } catch (...) {
+            // Keep every old output until the replacements and metadata commit.
+            for (auto i = replacements.rbegin(); i != replacements.rend(); ++i) {
+                try {
+                    if (i->installed) std::filesystem::rename(i->destination, i->scratch);
+                    if (i->saved) std::filesystem::rename(i->backup, i->destination);
+                } catch (...) { ignoreExceptionInDestructor(); }
+            }
+            throw;
+        }
+        for (auto &output : replacements) {
+            if (output.saved) {
+                try { deletePath(output.backup); }
+                catch (...) { ignoreExceptionInDestructor(); }
+            }
+        }
+    }
 public:
     Plan9Builder(LocalStore &store, std::unique_ptr<DerivationBuilderCallbacks> callbacks,
                  DerivationBuilderParams params)
@@ -53,8 +97,6 @@ public:
         return true;
     }
     std::optional<Descriptor> startBuild() override {
-        if (buildMode != bmNormal && buildMode != bmCheck)
-            throw Error("only normal and check builds are supported on Plan 9");
         if (buildMode == bmCheck && store.config->getLocalSettings().getDiffHook())
             throw Error("diff hooks are not supported on Plan 9");
         for (auto &[name, output] : drv.outputs) {
@@ -77,7 +119,7 @@ public:
         temp = std::make_unique<AutoDelete>(directory);
         for (auto &[name, path] : outputPaths) {
             auto scratch = path;
-            if (buildMode == bmCheck || store.isValidPath(path)) {
+            if (buildMode != bmNormal || store.isValidPath(path)) {
                 // Like upstream's unsandboxed builder, redirect retained outputs
                 // and rewrite their hashes back in the newly produced outputs.
                 scratch = store.makeStorePath(
@@ -160,7 +202,9 @@ public:
         SingleDrvOutputs result;
         for (auto &[name, path] : outputPaths) {
             auto scratch = scratchOutputs.at(name);
-            if (scratch != path && buildMode != bmCheck) {
+            auto &initial = initialOutputs.at(name);
+            bool keep = buildMode != bmRepair || (initial.known && initial.known->isValid());
+            if (scratch != path && buildMode != bmCheck && keep) {
                 // Never replace the contents or metadata of an already valid output.
                 infos.emplace(name, *store.queryPathInfo(path));
             } else {
@@ -237,7 +281,8 @@ public:
         }
         checkOutputs(store, drvPath, drv.outputs, drvOptions.outputChecks, infos);
         // All outputs and their references become valid in one transaction.
-        store.registerValidPaths(registrations);
+        if (buildMode == bmRepair) installRepairedOutputs(registrations);
+        else store.registerValidPaths(registrations);
         if (buildMode == bmCheck) return {};
         for (auto &[name, path] : outputPaths)
             if (scratchOutputs.at(name) == path) cleanupOutputs.at(name)->cancel();

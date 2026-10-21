@@ -211,8 +211,9 @@ its bundled file cache.
 With other store clients stopped, `nix-store --verify --check-contents` checks the
 store and removes registrations for missing, unreferenced paths.
 Under the same restriction, `nix-store --repair-path PATH` restores a path
-from a configured cache. It verifies the replacement before copying it into place.
-An interrupted copy requires another repair after offline recovery.
+from a configured cache or rebuilds an available derivation. `nix-build --repair`
+checks and repairs a package's outputs and dependencies.
+An interrupted replacement requires another repair after offline recovery.
 To publish natively, generate a key with `nix-store --generate-binary-cache-key NAME SECRET PUBLIC`,
 then import the closure with `--store 'file:///path/to/cache?store=/usr/local/nix/store&secret-key=/path/to/SECRET'`.
 Share the cache and public key. Keep the secret key private.

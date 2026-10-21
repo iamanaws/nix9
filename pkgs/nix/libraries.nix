@@ -95,6 +95,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/brotli-truncation.patch}
     patch -p1 < ${./patches/store-cache.patch}
     patch -p1 < ${./patches/store-cycles.patch}
+    patch -p1 < ${./patches/store-repair.patch}
     patch -p1 < ${./patches/version-without-store.patch}
     patch -p1 < ${./patches/gc-query.patch}
     patch -p1 < ${./patches/cc9-compat.patch}

@@ -16,8 +16,10 @@ let
       }
       // extra
     );
+  dependency = mk "repair-dependency" "/bin/echo dependency > $out" { };
 in
 {
+  inherit dependency;
   hello = mk "cli-hello" "/bin/echo ran >> /tmp/nix9-cli-count; /bin/echo $message > $out" {
     inherit message;
   };
@@ -58,6 +60,49 @@ in
           "dev"
         ];
         devPlaceholder = builtins.placeholder "dev";
+      };
+  repair =
+    mk "cli-repair"
+      ''
+        /bin/echo ran >> /tmp/nix9-repair-count
+        if(! /bin/test -e /tmp/nix9-repair-missing) {
+          /bin/mkdir $out
+          /bin/echo original > $out/message
+          /bin/echo $out > $out/self
+          /bin/echo $input > $out/dependency
+          if(/bin/test -e /tmp/nix9-repair-cycle) /bin/echo $dev >> $out/dependency
+        }
+        /bin/echo headers > $dev
+        if(/bin/test -e /tmp/nix9-repair-change) /bin/echo changed > $dev
+        if(/bin/test -e /tmp/nix9-repair-cycle) /bin/echo $out > $dev
+        if(/bin/test -e /tmp/nix9-repair-fail) {
+          /bin/echo repair-builder-failed
+          exit failed
+        }
+        if(/bin/test -e /tmp/nix9-repair-cancel) {
+          /bin/echo $pid > /tmp/nix9-repair-pid
+          @{/bin/rc -c '/bin/echo $pid > /tmp/nix9-repair-child; exec /bin/sleep 30'}
+        }
+        /bin/echo finished
+      ''
+      {
+        outputs = [
+          "out"
+          "dev"
+        ];
+        input = dependency;
+      };
+  fixedRepair =
+    mk "fixed-repair"
+      ''
+        /bin/echo fixed > $out
+        if(/bin/test -e /tmp/nix9-fixed-wrong) /bin/echo wrong > $out
+        /bin/echo finished
+      ''
+      {
+        outputHashMode = "flat";
+        outputHashAlgo = "sha256";
+        outputHash = builtins.hashString "sha256" "fixed\n";
       };
   failed = mk "cli-failed" "exit failed" { };
 }

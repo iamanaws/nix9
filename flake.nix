@@ -147,6 +147,7 @@
                 ./tests/nix_eval.py
                 ./tests/nix_build.py
                 ./tests/nix_build_cli.py
+                ./tests/nix_repair.py
                 ./tests/nix-build.nix
                 ./tests/nix_concurrency.py
                 ./tests/concurrent-builds.nix
