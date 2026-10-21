@@ -186,7 +186,8 @@ or `package.overrideAttrs (old: { version = "2"; })` to change derivation attrib
 `meta` holds package metadata; `passthru` exposes extra package attributes.
 Neither enters the build environment.
 Each builder gets a private namespace for its tools, headers,
-and libraries. Other host files remain accessible.
+and libraries. Normal builds use the rebuilt compiler and declared libraries;
+seed compilers and libraries are bound during bootstrapping. Other host files remain accessible.
 `nativeBuildInputs` adds commands to rc's `path` and POSIX `PATH`.
 `buildInputs` exposes `include` and `lib` in the compiler namespace.
 Use `propagatedNativeBuildInputs` or `propagatedBuildInputs` to pass those

@@ -12,6 +12,7 @@ let
   inherit (stdenv)
     tools
     shell
+    cc
     initialPath
     libc
     ;
@@ -44,7 +45,12 @@ let
         propagatedNativeBuildInputs
         propagatedBuildInputs
         ;
-      inherit initialPath libc;
+      inherit
+        initialPath
+        shell
+        cc
+        libc
+        ;
       interactive = true;
     }}
     ${hooks}

@@ -18,7 +18,7 @@ in
       echo '#!/bin/rc
       exit seed-shell-unavailable' > blocked
       chmod +x blocked
-      bind blocked $tools/bin/rc
+      bind blocked $tools/bootstrap/rc/bin/rc
       rc -c 'echo nested-rc-PASS'
       echo passed > $out
     '';

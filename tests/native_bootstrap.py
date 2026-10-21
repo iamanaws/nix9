@@ -18,7 +18,10 @@ def rooted(guest, root):
 
 qemu, image, archive, output = sys.argv[1:]
 roots = "/usr/local/nix/state/gcroots"
-with files_guest(qemu, image, {"bootstrap.tar": archive, "rc.nix": Path(__file__).with_name("rc.nix")}) as guest:
+fixtures = {"bootstrap.tar": archive}
+for name in ("rc.nix", "bootstrap-inputs.nix"):
+    fixtures[name] = Path(__file__).with_name(name)
+with files_guest(qemu, image, fixtures) as guest:
     guest.child.timeout = 300
     guest.command("test ! -e /usr/local/nix/store")
     guest.command("cd / && tar xf /tmp/bootstrap.tar; rm /tmp/bootstrap.tar")
@@ -41,6 +44,17 @@ with files_guest(qemu, image, {"bootstrap.tar": archive, "rc.nix": Path(__file__
     rebuilt_rc = rooted(guest, roots + "/rebuilt-rc")
     guest.command(f"cmp {rc}/bin/rc {rebuilt_rc}/bin/rc")
     guest.command(f"rm {roots}/rc {roots}/rc-test {roots}/rebuilt-rc")
+    guest.command("fn inputBuild { nix-build /tmp/bootstrap-inputs.nix --argstr packages $nix9/packages $* }")
+    guest.command(f"inputBuild -A declared --out-link {roots}/library-test")
+    library_test = rooted(guest, roots + "/library-test")
+    guest.command(f"{library_test}/bin/bio", "declared library PASS")
+    result = guest.command("inputBuild -A undeclared --no-out-link; echo INPUT-STATUS:$status")
+    if "libbio.a" not in result or not re.search(r"(?m)^INPUT-STATUS:.*cc9exit=100$", result):
+        raise RuntimeError(f"undeclared library was accepted: {result}")
+    guest.command(f"inputBuild -A ape --out-link {roots}/ape-test")
+    guest.command(f"`{{cat {roots}/ape-test}}", "APE runtime PASS")
+    guest.command(f"rm {roots}/ape-test")
+    guest.command(f"rm {roots}/library-test")
     guest.command("nix-build $nix9/packages -A sha1sum --check --no-out-link")
     guest.command(f"nix-build $nix9/packages -A sha1sum --out-link {roots}/sha1sum")
     guest.command(f"sum=`{{cat {roots}/sha1sum}}; chmod 666 $sum/bin/sha1sum; echo damaged > $sum/bin/sha1sum")
@@ -78,5 +92,6 @@ Path(output, "results.json").write_text(json.dumps({
     "clean-install": "passed",
     "native-project": "passed",
     "rebuilt-shell": "passed",
+    "declared-build-inputs": "passed",
     "update-and-rollback": "passed",
 }, indent=2) + "\n")

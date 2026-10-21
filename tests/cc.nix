@@ -42,7 +42,7 @@ let
       echo '#!/bin/rc
       exit bootstrap-compiler-unavailable' > blocked
       chmod +x blocked
-      for(command in 6a 6c 6l) bind blocked $tools/bin/$command
+      for(command in 6a 6c 6l) bind blocked $tools/bootstrap/bin/$command
       mkdir -p $out/bin
       cp $assembly answer.s
       cp $main main.c

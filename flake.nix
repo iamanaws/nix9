@@ -107,13 +107,18 @@
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
         cp amd64/bin/* "$out/bin/"
+        mkdir -p "$out/bootstrap/bin" "$out/bootstrap/rc/bin" "$out/bootstrap/lib"
+        for command in 6a 6c 6l ar mk; do
+          mv "$out/bin/$command" "$out/bootstrap/bin/"
+        done
+        mv "$out/bin/rc" "$out/bootstrap/rc/bin/"
         cp rc/lib/rcmain "$out/rcmain"
         cp -r ${sysroot}/sys/include "$out/sys/"
         cp -r ${sysroot}/amd64/include "$out/amd64/"
         cp amd64/mkfile "$out/amd64/"
         cp -r sys/src "$out/sys/"
-        cp ${libc}/lib/libc.a "$out/amd64/lib/"
-        cp amd64/lib/libbio.a amd64/lib/libmach.a "$out/amd64/lib/"
+        cp ${libc}/lib/libc.a amd64/lib/libbio.a "$out/bootstrap/lib/"
+        cp amd64/lib/libmach.a "$out/bootstrap/lib/"
         mkdir -p "$out/amd64/lib/ape"
         cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
       '';
@@ -527,6 +532,7 @@
               testSupport [
                 ./tests/native_bootstrap.py
                 ./tests/rc.nix
+                ./tests/bootstrap-inputs.nix
               ]
             }/native_bootstrap.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"

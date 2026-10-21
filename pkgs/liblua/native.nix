@@ -24,7 +24,7 @@ mkDerivation {
   '';
   installPhase = ''
     $tools/bin/mkdir -p $out/lib/ape $out/include/ape $out/share/lua/5.4 $out/share/doc/lua
-    $tools/bin/ar rc $out/lib/ape/liblua.a *.6
+    ar rc $out/lib/ape/liblua.a *.6
     for(header in lua.h luaconf.h lauxlib.h lualib.h lprefix.h ape-config.h) {
       $tools/bin/cp $header $out/include/ape/$header
     }

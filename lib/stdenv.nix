@@ -1,6 +1,6 @@
 {
   tools,
-  shell ? "${tools}/bin/rc",
+  shell ? "${tools}/bootstrap/rc/bin/rc",
   initialPath ? [ ],
   cc ? null,
   libc ? null,
@@ -17,7 +17,12 @@ in
     ;
   initialPath = path;
   mkDerivation = import ./mk-derivation.nix {
-    inherit tools shell libc;
+    inherit
+      tools
+      shell
+      cc
+      libc
+      ;
     initialPath = path;
   };
 }

@@ -1,6 +1,7 @@
 {
   tools,
-  shell ? "${tools}/bin/rc",
+  shell ? "${tools}/bootstrap/rc/bin/rc",
+  cc ? null,
   initialPath ? [ ],
   libc ? null,
 }:
@@ -187,6 +188,8 @@ let
                 propagatedNativeBuildInputs
                 propagatedBuildInputs
                 initialPath
+                shell
+                cc
                 libc
                 ;
             }}

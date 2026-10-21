@@ -4,6 +4,8 @@
   propagatedNativeBuildInputs ? [ ],
   propagatedBuildInputs ? [ ],
   initialPath ? [ ],
+  shell,
+  cc ? null,
   libc ? null,
   interactive ? false,
 }:
@@ -15,6 +17,9 @@ in
   $tools/bin/bind $tools/sys/include /sys/include
   $tools/bin/bind $tools/amd64/include /amd64/include
   $tools/bin/bind $tools/amd64/lib /amd64/lib
+  ${if libc == null then "$tools/bin/bind -b $tools/bootstrap/lib /amd64/lib" else ""}
+  ${if cc == null then "$tools/bin/bind -b $tools/bootstrap/bin /bin" else ""}
+  $tools/bin/bind -b ${quote (builtins.dirOf shell)} /bin
   objtype=amd64
   $tools/bin/bind $tools/amd64/mkfile /amd64/mkfile
   $tools/bin/bind $tools/sys/src/mkfile.proto /sys/src/mkfile.proto
@@ -80,7 +85,7 @@ in
   for(input in $bindInputs) {
     if($tools/bin/test -d $input/bin) $tools/bin/bind -b $input/bin /bin
   }
-  # Declared inputs override bootstrap files; the first input wins.
+  # The first declared input wins.
   bindInputs=()
   for(input in $buildInputs) bindInputs=($input $bindInputs)
   for(input in $bindInputs) {
