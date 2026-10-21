@@ -101,7 +101,7 @@
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
           amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test \
-          amd64/bin/mk amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr \
+          amd64/bin/mk amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr amd64/bin/ed amd64/bin/date \
           amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
@@ -192,6 +192,8 @@
                 ./tests/native_libc.py
                 ./tests/libc.nix
                 ./tests/libc.c
+                ./tests/native_cc.py
+                ./tests/cc.nix
                 ./tests/native_phases.py
                 ./tests/phases.nix
                 ./tests/mk-phases.nix
@@ -352,6 +354,21 @@
         test -s "$out/sys/lib/yaccpar"
         test -s "$out/sys/lib/yaccpars"
       '';
+      ccSource = pkgs.runCommand "9front-cc-source" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/export_tree.py
+            ./tests/artifacts.py
+          ]
+        }/export_tree.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
+          sys/src/cmd/cc sys/src/cmd/6a sys/src/cmd/6c sys/src/cmd/6l
+        mkdir -p "$out"
+        tar -xf "$TMPDIR/source.tar" -C "$out"
+        for command in cc 6a 6c 6l; do
+          test -s "$out/sys/src/cmd/$command/mkfile"
+        done
+      '';
       lexSource = pkgs.runCommand "9front-lex-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -413,6 +430,7 @@
         libcSource = apeSource;
         inherit
           nativeTools
+          ccSource
           secSource
           fortuneSource
           mkSource

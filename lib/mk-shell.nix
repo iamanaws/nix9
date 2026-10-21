@@ -9,7 +9,7 @@
   shellHook ? "",
 }@attrs:
 let
-  inherit (stdenv) tools initialPath;
+  inherit (stdenv) tools initialPath libc;
   mergeInputs =
     name:
     (attrs.${name} or [ ])
@@ -39,7 +39,7 @@ let
         propagatedNativeBuildInputs
         propagatedBuildInputs
         ;
-      inherit initialPath;
+      inherit initialPath libc;
       interactive = true;
     }}
     ${hooks}

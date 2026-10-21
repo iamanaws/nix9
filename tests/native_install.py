@@ -20,6 +20,7 @@ from native_project import check_project
 from native_yacc import check_yacc
 from native_lex import check_lex
 from native_libc import check_libc
+from native_cc import check_cc
 from native_phases import check_phases, check_overrides, check_mk_phases
 from native_inputs import check_inputs, check_shell
 from native_environments import check_environments
@@ -58,7 +59,7 @@ with tempfile.TemporaryDirectory() as directory:
     shutil.copytree(Path(__file__).with_name("yacc"), root / "yacc")
     shutil.copyfile(Path(__file__).with_name("lex.nix"), root / "lex.nix")
     shutil.copytree(Path(__file__).with_name("lex"), root / "lex")
-    for name in ("libc.nix", "libc.c"):
+    for name in ("libc.nix", "libc.c", "cc.nix"):
         shutil.copyfile(Path(__file__).with_name(name), root / name)
     fetch_fixtures(root)
     with source_server(root, lua_archive) as tls_port, \
@@ -78,6 +79,10 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"test ! -e {prefix}/share/nix9")
                 guest.command(f"hget -o /tmp/packages.tar http://10.0.2.2:{server.server_port}/packages.tar")
                 guest.command("cd / && tar xf /tmp/packages.tar && rm /tmp/packages.tar")
+                # Keep the shared toolchain through the package tests' GC runs.
+                stdenv_root = "/usr/local/nix/state/gcroots/stdenv"
+                guest.command(f"nix-build --expr 'let p=import {packages}; in p.buildEnv {{ name=\"test-toolchain\"; paths=[p.cc p.libc]; }}' --out-link {stdenv_root}")
+                cc = check_cc(guest, packages, server.server_port)
                 yacc = check_yacc(guest, packages, server.server_port)
                 lex = check_lex(guest, packages, server.server_port)
                 libc = check_libc(guest, packages, server.server_port)
@@ -117,6 +122,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"rm {drv_root}")
                 guest.command(f"echo -n abc | {package}/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
                 guest.command(f"nix-store --verify-path {drv} {package}")
+                guest.command(f"rm {stdenv_root}")
                 guest.command("rm /tmp/package.tar")
         finally:
             server.shutdown()
@@ -170,6 +176,7 @@ Path(output, "native-install.json").write_text(json.dumps({
     "yacc": yacc,
     "lex": lex,
     "libc": libc,
+    "cc": cc,
     "phases": phases,
     "mk-phases": mk_phases,
     "overrides": overrides,

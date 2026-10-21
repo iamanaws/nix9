@@ -1,7 +1,13 @@
 let
-  bootstrapStdenv = import ./stdenv.nix { tools = ./tools; };
+  bootstrap = import ./bootstrap.nix;
+  buildStdenv = import ./stdenv.nix {
+    tools = ./tools;
+    inherit (bootstrap) cc libc;
+    initialPath = [ bootstrap.mk ];
+  };
   stdenv = import ./stdenv.nix {
     tools = ./tools;
+    inherit (pkgs) cc libc;
     initialPath = [ pkgs.mk ];
   };
   upstream = import ./pkgs/lua-source.nix;
@@ -9,19 +15,23 @@ let
     inherit stdenv;
     inherit (stdenv) mkDerivation;
     callPackage = import ./call-package.nix pkgs;
-    libc = callPackage ./pkgs/libc.nix { src = ./libc-source; };
+    cc = bootstrap.cc;
+    libc = callPackage ./pkgs/libc.nix {
+      stdenv = buildStdenv;
+      src = ./libc-source;
+    };
     libmp = callPackage ./pkgs/libmp.nix { src = ./libsec-source; };
     libsec = callPackage ./pkgs/libsec.nix { src = ./libsec-source; };
     libbio = callPackage ./pkgs/libbio.nix {
-      mkDerivation = bootstrapStdenv.mkDerivation;
+      mkDerivation = buildStdenv.mkDerivation;
       src = ./fortune-source/sys/src/libbio;
     };
     libregexp = callPackage ./pkgs/libregexp.nix {
-      mkDerivation = bootstrapStdenv.mkDerivation;
+      mkDerivation = buildStdenv.mkDerivation;
       src = ./mk-source/sys/src/libregexp;
     };
     mk = callPackage ./pkgs/mk.nix {
-      mkDerivation = bootstrapStdenv.mkDerivation;
+      mkDerivation = buildStdenv.mkDerivation;
       src = ./mk-source/sys/src/cmd/mk;
     };
     yacc = callPackage ./pkgs/yacc.nix { src = ./yacc-source; };

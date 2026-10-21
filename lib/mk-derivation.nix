@@ -1,6 +1,7 @@
 {
   tools,
   initialPath ? [ ],
+  libc ? null,
 }:
 let
   mkDerivation =
@@ -166,6 +167,7 @@ let
                 propagatedNativeBuildInputs
                 propagatedBuildInputs
                 initialPath
+                libc
                 ;
             }}
             ${script}

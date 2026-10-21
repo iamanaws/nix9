@@ -4,6 +4,7 @@
   propagatedNativeBuildInputs ? [ ],
   propagatedBuildInputs ? [ ],
   initialPath ? [ ],
+  libc ? null,
   interactive ? false,
 }:
 let
@@ -21,7 +22,9 @@ in
     $tools/bin/bind $tools/sys/src/cmd/$file /sys/src/cmd/$file
   }
   nativeBuildInputs=( ${inputList (nativeBuildInputs ++ propagatedNativeBuildInputs)} )
-  buildInputs=( ${inputList (buildInputs ++ propagatedBuildInputs)} )
+  buildInputs=( ${
+    inputList (buildInputs ++ propagatedBuildInputs ++ (if libc == null then [ ] else [ libc ]))
+  } )
   fn findInputs {
     inputType=$1
     pendingInputs=$*(2-)
