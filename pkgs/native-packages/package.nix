@@ -1,6 +1,7 @@
 {
   runCommand,
   nativeTools,
+  libcSource,
   secSource,
   fortuneSource,
   mkSource,
@@ -11,6 +12,7 @@
 runCommand "native-packages" { } ''
   mkdir -p "$out/pkgs" "$out/bin"
   cp -r ${nativeTools} "$out/tools"
+  cp -r ${libcSource}/sys/src/libc "$out/libc-source"
   cp -r ${secSource} "$out/libsec-source"
   cp -r ${fortuneSource} "$out/fortune-source"
   cp -r ${mkSource} "$out/mk-source"
@@ -30,6 +32,7 @@ runCommand "native-packages" { } ''
   cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"
+  cp ${../libc/native.nix} "$out/pkgs/libc.nix"
   cp ${../libregexp/native.nix} "$out/pkgs/libregexp.nix"
   cp ${../mk/native.nix} "$out/pkgs/mk.nix"
   cp ${../yacc/native.nix} "$out/pkgs/yacc.nix"

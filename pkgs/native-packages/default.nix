@@ -9,6 +9,7 @@ let
     inherit stdenv;
     inherit (stdenv) mkDerivation;
     callPackage = import ./call-package.nix pkgs;
+    libc = callPackage ./pkgs/libc.nix { src = ./libc-source; };
     libmp = callPackage ./pkgs/libmp.nix { src = ./libsec-source; };
     libsec = callPackage ./pkgs/libsec.nix { src = ./libsec-source; };
     libbio = callPackage ./pkgs/libbio.nix {

@@ -189,6 +189,9 @@
                 ./tests/native_lex.py
                 ./tests/lex.nix
                 ./tests/lex
+                ./tests/native_libc.py
+                ./tests/libc.nix
+                ./tests/libc.c
                 ./tests/native_phases.py
                 ./tests/phases.nix
                 ./tests/mk-phases.nix
@@ -407,6 +410,7 @@
       mkGuestEnvironment = import ./lib/mk-guest-environment.nix { inherit pkgs; };
       nativeNix = pkgs.callPackage ./pkgs/nix/package.nix { inherit nixUtil; };
       nativePackageSet = pkgs.callPackage ./pkgs/native-packages/package.nix {
+        libcSource = apeSource;
         inherit
           nativeTools
           secSource

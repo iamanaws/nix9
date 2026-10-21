@@ -77,10 +77,17 @@ in
   for(input in $bindInputs) {
     if($tools/bin/test -d $input/bin) $tools/bin/bind -b $input/bin /bin
   }
-  for(input in $buildInputs) {
-    if($tools/bin/test -d $input/include) $tools/bin/bind -a $input/include /sys/include
-    if($tools/bin/test -d $input/lib) $tools/bin/bind -a $input/lib /amd64/lib
-    if($tools/bin/test -d $input/include/ape) $tools/bin/bind -a $input/include/ape /sys/include/ape
-    if($tools/bin/test -d $input/lib/ape) $tools/bin/bind -a $input/lib/ape /amd64/lib/ape
+  # Declared inputs override bootstrap files; the first input wins.
+  bindInputs=()
+  for(input in $buildInputs) bindInputs=($input $bindInputs)
+  for(input in $bindInputs) {
+    if($tools/bin/test -d $input/include) $tools/bin/bind -b $input/include /sys/include
+    if($tools/bin/test -d $input/lib) $tools/bin/bind -b $input/lib /amd64/lib
   }
+  for(input in $bindInputs) {
+    if($tools/bin/test -d $input/include/ape) $tools/bin/bind -b $input/include/ape /sys/include/ape
+    if($tools/bin/test -d $input/lib/ape) $tools/bin/bind -b $input/lib/ape /amd64/lib/ape
+  }
+  $tools/bin/bind -a $tools/sys/include/ape /sys/include/ape
+  $tools/bin/bind -a $tools/amd64/lib/ape /amd64/lib/ape
 ''
