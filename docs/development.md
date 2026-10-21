@@ -68,23 +68,20 @@ with the image's headers and libraries hidden.
 
 ## Native Nix
 
-Start with the [README quick start](../README.md#quick-start). On the host, build
-the separate package set with `nix build .#native-packages -o result-native-packages`.
-With the HTTP server running, install it and build in the guest:
+Start with the [README quick start](../README.md#quick-start). The bootstrap archive
+includes the package set and a signed cache for its development tools. In the guest:
 
 ```sh
-. /usr/local/pkg/nix-2.34.8/activate
-hget -o /tmp/packages.tar http://10.0.2.2:8000/result-native-packages
-cd / && tar xf /tmp/packages.tar
-cd /usr/local/pkg/native-packages
+. /usr/local/pkg/nix9/activate
+cd $nix9/packages
 roots=/usr/local/nix/state/gcroots
 nix-build -A fortune --out-link $roots/package
 result=`{cat $roots/package}
 $result/bin/fortune
 ```
 
-For your own project, copy [examples/hello](../examples/hello) into the guest and
-run `nix-build` in that directory. Its mkfile uses the standard build rules.
+For your own project, copy `$nix9/hello` to a writable directory and
+run `nix-build` there. Its mkfile uses the standard build rules.
 The source and recipe stay in your project.
 `pkgs.callPackage ./package.nix { }` supplies recipe dependencies; explicit arguments override them.
 
@@ -120,7 +117,7 @@ reveals the original files.
 To keep generations and roll back:
 
 ```rc
-profile=/usr/local/pkg/native-packages/bin/nix-profile
+profile=$nix9/bin/nix-profile
 $profile $roots/environment set $environment
 $profile $roots/environment list
 ```
@@ -128,14 +125,17 @@ $profile $roots/environment list
 `set` retains the previous environment. `rollback` selects the preceding generation.
 `delete NUMBER` releases an inactive generation for GC.
 Selecting a retained environment reuses its generation.
-Add this line at the end of `$home/lib/profile` to activate the selected environment at login:
+Add these lines at the end of `$home/lib/profile` to activate the selected environment at login:
 
 ```rc
-. /usr/local/pkg/native-packages/profile /usr/local/nix/state/gcroots/environment
+. /usr/local/pkg/nix9/activate
+. $nix9/packages/profile /usr/local/nix/state/gcroots/environment
 ```
 
-Source that line again after `set` or `rollback` to switch the current shell.
+Source the second line again after `set` or `rollback` to switch the current shell.
 Build updates with a separate `--out-link`, then use `set` to select them.
+To update nix9 itself, install a new bootstrap archive and source its activation file.
+Each archive keeps its package set in a separate versioned directory.
 
 The store persists at `/usr/local/nix/store`.
 `nix-build` evaluates and builds the selected package. Its default root is
@@ -195,7 +195,8 @@ dependencies and verifies their signatures and content hashes. The cache path ca
 read-only 9P mount. HTTP(S) caches use the same settings with a URL such as
 `https://cache.example?store=/usr/local/nix/store`. First mount webfs with
 `webfs -m /mnt/web -T 60000`. Network caches are read-only; webfs controls the
-transport and does not validate server certificates. No cache is configured by default.
+transport and does not validate server certificates. The bootstrap archive configures
+its bundled file cache.
 With other store clients stopped, `nix-store --verify --check-contents` checks the
 store and removes registrations for missing, unreferenced paths.
 Under the same restriction, `nix-store --repair-path PATH` restores a path

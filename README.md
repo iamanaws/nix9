@@ -15,11 +15,11 @@ See [test coverage](docs/validation.md) and [limitations](docs/feasibility.md).
 On x86_64 Linux with KVM and Nix flakes enabled, run from the checkout.
 Your user and Nix builders need access to `/dev/kvm`.
 Accept the flake's cache settings when prompted to use `nix9.cachix.org`.
-In one terminal, prepare the VM and serve the native Nix package:
+In one terminal, prepare the VM and serve the bootstrap archive:
 
 ```sh
 nix build .#vm-image -o result-vm
-nix build .#nix-package -o result-nix-package
+nix build .#native-bootstrap -o result-native-bootstrap
 nix run .#setup-vm
 nix develop -c python -m http.server 8000 --bind 127.0.0.1
 ```
@@ -35,14 +35,30 @@ A missing-display message from `rio` is expected. Run inside the VM:
 
 ```rc
 ip/ipconfig ether /net/ether0
-hget -o /tmp/nix.tar http://10.0.2.2:8000/result-nix-package
+hget -o /tmp/nix.tar http://10.0.2.2:8000/result-native-bootstrap
 cd / && tar xf /tmp/nix.tar
-. /usr/local/pkg/nix-2.34.8/activate
-nix-instantiate --eval --expr '6 * 7'
+. /usr/local/pkg/nix9/activate
+roots=/usr/local/nix/state/gcroots
+nix-build $nix9/environment.nix --out-link $roots/environment
+environment=`{cat $roots/environment}
+. $environment/activate
+echo -n abc | sha1sum
 ```
 
-The result is `42`. Next, [build a package natively](docs/development.md#native-nix).
-The disk persists. Later, run only `run-vm` and activate Nix again.
+The archive includes Nix, a pinned package set and a signed native cache.
+If Cachix has no copy, this step builds the native packages in a VM.
+Try a C project with the cached toolchain:
+
+```rc
+mkdir /tmp/hello
+cp $nix9/hello/* /tmp/hello
+cd /tmp/hello
+nix-shell --run 'mk && ./6.out'
+```
+
+The result is `hello from nix9`. See [native development](docs/development.md#native-nix)
+for package builds, environment updates and rollback.
+The disk persists. Later, run only `run-vm` and source `/usr/local/pkg/nix9/activate` again.
 Keep `result-vm` to retain the backing image. Run `fshalt` before stopping QEMU
 with Ctrl-C. The host HTTP server can stop after installation.
 

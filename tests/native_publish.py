@@ -1,0 +1,91 @@
+"""Build a signed native development cache and package it for installation."""
+
+from pathlib import Path
+import re
+import shutil
+import sys
+import tarfile
+import tempfile
+import threading
+
+from artifacts import ArtifactServer
+from cache_publish import publish_cache, verify_published
+from guest import boot
+
+
+def rooted(guest, root):
+    result = guest.command(f"cat {root}")
+    paths = re.findall(r"(?m)^/usr/local/nix/store/[^\s]+$", result)
+    if len(paths) != 1:
+        raise RuntimeError(f"missing output root: {result}")
+    return paths[0]
+
+
+qemu, image, nix, packages, recipes, project, prefix, output = sys.argv[1:]
+with tempfile.TemporaryDirectory() as directory:
+    work = Path(directory)
+    payload = work / "root" / prefix.lstrip("/")
+    shutil.copytree(nix, payload)
+    payload.chmod(0o755)
+    shutil.copytree(packages, payload / "packages")
+    for name in ("environment.nix", "shell.nix"):
+        shutil.copyfile(Path(recipes) / name, payload / name)
+    shutil.copytree(project, payload / "hello")
+    for path in payload.rglob("*"):
+        path.chmod(path.stat().st_mode | 0o200)
+    # Keep the example tied to this archive's package set.
+    for name in ("default.nix", "shell.nix"):
+        path = payload / "hello" / name
+        path.write_text(path.read_text().replace("/usr/local/pkg/native-packages", "<nix9>"))
+    shutil.copy(payload / "packages" / "bin" / "nix-profile", payload / "bin" / "nix-profile")
+    activate = (
+        f"nix9={prefix}\n"
+        "path=($nix9/bin $path)\n"
+        "NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'\n"
+        "NIX_PATH='nix9='^$nix9/packages\n"
+        "NIX_CONF_DIR=$nix9\n"
+        "status=''\n"
+    )
+    (payload / "activate").write_text(activate)
+    selector = work / "root/usr/local/pkg/nix9"
+    selector.mkdir()
+    (selector / "activate").write_text(f". {prefix}/activate\n")
+
+    def archive(destination):
+        with tarfile.open(destination, "w", format=tarfile.USTAR_FORMAT) as tar:
+            tar.add(work / "root/usr", arcname="usr")
+
+    archive(work / "bootstrap.tar")
+    with ArtifactServer(work, work / "published.tar") as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # All package compilation happens natively. The host only collects the cache.
+            with boot(qemu, image) as guest:
+                guest.child.timeout = 300
+                guest.command(f"hget -o /tmp/bootstrap.tar http://10.0.2.2:{server.server_port}/bootstrap.tar")
+                guest.command("cd / && tar xf /tmp/bootstrap.tar")
+                guest.command(". /usr/local/pkg/nix9/activate")
+                roots = "/usr/local/nix/state/gcroots"
+                guest.command(f"nix-build $nix9/environment.nix --out-link {roots}/environment")
+                environment = rooted(guest, roots + "/environment")
+                guest.command(f"nix-build $nix9/shell.nix --out-link {roots}/shell")
+                shell = rooted(guest, roots + "/shell")
+                guest.command(f"package=({environment} {shell})")
+                closure = set(re.findall(r"(?m)^/usr/local/nix/store/[^\s]+$", guest.command("nix-store -qR $package")))
+                publish_cache(guest, server.server_port)
+            if not server.received.is_set():
+                raise RuntimeError("native cache was not uploaded")
+            verify_published(work, [environment, shell], closure)
+            shutil.move(work / "published", payload / "cache")
+            key = (work / "published.pub").read_text().strip()
+            (payload / "nix.conf").write_text(
+                f"substituters = file://{prefix}/cache?store=/usr/local/nix/store\n"
+                f"trusted-public-keys = {key}\n"
+            )
+            archive(work / "bootstrap.tar")
+            shutil.copyfile(work / "bootstrap.tar", output)
+        finally:
+            server.shutdown()
+            thread.join()
+print(f"Published native bootstrap: {len(closure)} cached paths")

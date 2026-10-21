@@ -1,5 +1,5 @@
 let
-  pkgs = import /usr/local/pkg/native-packages;
+  pkgs = import <nix9>;
 in
 pkgs.buildEnv {
   name = "tools";

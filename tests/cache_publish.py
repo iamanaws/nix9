@@ -21,12 +21,12 @@ def verify_published(root, package, expected):
     with tarfile.open(root / "published.tar") as archive:
         archive.extractall(root, filter="data")
     key = (root / "published.pub").read_text().strip()
+    packages = [package] if isinstance(package, str) else package
     store = ["nix-store", "--store", f"local?root={root}/receiver&store=/usr/local/nix/store"]
     subprocess.run(store + ["--option", "substituters", f"file://{root}/published?store=/usr/local/nix/store",
-                           "--option", "trusted-public-keys", key, "--realise", package], check=True)
-    paths = subprocess.check_output(store + ["-qR", package], text=True).splitlines()
+                           "--option", "trusted-public-keys", key, "--realise", *packages], check=True)
+    paths = subprocess.check_output(store + ["-qR", *packages], text=True).splitlines()
     if set(paths) != expected:
         raise RuntimeError(f"native cache changed the closure: {paths}")
     subprocess.run(store + ["--verify-path", *paths], check=True)
-
 

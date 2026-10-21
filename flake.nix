@@ -447,6 +447,45 @@
         name = "nix-${nixUtil.version}";
         package = nativeNix;
       };
+      nativeBootstrapBuild =
+        let
+          revision = builtins.substring 0 12 (
+            builtins.hashString "sha256" "${nativeNix} ${nativePackageSet} ${./pkgs/native-bootstrap} ${./examples/hello}"
+          );
+        in
+        pkgs.runCommand "nix9-${revision}-bootstrap.tar"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [ pkgs.nix ];
+          }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_publish.py
+                ./tests/cache_publish.py
+                ./tests/artifacts.py
+              ]
+            }/native_publish.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nativeNix} ${nativePackageSet} ${./pkgs/native-bootstrap} ${./examples/hello} \
+              /usr/local/pkg/nix9-${revision} "$out"
+          '';
+      # The archive is self-contained; embedded host debug paths need no GC roots.
+      nativeBootstrap =
+        pkgs.runCommand "nix9-bootstrap.tar"
+          {
+            __structuredAttrs = true;
+            unsafeDiscardReferences.out = true;
+          }
+          ''
+            cp ${nativeBootstrapBuild} "$out"
+          '';
+      nativeBootstrapTests =
+        pkgs.runCommand "native-bootstrap-tests" { requiredSystemFeatures = [ "kvm" ]; }
+          ''
+            ${python}/bin/python ${testSupport [ ./tests/native_bootstrap.py ]}/native_bootstrap.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+          '';
       guestEnvironment = mkGuestEnvironment {
         name = "default";
         packages = [
@@ -590,6 +629,8 @@
         nix = nativeNix;
         nix-package = nixPackage;
         native-packages = nativePackagesArchive;
+        native-bootstrap = nativeBootstrap;
+        native-bootstrap-tests = nativeBootstrapTests;
         guest-development-tests = developmentTests;
         inherit libbz2;
         inherit libbsd;
