@@ -39,6 +39,7 @@
     {
       lib = {
         inherit (project) mkPlan9Program mkGuestPackage mkGuestEnvironment;
+        inherit (project) stdenv callPackage;
         mkDerivation = import ./lib/mk-derivation.nix;
       };
       packages.${system} = project.flakePackages // tests.packages;

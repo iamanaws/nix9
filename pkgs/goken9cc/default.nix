@@ -12,6 +12,7 @@ stdenv.mkDerivation {
   patches = [
     ./plan9-archive.patch
     ./9front-amd64.patch
+    ./binary-literals.patch
   ];
   configurePhase = ''
     runHook preConfigure
@@ -51,6 +52,13 @@ stdenv.mkDerivation {
         cmp "../$member" "$member"
       done
     )
+    printf 'int binary(void) { return 0b101010 == 42 && 0B11111111U == 255; }\n' > binary.c
+    ROOT/arch/boot-gcc/bin/6c -o binary.6 binary.c
+    printf 'int binary(void) { return 0b; }\n' > invalid-binary.c
+    if ROOT/arch/boot-gcc/bin/6c -o invalid.6 invalid-binary.c; then
+      echo 'compiler accepted an empty binary constant' >&2
+      exit 1
+    fi
     runHook postCheck
   '';
   installPhase = ''

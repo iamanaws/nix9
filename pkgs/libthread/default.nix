@@ -1,7 +1,11 @@
-{ mkPlan9Library, source }:
-mkPlan9Library {
+{ mkDerivation, src }:
+mkDerivation {
   name = "libthread";
-  src = "${source}/sys/src/libthread";
-  # goken9cc lacks _Noreturn; -B permits paths ending in abort().
-  cFlags = [ "-B" ];
+  inherit src;
+  buildFlags = [ "libthread.a" ];
+  makeFlags = [ "LIB=libthread.a" ];
+  installPhase = ''
+    mkdir -p $out/lib
+    cp libthread.a $out/lib/
+  '';
 }

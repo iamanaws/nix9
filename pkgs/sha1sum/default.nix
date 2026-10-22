@@ -1,24 +1,16 @@
 {
-  fetchurl,
-  mkPlan9Program,
+  mkDerivation,
+  src,
   libsec,
 }:
-let
-  revision = "228167f32bf5b14fcb41e52eab527a1c8531638a";
-  source = fetchurl {
-    url = "https://raw.githubusercontent.com/9front/9front/${revision}/sys/src/cmd/sha1sum.c";
-    hash = "sha256-LIcy0GXxvp5cUoZsfZAwGvk0C+G05HmJSP/FRgupAHM=";
-  };
-in
-(mkPlan9Program {
+mkDerivation {
   name = "sha1sum";
-  sources = [ source ];
-  libraries = [ libsec ];
-  meta = {
-    description = "9front SHA-1 and SHA-2 checksum utility";
-    homepage = "https://9front.org";
-  };
-}).overrideAttrs
-  (_: {
-    passthru = { inherit source revision; };
-  })
+  inherit src;
+  passthru.source = src;
+  buildInputs = [ libsec ];
+  buildCommand = ''
+    6c -o sha1sum.6 $src
+    mkdir -p $out/bin
+    6l -o $out/bin/sha1sum sha1sum.6
+  '';
+}

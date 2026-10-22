@@ -7,7 +7,17 @@ let
       bootstrap.patch
     ];
   };
+  definitions = import ./pkgs/packages.nix {
+    sources = builtins.mapAttrs (name: _: ./sources + "/${name}") (builtins.readDir ./sources);
+  };
+  package =
+    name: args:
+    let
+      definition = definitions.${name};
+    in
+    bootstrap.callPackage definition.path (definition.args // args);
   bootstrap = rec {
+    buildPackages = bootstrap;
     stdenv = import ./stdenv.nix {
       tools = ./tools;
       initialPath = [
@@ -17,33 +27,30 @@ let
       ];
     };
     callPackage = import ./call-package.nix bootstrap;
-    patch = callPackage ./pkgs/patch.nix {
+    patch = package "patch" {
       mkDerivation = rawStdenv.mkDerivation;
-      src = ./patch.c;
+      libbio = null;
     };
-    ar = callPackage ./pkgs/ar.nix {
+    ar = package "ar" {
       mkDerivation = rawStdenv.mkDerivation;
-      src = ./ar.c;
+      libbio = null;
+      libmach = null;
     };
-    libbio = callPackage ./pkgs/libbio.nix {
+    libbio = package "libbio" {
       mkDerivation = seedStdenv.mkDerivation;
-      src = ./fortune-source/sys/src/libbio;
     };
-    libstdio = callPackage ./pkgs/libstdio.nix {
+    libstdio = package "libstdio" {
       mkDerivation = seedStdenv.mkDerivation;
-      src = ./cc-source/sys/src/libstdio;
     };
-    libregexp = callPackage ./pkgs/libregexp.nix {
+    libregexp = package "libregexp" {
       mkDerivation = seedStdenv.mkDerivation;
-      src = ./mk-source/sys/src/libregexp;
     };
-    mk = callPackage ./pkgs/mk.nix {
+    mk = package "mk" {
       mkDerivation = seedStdenv.mkDerivation;
-      src = ./mk-source/sys/src/cmd/mk;
     };
-    libc = callPackage ./pkgs/libc.nix { src = ./libc-source; };
-    yacc = callPackage ./pkgs/yacc.nix { src = ./yacc-source; };
-    cc = callPackage ./pkgs/cc.nix { src = ./cc-source; };
+    libc = package "libc" { };
+    yacc = package "yacc" { };
+    cc = package "cc" { };
   };
 in
 bootstrap

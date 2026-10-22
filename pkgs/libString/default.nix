@@ -1,10 +1,10 @@
 { mkDerivation, src }:
 mkDerivation {
-  name = "libbio";
+  name = "libString";
   inherit src;
-  makeFlags = [ "LIB=libbio.a" ];
+  makeFlags = [ "LIB=libString.a" ];
   installPhase = ''
     mkdir -p $out/lib
-    cp libbio.a $out/lib/
+    cp libString.a $out/lib/
   '';
 }

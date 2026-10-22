@@ -8,7 +8,7 @@ let
   '';
 in
 {
-  rebuilt = pkgs.rc.override { inherit (pkgs) stdenv yacc; };
+  rebuilt = pkgs.rc.override { inherit (pkgs) stdenv buildPackages; };
   program = pkgs.stdenv.mkDerivation {
     name = "rc-tests";
     nativeBuildInputs = [ pkgs.sha1sum ];

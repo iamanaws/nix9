@@ -1,0 +1,46 @@
+--- a/compilers/cck/lex.c
++++ b/compilers/cck/lex.c
+@@ -849,6 +849,16 @@
+ 				yyerror("malformed hex constant");
+ 			goto ncu;
+ 		}
++	if(c == 'b' || c == 'B')
++		for(;;) {
++			*cp++ = c;
++			c = GETC();
++			if(c == '0' || c == '1')
++				continue;
++			if(cp == symb+2)
++				yyerror("malformed binary constant");
++			goto ncu;
++		}
+ 	if(c < '0' || c > '7')
+ 		goto dc;
+ 	for(;;) {
+@@ -1001,6 +1011,8 @@
+ 	c = *s;
+ 	if(c == 'x' || c == 'X')
+ 		goto hex;
++	if(c == 'b' || c == 'B')
++		goto bin;
+ 	while(c = *s++) {
+ 		if(c >= '0' || c <= '7')
+ 			nn = n*8 + c-'0';
+@@ -1009,6 +1021,17 @@
+ 		if(n < 0 && nn >= 0)
+ 			goto bad;
+ 		n = nn;
++	}
++	goto out;
++
++bin:
++	s++;
++	while(c = *s++) {
++		if(c != '0' && c != '1')
++			goto bad;
++		if((uvlong)n >> 63)
++			goto bad;
++		n = (uvlong)n*2 + c-'0';
+ 	}
+ 	goto out;
+ 

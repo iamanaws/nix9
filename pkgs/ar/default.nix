@@ -1,23 +1,31 @@
 {
-  applyPatches,
-  mkPlan9Program,
-  libmach,
-  libbio,
-  source,
+  mkDerivation,
+  src,
+  buildPackages,
+  libmach ? null,
+  libbio ? null,
 }:
-let
-  src = applyPatches {
-    name = "ar-source";
-    src = "${source}/sys/src/cmd";
-    patches = [ ./source-date-epoch.patch ];
-  };
-in
-mkPlan9Program {
+mkDerivation {
   name = "ar";
-  cFlags = [ "-B" ]; # armalloc ends in sysfatal, which this compiler treats as returning.
-  sources = [ "${src}/ar.c" ];
-  libraries = [
+  inherit src;
+  nativeBuildInputs = [ buildPackages.patch ];
+  buildInputs = builtins.filter (input: input != null) [
     libmach
     libbio
   ];
+  patches = [ ./source-date-epoch.patch ];
+  sourceRoot = ".";
+  unpackPhase = ''
+    cp $src ar.c
+    chmod u+w ar.c
+  '';
+  buildPhase = ''
+    6c -FTVw -o ar.6 ar.c
+    6l -o ar ar.6
+  '';
+  installPhase = ''
+    mkdir -p $out/bin
+    cp ar $out/bin/ar
+  '';
+  meta.description = "Plan 9 archive tool";
 }

@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"cd / && hget http://10.0.2.2:{server.server_port}/packages.tar | tar x")
                 # Keep the shared toolchain through the package tests' GC runs.
                 stdenv_root = "/usr/local/nix/state/gcroots/stdenv"
-                guest.command(f"nix-build --expr 'let p=import {packages}; in p.buildEnv {{ name=\"test-toolchain\"; paths=[p.cc p.libc]; }}' --out-link {stdenv_root}")
+                guest.command(f"nix-build --expr 'let p=import {packages}; in p.buildEnv {{ name=\"test-toolchain\"; paths=p.stdenv.initialPath ++ [p.libc]; }}' --out-link {stdenv_root}")
                 cc = check_cc(guest, packages, server.server_port)
                 yacc = check_yacc(guest, packages, server.server_port)
                 lex = check_lex(guest, packages, server.server_port)

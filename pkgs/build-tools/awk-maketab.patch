@@ -1,0 +1,14 @@
+--- a/cmd/awk/mkfile
++++ b/cmd/awk/mkfile
+@@ -37,8 +37,9 @@
+ nuke:V:
+ 	rm -f *.[$OS] [$OS].out *.maketab y.tab.? y.debug y.output awkgram.c proctab.c $TARG
+ 
+-proctab.c:	$cputype.maketab
+-	./$cputype.maketab >proctab.c
++MAKETAB=./$cputype.maketab
++proctab.c:	$MAKETAB
++	$MAKETAB >proctab.c
+ 
+ $cputype.maketab:	y.tab.h maketab.c
+ 	objtype=$cputype mk maketab.$cputype

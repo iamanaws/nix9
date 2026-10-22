@@ -29,5 +29,5 @@ pkgs.runCommand "9front-native-tools" { } ''
   cp -r ${imageTools}/sys/src "$out/sys/"
   cp ${libc}/lib/libc.a ${libbio}/lib/libbio.a ${libmach}/lib/libmach.a "$out/bootstrap/lib/"
   mkdir -p "$out/amd64/lib/ape"
-  cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
+  cp ${libap}/lib/ape/libap.a ${libbsd}/lib/ape/libbsd.a "$out/amd64/lib/ape/"
 ''

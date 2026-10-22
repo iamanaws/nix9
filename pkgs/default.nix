@@ -14,32 +14,42 @@ pkgs.lib.makeScope pkgs.newScope (
       inherit pkgs vm;
       inherit (support) python testSupport;
     };
-    buildMpc = callPackage ./mpc/build.nix { source = sources.secSource; };
-    cross = {
-      build-tools = callPackage ./build-tools { source = sources.buildToolsSource; };
-      libbio = callPackage ./libbio { source = sources.fortuneSource; };
-      libstdio = callPackage ./libstdio { source = sources.ccSource; };
-      libregexp = callPackage ./libregexp { source = sources.mkSource; };
-      mk = callPackage ./mk { source = sources.mkSource; };
-      yacc = callPackage ./yacc { source = sources.yaccSource; };
-      rc = callPackage ./rc { source = sources.rcSource; };
-      cc = callPackage ./cc { source = sources.ccSource; };
-      libmach = callPackage ./libmach { source = sources.machSource; };
-      ar = callPackage ./ar { source = sources.ccSource; };
-      sha1sum = callPackage ./sha1sum { };
-      libbsd = callPackage ./libbsd { source = sources.apeSource; };
-      libap = callPackage ./libap { source = sources.apeSource; };
-      libc = callPackage ./libc { source = sources.apeSource; };
-      mpc = callPackage ./mpc { source = sources.secSource; };
-      libthread = callPackage ./libthread { source = sources.ramfsSource; };
-      clone = callPackage ./clone { };
-      libmp = callPackage ./libmp { source = sources.secSource; };
-      libsec = callPackage ./libsec {
+    buildPackages = pkgs // {
+      awkMaketab = pkgs.callPackage ./awk-maketab/build.nix { source = sources.buildToolsSource; };
+      yacc = pkgs.runCommand "build-yacc" { } ''
+        mkdir -p "$out/bin"
+        ln -s ${pkgs.plan9port}/plan9/bin/yacc "$out/bin/yacc"
+      '';
+      mpc = callPackage ./mpc/build.nix {
         source = sources.secSource;
-        inherit buildMpc;
+        inherit (pkgs) stdenv;
       };
-      lua = callPackage ./lua { };
-      libbz2 = callPackage ./libbz2 { };
+    };
+    luaSource = import ./lua/source.nix;
+    luaPrefix = "/usr/local/pkg/lua-${luaSource.version}";
+    checksumSource = callPackage ./sha1sum/source.nix { };
+    packageDefinitions = import ./packages.nix { inherit sources; };
+    packages = builtins.mapAttrs (
+      _: definition: callPackage definition.path definition.args
+    ) packageDefinitions;
+    cross = builtins.removeAttrs packages [ "buildTools" ] // {
+      build-tools = packages.buildTools;
+      libc = packages.libc.override { stdenv = callPackage ./stdenv { libc = null; }; };
+      liblua = packages.liblua.override { runtimePrefix = luaPrefix; };
+      sha1sum = packages.sha1sum.overrideAttrs (_: {
+        passthru = checksumSource;
+      });
+      lua = packages.lua.overrideAttrs (_: {
+        passthru = {
+          inherit (luaSource) version;
+          archive = pkgs.fetchurl luaSource.src;
+          guestPrefix = luaPrefix;
+          source = pkgs.callPackage ./lua/prepare-source.nix {
+            upstream = luaSource;
+            runtimePrefix = luaPrefix;
+          };
+        };
+      });
     };
     inherit (cross) lua sha1sum;
   in
@@ -48,16 +58,21 @@ pkgs.lib.makeScope pkgs.newScope (
   // sources
   // cross
   // rec {
+    inherit buildPackages sources packageDefinitions;
+    stdenv = callPackage ./stdenv { };
+    inherit (stdenv) mkDerivation;
     buildTools = cross.build-tools;
     imageTools = callPackage ./native-packages/image-tools.nix { };
     nativeTools = callPackage ./native-packages/tools.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
     hello = callPackage ./hello-plan9 { };
-    cTools = callPackage ./goken9cc { source = goken9cc; };
+    cTools = callPackage ./goken9cc {
+      source = goken9cc;
+      inherit (pkgs) stdenv;
+    };
     nixUtil = callPackage ./nix { };
     mkPlan9Program = callPackage ../lib/mk-plan9-program.nix { };
-    helloCross = callPackage ./hello-c-cross { };
-    mkPlan9Library = callPackage ../lib/mk-plan9-library.nix { };
+    helloCross = callPackage ./hello-c-cross { src = ./hello-c-cross/main.c; };
     mkGuestPackage = import ../lib/mk-guest-package.nix { inherit pkgs; };
     luaPackage = mkGuestPackage {
       name = "lua-${lua.version}";
@@ -69,7 +84,7 @@ pkgs.lib.makeScope pkgs.newScope (
     };
     mkGuestEnvironment = import ../lib/mk-guest-environment.nix { inherit pkgs; };
     nativeNix = callPackage ./nix/package.nix { };
-    nativePackageSet = callPackage ./native-packages/package.nix { libcSource = sources.apeSource; };
+    nativePackageSet = callPackage ./native-packages/package.nix { };
     nativePackagesArchive = mkGuestPackage {
       name = "native-packages";
       package = nativePackageSet;

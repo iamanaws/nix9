@@ -1,5 +1,10 @@
-{ mkPlan9Library, source }:
-mkPlan9Library {
+{ mkDerivation, src }:
+mkDerivation {
   name = "libbio";
-  src = "${source}/sys/src/libbio";
+  inherit src;
+  makeFlags = [ "LIB=libbio.a" ];
+  installPhase = ''
+    mkdir -p $out/lib
+    cp libbio.a $out/lib/
+  '';
 }

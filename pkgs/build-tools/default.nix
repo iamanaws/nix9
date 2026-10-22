@@ -1,76 +1,53 @@
 {
-  runCommand,
-  lib,
-  plan9port,
-  binutils,
-  cTools,
-  sysroot,
-  libc,
+  stdenv,
+  src,
+  buildPackages,
   libbio,
   libregexp,
-  mkPlan9Library,
-  source,
+  libString,
+  libflate,
 }:
 let
-  libraries =
-    map
-      (
-        name:
-        mkPlan9Library {
-          inherit name;
-          src = "${source}/sys/src/${name}";
-          cFlags = [ "-B" ];
-        }
-      )
-      [
-        "libString"
-        "libflate"
-      ];
+  commands = import ./commands.nix;
 in
-runCommand "build-tools"
-  {
-    nativeBuildInputs = [
-      cTools
-      plan9port
-      binutils
-    ];
-    ccroot = sysroot;
-  }
-  ''
-    cp -r ${source}/sys/src source
-    chmod -R u+w source
-    cd source/cmd
-    compile() {
-      6c -B -D_Noreturn= -I ${sysroot}/amd64/include -I ${sysroot}/sys/include -o "$1.6" "$1.c"
+stdenv.mkDerivation {
+  name = "build-tools";
+  cputype = "amd64";
+  inherit src;
+  patches = [ ./awk-maketab.patch ];
+  passthru = { inherit commands; };
+  nativeBuildInputs = [
+    buildPackages.yacc
+    buildPackages.awkMaketab
+  ];
+  buildInputs = [
+    libbio
+    libregexp
+    libString
+    libflate
+  ];
+  sourceRoot = "source/sys/src";
+  buildPhase = ''
+    commands=( ${builtins.concatStringsSep " " commands} )
+    cd cmd
+    for(command in $commands) {
+      6c -FTVw $command^.c
+      6l -o $command $command^.6
     }
-    link() {
-      name="$1"
-      shift
-      6l -H2 -L ${libc}/lib -L ${libbio}/lib -L ${libregexp}/lib \
-        ${lib.concatMapStringsSep " " (library: "-L ${library}/lib") libraries} -o "$name" "$@"
-      install -Dm755 "$name" "$out/bin/$name"
-    }
-    for command in ${lib.escapeShellArgs (import ./commands.nix)}; do
-      compile "$command"
-      link "$command" "$command.6"
-    done
-    (cd gzip; compile gunzip; link gunzip gunzip.6)
-    (
-      cd grep
-      9 yacc -d grep.y
-      for unit in y.tab main comp sub; do compile "$unit"; done
-      link grep ./*.6
-    )
-    (
+    @{ cd gzip; 6c gunzip.c; 6l -o gunzip gunzip.6 }
+    @{ cd grep; mk }
+    @{
       cd awk
       rm -f awkgram.c y.tab.h proctab.c
-      9 yacc -d -o awkgram.c awkgram.y
-      9 9c maketab.c
-      9 9l -o maketab maketab.o
-      ./maketab > proctab.c
-      sed -n '/^OFILES=/,/^$/p' mkfile | sed 's/^OFILES=//' | \
-        sed -n 's/^[[:space:]]*\([a-zA-Z0-9_]*\)\.\$O.*/\1/p' > units
-      while read -r unit; do compile "$unit"; done < units
-      link awk ./*.6
-    )
-  ''
+      yacc -d -o awkgram.c awkgram.y
+      mk 'MAKETAB=${buildPackages.awkMaketab}/bin/maketab'
+    }
+  '';
+  installPhase = ''
+    mkdir -p $out/bin
+    for(command in $commands) cp $command $out/bin/$command
+    cp gzip/gunzip $out/bin/gunzip
+    cp grep/6.out $out/bin/grep
+    cp awk/6.out $out/bin/awk
+  '';
+}

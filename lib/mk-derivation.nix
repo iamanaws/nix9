@@ -4,6 +4,18 @@
   cc ? null,
   initialPath ? [ ],
   libc ? null,
+  buildPlatform ? {
+    system = "x86_64-plan9";
+  },
+  hostPlatform ? buildPlatform,
+  setup ? null,
+  prepareSource ? "",
+  shellArgs ? [
+    "-m"
+    "${tools}/rcmain"
+    "-e"
+    "-c"
+  ],
 }:
 let
   mkDerivation =
@@ -136,12 +148,14 @@ let
           body = attrs.${phase} or (defaults.${phase} or (throw "unknown build phase '${phase}'"));
         in
         (
-          if phase == "checkPhase" && !(attrs.doCheck or false) then
+          if
+            phase == "checkPhase" && (!(attrs.doCheck or false) || buildPlatform.system != hostPlatform.system)
+          then
             ""
           else
             ''
               ${attrs.${builtins.elemAt hooks 0} or ""}
-              ${body}${if phase == "unpackPhase" then "\ncd $sourceRoot" else ""}
+              ${body}${if phase == "unpackPhase" then "\ncd $sourceRoot\n${prepareSource}" else ""}
               ${attrs.${builtins.elemAt hooks 1} or ""}
             ''
         )
@@ -159,40 +173,54 @@ let
           propagatedNativeBuildInputs
           propagatedBuildInputs
           ;
-        system = "x86_64-plan9";
+        system = buildPlatform.system;
         SOURCE_DATE_EPOCH = "1";
+        CC = "6c";
+        LD = "6l";
+        AS = "6a";
+        AR = "ar";
         builder = shell;
-        args = [
-          "-m"
-          "${tools}/rcmain"
-          "-e"
-          "-c"
+        args = shellArgs ++ [
           ''
-            rfork n
-            # Keep compiler history independent of the temporary directory name.
-            $tools/bin/bind -c $TMPDIR /mnt/temp
-            cd /mnt/temp
-            TMPDIR=/mnt/temp
-            TMP=/mnt/temp
-            TEMP=/mnt/temp
-            NIX_BUILD_TOP=/mnt/temp
-            $tools/bin/mkdir .nix-empty .nix-rc
-            $tools/bin/cp $tools/rcmain .nix-rc/rcmain
-            $tools/bin/bind $tools/bin /bin
-            for(directory in /amd64/bin /rc/bin) /bin/bind .nix-empty $directory
-            /bin/bind .nix-rc /rc/lib
-            ${import ./setup-environment.nix {
-              inherit
-                nativeBuildInputs
-                buildInputs
-                propagatedNativeBuildInputs
-                propagatedBuildInputs
-                initialPath
-                shell
-                cc
-                libc
-                ;
-            }}
+            ${
+              if setup == null then
+                ''
+                  rfork n
+                  # Keep compiler history independent of the temporary directory name.
+                  $tools/bin/bind -c $TMPDIR /mnt/temp
+                  cd /mnt/temp
+                  TMPDIR=/mnt/temp
+                  TMP=/mnt/temp
+                  TEMP=/mnt/temp
+                  NIX_BUILD_TOP=/mnt/temp
+                  $tools/bin/mkdir .nix-empty .nix-rc
+                  $tools/bin/cp $tools/rcmain .nix-rc/rcmain
+                  $tools/bin/bind $tools/bin /bin
+                  for(directory in /amd64/bin /rc/bin) /bin/bind .nix-empty $directory
+                  /bin/bind .nix-rc /rc/lib
+                  ${import ./setup-environment.nix {
+                    inherit
+                      nativeBuildInputs
+                      buildInputs
+                      propagatedNativeBuildInputs
+                      propagatedBuildInputs
+                      initialPath
+                      shell
+                      cc
+                      libc
+                      ;
+                  }}
+                ''
+              else
+                setup {
+                  inherit
+                    nativeBuildInputs
+                    buildInputs
+                    propagatedNativeBuildInputs
+                    propagatedBuildInputs
+                    ;
+                }
+            }
             ${script}
             ${propagate "propagated-build-inputs" propagatedBuildInputs}
             ${propagate "propagated-native-build-inputs" propagatedNativeBuildInputs}

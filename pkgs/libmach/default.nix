@@ -1,23 +1,26 @@
 {
-  mkPlan9Library,
-  source,
-  python3,
+  mkDerivation,
+  src,
+  libbio,
 }:
-mkPlan9Library {
+mkDerivation {
   name = "libmach";
-  src = "${source}/sys/src/libmach";
-  includeDirs = [
-    source
-    "${source}/sys/src/cmd"
-  ];
-  postPatch = ''
-    sed -i 's|"/\([^"]*/include/ureg.h\)"|"\1"|' *.c
-    # The cross-compiler predates binary integer literals.
-    ${python3}/bin/python - <<'PY'
-    from pathlib import Path
-    import re
-    path = Path("qdb.c")
-    path.write_text(re.sub(r"\b0b[01]+\b", lambda m: hex(int(m[0], 2)), path.read_text()))
-    PY
+  inherit src;
+  sourceRoot = "source/sys/src/libmach";
+  buildInputs = [ libbio ];
+  postUnpack = ''
+    for(file in *.c) {
+      sed 's|"[^"]*/([^/]+/include/ureg.h)"|"${src}/\1"|' $file > converted.c
+      mv converted.c $file
+    }
   '';
+  makeFlags = [
+    "LIB=libmach.a"
+    "CFLAGS=-FTVw -I${src} -I${src}/sys/src/cmd"
+  ];
+  installPhase = ''
+    mkdir -p $out/lib
+    cp libmach.a $out/lib/
+  '';
+  meta.description = "Plan 9 executable and object file library";
 }

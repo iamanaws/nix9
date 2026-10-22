@@ -6,7 +6,7 @@ let
       stdenv
       libc
       libbio
-      yacc
+      buildPackages
       ;
   };
   program = pkgs.stdenv.mkDerivation {

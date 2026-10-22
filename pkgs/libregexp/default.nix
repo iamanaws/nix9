@@ -1,6 +1,10 @@
-{ mkPlan9Library, source }:
-mkPlan9Library {
+{ mkDerivation, src }:
+mkDerivation {
   name = "libregexp";
-  src = "${source}/sys/src/libregexp";
-  cFlags = [ "-B" ];
+  inherit src;
+  makeFlags = [ "LIB=libregexp.a" ];
+  installPhase = ''
+    mkdir -p $out/lib
+    cp libregexp.a $out/lib/
+  '';
 }

@@ -1,5 +1,10 @@
-{ mkPlan9Library, source }:
-mkPlan9Library {
+{ mkDerivation, src }:
+mkDerivation {
   name = "libstdio";
-  src = "${source}/sys/src/libstdio";
+  inherit src;
+  makeFlags = [ "LIB=libstdio.a" ];
+  installPhase = ''
+    mkdir -p $out/lib
+    cp libstdio.a $out/lib/
+  '';
 }

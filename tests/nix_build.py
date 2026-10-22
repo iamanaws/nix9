@@ -26,8 +26,8 @@ def build_fixtures(root, hello, abi, packages, tools):
     for name, data in SUM_FIXTURES.items():
         (sums / name).write_bytes(data)
     (root / "sums.nar").write_bytes(subprocess.check_output(["nix-store", "--dump", str(sums)]))
-    for name in ("main.c", "native.nix"):
-        shutil.copyfile(hello / name, root / name)
+    for name in ("main.c", "default.nix"):
+        shutil.copyfile(hello / name, root / ("native.nix" if name == "default.nix" else name))
     tree = root / "fixed-tree"
     (tree / "bin").mkdir(parents=True)
     (tree / "empty").mkdir()
@@ -48,7 +48,7 @@ def build_fixtures(root, hello, abi, packages, tools):
         abi = import ./abi/native.nix { inherit mkDerivation; };
         libsec = import ./packages/libsec.nix {
           inherit mkDerivation; src = ./packages/libsec;
-          mpc = ./packages/mpc;
+          buildPackages.mpc = ./packages/mpc;
         };
         multiple = mk "native-multiple" ''
           /bin/echo ran >> /tmp/n9-multiple-count

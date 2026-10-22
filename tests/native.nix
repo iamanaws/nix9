@@ -26,6 +26,8 @@
       ./libsec/generated.sha256
       ./build-tools.nix
       ./build-tools.rc
+      ./mk-phases.nix
+      ./inputs.nix
     ];
     args = ''
       ${nativeBootstrap} \

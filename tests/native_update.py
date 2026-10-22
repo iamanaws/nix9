@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory() as directory:
     hashes = {"one": (Path(source) / "sha256").read_text().strip()}
     if tree_hash(tree) != hashes["one"]:
         raise RuntimeError("published package archive does not match its hash")
-    recipe = tree / "pkgs/sha1sum.nix"
+    recipe = tree / "pkgs/sha1sum/default.nix"
     original = recipe.read_text()
     recipe.chmod(0o644)
     for name, command in (("two", "echo updated > $out/revision"),

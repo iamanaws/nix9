@@ -2,10 +2,16 @@
   stdenv,
   src,
   header,
+  libap,
+  libbsd,
 }:
 stdenv.mkDerivation {
   name = "libl";
   inherit src header;
+  propagatedBuildInputs = [
+    libap
+    libbsd
+  ];
   buildPhase = ''
     cp $header libl.h
     for(source in *.c) pcc -c -D_RESEARCH_SOURCE -I . $source

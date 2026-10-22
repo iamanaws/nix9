@@ -32,7 +32,7 @@ def main():
                 with upstream.extractfile(f"bzip2-1.0.8/{name}") as data:
                     (root / name).write_bytes(data.read())
         shutil.copyfile(main_source, root / "main.c")
-        shutil.copyfile(Path(library) / "lib/libbz2.a", root / "cross.a")
+        shutil.copyfile(Path(library) / "lib/ape/libbz2.a", root / "cross.a")
         shutil.copyfile(Path(consumer) / "main.6", root / "cross-main.6")
         shutil.copyfile(Path(consumer) / "bin/bz2-test", root / "cross")
         for name, data in fixtures.items():

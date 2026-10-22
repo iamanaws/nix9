@@ -20,11 +20,16 @@ execution in the guest. Use `nix fmt` to format all Nix files.
 
 ## Toolchains
 
-Cross-builds use goken9cc's `6c` and `6l` for Plan 9 C, with GCC preprocessing
-for APE. Nix and its C++ dependencies use Clang, LLD and the cc9 runtime;
+Cross-builds use Plan9port's `rc` and `mk`, goken9cc's `6c` and `6l`, and GCC
+preprocessing for APE. Nix and its C++ dependencies use Clang, LLD and the cc9 runtime;
 `elf2aout` converts the executable format. Go examples use `GOOS=plan9`.
 
 ## Add a C package
+
+`lib.callPackage ./package.nix { }` supplies `stdenv` and dependencies.
+Cross and native builds share recipes such as [`mpc`](../pkgs/mpc/default.nix).
+Use `buildPackages` for build tools and `buildInputs` for libraries.
+APE packages use `pcc` with `libap` and `libbsd`.
 
 The flake exports `lib.mkPlan9Program`:
 
@@ -35,11 +40,9 @@ mkPlan9Program {
 }
 ```
 
-It compiles on Linux, links with rebuilt libc, checks the executable format,
-and installs `bin/my-program`. Optional arguments are `includeDirs`, `libraries`
+It uses the shared stdenv to compile, link with libc and install `bin/my-program`. Optional arguments are `includeDirs`, `libraries`
 and `meta`. Pass rebuilt library packages through `libraries`.
 
-APE packages use the shared [compile and link functions](../lib/ape-build.sh).
 See [package definitions](../pkgs) for examples and dependencies.
 
 Use `lib.mkGuestPackage { name = "my-program-1"; package = myProgram; }` to

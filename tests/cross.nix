@@ -22,12 +22,21 @@
   secCross,
   sha1sum,
   sha1sumPackage,
+  stdenvCross,
   testSupport,
   vm,
   vmTest,
   yacc,
 }:
 {
+  stdenv-tests = vmTest "stdenv-tests" {
+    script = ./smoke.py;
+    args = ''
+      ${stdenvCross}/bin/answer 'cross stdenv PASS'
+      mkdir -p "$out"
+      echo '{"cross-stdenv": "passed"}' > "$out/results.json"
+    '';
+  };
   build-tools-tests = vmTest "build-tools-tests" {
     script = ./build_tools.py;
     files = [ ./build-tools.rc ];

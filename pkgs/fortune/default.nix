@@ -1,9 +1,9 @@
 {
-  mkDerivation,
+  stdenv,
   src,
   libbio,
 }:
-mkDerivation {
+stdenv.mkDerivation {
   name = "fortune";
   inherit src;
   buildInputs = [ libbio ];
@@ -20,6 +20,14 @@ mkDerivation {
     mkdir -p $out/bin $out/share/fortune
     cp fortune $out/bin/fortune
     cp ../../games/lib/fortunes $out/share/fortune/fortunes
-    $out/bin/fortune > /dev/null
+    ${
+      if stdenv.buildPlatform.system == stdenv.hostPlatform.system then
+        ''
+          # Populate the optional index without changing the installed store later.
+          $out/bin/fortune > /dev/null
+        ''
+      else
+        ""
+    }
   '';
 }

@@ -1,22 +1,26 @@
 {
-  runCommand,
-  plan9port,
-  mkPlan9Program,
+  stdenv,
+  src,
+  buildPackages,
   libbio,
   libmp,
-  source,
 }:
-let
-  parser = runCommand "mpc-parser.c" { nativeBuildInputs = [ plan9port ]; } ''
-    9 yacc ${source}/sys/src/cmd/mpc.y
-    cp y.tab.c "$out"
-  '';
-in
-mkPlan9Program {
+stdenv.mkDerivation {
   name = "mpc";
-  sources = [ parser ];
-  libraries = [
-    libmp
+  inherit src;
+  sourceRoot = "source/sys/src/cmd";
+  nativeBuildInputs = [ buildPackages.yacc ];
+  buildInputs = [
     libbio
+    libmp
   ];
+  buildPhase = ''
+    yacc mpc.y
+    6c -o mpc.6 y.tab.c
+    6l -o mpc mpc.6
+  '';
+  installPhase = ''
+    mkdir -p $out/bin
+    cp mpc $out/bin/mpc
+  '';
 }

@@ -1,24 +1,21 @@
 {
+  stdenv,
   fetchgit,
-  applyPatches,
-  mkPlan9Program,
   libthread,
+  upstream,
 }:
-let
-  src = applyPatches {
-    src = fetchgit (import ./source.nix);
-    patches = [ ./directories-only.patch ];
-  };
-in
-(mkPlan9Program {
+stdenv.mkDerivation {
   name = "clone";
-  sources = [ "${src}/clone.c" ];
-  libraries = [ libthread ];
+  src = fetchgit upstream;
+  patches = [ ./directories-only.patch ];
+  buildInputs = [ libthread ];
+  installPhase = ''
+    mkdir -p $out/bin $out/man/1
+    mk 'BIN='$out/bin 'MAN='$out/man/1 install
+  '';
+  postInstall = ''
+    mkdir -p $out/share/doc/clone
+    cp LICENSE $out/share/doc/clone/
+  '';
   meta.description = "Parallel file and directory copying";
-}).overrideAttrs
-  (old: {
-    buildCommand = old.buildCommand + ''
-      install -Dm644 ${src}/clone.man "$out/man/1/clone"
-      install -Dm644 ${src}/LICENSE "$out/share/doc/clone/LICENSE"
-    '';
-  })
+}

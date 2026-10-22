@@ -1,9 +1,4 @@
-{
-  pkgs,
-  cTools,
-  sysroot,
-  libc,
-}:
+{ mkDerivation }:
 {
   name,
   sources,
@@ -13,39 +8,27 @@
   meta ? { },
 }:
 let
-  inherit (pkgs) lib;
-  units = lib.imap0 (index: source: {
-    inherit source;
+  quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
+  units = builtins.genList (index: {
+    source = builtins.elemAt sources index;
     object = "unit-${toString index}.6";
-  }) sources;
-  includes = lib.concatMapStringsSep " " (dir: "-I ${lib.escapeShellArg "${dir}"}") (
-    [
-      "${sysroot}/amd64/include"
-      "${sysroot}/sys/include"
-    ]
-    ++ includeDirs
+  }) (builtins.length sources);
+  flags = builtins.concatStringsSep " " (
+    map quote cFlags ++ map (directory: "-I " + quote directory) includeDirs
   );
 in
 assert builtins.match "[a-zA-Z0-9][a-zA-Z0-9._+-]*" name != null;
 assert sources != [ ];
-pkgs.runCommand name
-  {
-    nativeBuildInputs = [
-      cTools
-      pkgs.go
-    ];
-    ccroot = sysroot;
-    inherit meta;
-  }
-  ''
-    ${lib.concatMapStringsSep "\n" (unit: ''
-      6c -D_Noreturn= ${lib.escapeShellArgs cFlags} ${includes} -o ${unit.object} ${lib.escapeShellArg "${unit.source}"}
-    '') units}
-    6l -H2 -L ${libc}/lib ${
-      lib.concatMapStringsSep " " (library: "-L ${lib.escapeShellArg "${library}/lib"}") libraries
-    } \
-      -o program ${lib.concatMapStringsSep " " (unit: unit.object) units}
-    export HOME="$TMPDIR" GOCACHE="$TMPDIR/go-cache" GOPROXY=off GOTOOLCHAIN=local
-    go run ${../tests/format.go} program
-    install -Dm755 program "$out/bin/${name}"
-  ''
+mkDerivation {
+  inherit name meta;
+  buildInputs = libraries;
+  buildCommand = ''
+    ${builtins.concatStringsSep "\n" (
+      map (unit: ''
+        6c ${flags} -o ${unit.object} ${quote unit.source}
+      '') units
+    )}
+    mkdir -p $out/bin
+    6l -o $out/bin/${name} ${builtins.concatStringsSep " " (map (unit: unit.object) units)}
+  '';
+}

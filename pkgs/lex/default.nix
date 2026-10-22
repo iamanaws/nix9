@@ -2,12 +2,12 @@
   stdenv,
   src,
   libbio,
-  yacc,
+  buildPackages,
 }:
 stdenv.mkDerivation {
   name = "lex";
   inherit src;
-  nativeBuildInputs = [ yacc ];
+  nativeBuildInputs = [ buildPackages.yacc ];
   buildInputs = [ libbio ];
   postInstall = ''
     mkdir -p $out/libexec $out/share/lex

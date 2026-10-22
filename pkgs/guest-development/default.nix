@@ -16,7 +16,7 @@ runCommand "9front-c-development" { passthru = { inherit guestPrefix; }; } ''
   cp -r ${sysroot}/amd64/include "$out/amd64/"
   cp ${libc}/lib/libc.a "$out/amd64/lib/"
   mkdir -p "$out/amd64/lib/ape"
-  cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
+  cp ${libap}/lib/ape/libap.a ${libbsd}/lib/ape/libbsd.a "$out/amd64/lib/ape/"
   cat > "$out/bin/6c" <<'EOF'
   #!/bin/rc
   exec ${guestPrefix}/libexec/6c -I ${guestPrefix}/amd64/include -I ${guestPrefix}/sys/include $*

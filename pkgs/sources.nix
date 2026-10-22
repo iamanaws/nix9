@@ -28,6 +28,7 @@ let
     );
 in
 {
+  sha1sumSource = (pkgs.callPackage ./sha1sum/source.nix { }).source;
   sysroot = exportSource "9front-11952-amd64-sysroot" {
     paths = "sys/include amd64/include";
     check = ''

@@ -14,7 +14,7 @@ yacc = Path(yacc)
 fixtures = {
     "rc": rc,
     "rc-check": here / "cross-rc.rc",
-    "yacc": yacc / "bin/yacc",
+    "yacc": yacc / "libexec/yacc",
     "parser.y": here / "yacc/parser.y",
     **{name: yacc / "share/yacc" / name for name in ("yaccpar", "yaccpars")},
 }

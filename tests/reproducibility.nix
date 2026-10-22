@@ -7,20 +7,24 @@ in
     buildTools = pkgs.buildTools.override {
       inherit (pkgs)
         stdenv
-        yacc
+        buildPackages
         libbio
         libregexp
         ;
     };
     cc = pkgs.cc.override { inherit (pkgs) stdenv; };
     libc = pkgs.libc.override { inherit (pkgs) stdenv; };
-    rc = pkgs.rc.override { inherit (pkgs) stdenv yacc; };
+    rc = pkgs.rc.override { inherit (pkgs) stdenv buildPackages; };
     yacc = pkgs.yacc.override { inherit (pkgs) stdenv; };
-    mpc = pkgs.mpc.override { yacc = pkgs.yacc.override { inherit (pkgs) stdenv; }; };
+    mpc = pkgs.mpc.override {
+      buildPackages = pkgs // {
+        yacc = pkgs.yacc.override { inherit (pkgs) stdenv; };
+      };
+    };
     patch = pkgs.patch.override { inherit (pkgs.stdenv) mkDerivation; };
     ar = pkgs.ar.override {
       inherit (pkgs.stdenv) mkDerivation;
-      inherit (pkgs) patch;
+      inherit (pkgs) buildPackages;
     };
     libbio = pkgs.libbio.override { inherit (pkgs.stdenv) mkDerivation; };
     libstdio = pkgs.libstdio.override { inherit (pkgs.stdenv) mkDerivation; };

@@ -22,7 +22,7 @@ fixtures = {"bootstrap.tar": archive, "seed-mk": seed_mk, "seed-rc": seed_rc,
             "seed-ar": seed_ar, "seed-libmach.a": seed_libmach, "input.gz": compressed}
 for name in ("6a", "6c", "6l", "cpp", "pcc"):
     fixtures[name] = Path(seed_cc) / "bin" / name
-for name in ("rc.nix", "bootstrap-inputs.nix", "build-tools.nix", "build-tools.rc", "cc.nix", "libc.c"):
+for name in ("rc.nix", "bootstrap-inputs.nix", "build-tools.nix", "build-tools.rc", "cc.nix", "libc.c", "mk-phases.nix", "inputs.nix"):
     fixtures[name] = Path(__file__).with_name(name)
 for name in ("native.nix", "mp.c", "generated.sha256"):
     fixtures["crypto.nix" if name == "native.nix" else name] = Path(__file__).with_name("libsec") / name
@@ -45,6 +45,11 @@ with files_guest(qemu, image, fixtures) as guest:
     environment = rooted(guest, roots + "/environment")
     shell = rooted(guest, roots + "/shell")
     guest.command("rm -r $nix9/cache; NIX_CONFIG='substituters ='")
+    guest.command("nix-instantiate --eval --expr 'let s=(import <nix9>).stdenv; in s.buildPlatform.system == s.hostPlatform.system'", "true")
+    for attribute in ("default", "custom", "override", "noMkfile", "singleCommand"):
+        guest.command(f"nix-build /tmp/mk-phases.nix --argstr packages $nix9/packages -A {attribute} --no-out-link")
+    for attribute in ("native", "ape"):
+        guest.command(f"nix-build /tmp/inputs.nix --argstr packages $nix9/packages -A {attribute} --no-out-link", f"{attribute} inputs PASS")
     guest.command("test ! -e $nix9/packages/tools/bin/mpc; bind /dev/null /amd64/bin/mpc")
     guest.command("nix-build $nix9/packages -A mpc --no-out-link")
     guest.command("nix-build $nix9/packages -A mpc --check --no-out-link")

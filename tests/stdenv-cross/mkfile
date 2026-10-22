@@ -1,0 +1,13 @@
+all:V: 6.out
+
+generated.h:
+	generate > $target
+
+main.6: main.c generated.h
+	$CC main.c
+
+6.out: main.6
+	$LD -o $target $prereq
+
+install:V: 6.out
+	cp 6.out $BIN/answer

@@ -1,63 +1,33 @@
 {
-  runCommand,
-  plan9port,
-  ed,
-  cTools,
-  sysroot,
+  stdenv,
+  src,
   libc,
   libbio,
   libstdio,
-  source,
+  buildPackages,
 }:
-runCommand "cc"
-  {
-    nativeBuildInputs = [
-      cTools
-      plan9port
-    ];
-    ccroot = sysroot;
-  }
-  ''
-    cp -r ${source}/sys/src/cmd source
-    chmod -R u+w source
-    cd source
-    (cd cc; 9 yacc -d cc.y)
-    (cd 6a; 9 yacc -D1 -d a.y)
-    rm -f 6c/enam.c
-    (cd 6c; T=6 9 rc -c 'fn ed { ${ed}/bin/ed $* }; . ../cc/mkenam')
-    test -s 6c/enam.c
-    for command in cc 6c 6a 6l cpp; do
-      (
-        cd "$command"
-        sed -n '/^OFILES=/,/^$/p' mkfile | sed 's/^OFILES=//' | \
-          sed -n 's/^[[:space:]]*\([a-zA-Z0-9_.]*\)\.\$O.*/\1/p' > units
-        test -s units
-        flags=()
-        if test "$command" = cpp; then flags=(-B); fi
-        while read -r unit; do
-          input="$unit.c"
-          if ! test -f "$input"; then
-            case "$unit" in
-              enam) input=../6c/enam.c ;;
-              *) input=../cc/$unit.c ;;
-            esac
-          fi
-          6c "''${flags[@]}" -D_Noreturn= -I ${sysroot}/amd64/include -I ${sysroot}/sys/include \
-            -o "$unit.6" "$input"
-        done < units
-        if test "$command" = cc; then
-          9ar rcD cc.a6 ./*.6
-        else
-          set -- ./*.6
-          if test "$command" = 6c; then
-            set -- "$@" ../cc/cc.a6
-          fi
-          6l -H2 -L ${libc}/lib -L ${libbio}/lib -L ${libstdio}/lib -o "$command" "$@"
-          install -Dm755 "$command" "$out/bin/$command"
-        fi
-      )
-    done
-    6c -D_Noreturn= -I ${sysroot}/amd64/include -I ${sysroot}/sys/include -o pcc.6 pcc.c
-    6l -H2 -L ${libc}/lib -o pcc pcc.6
-    install -Dm755 pcc "$out/bin/pcc"
-  ''
+stdenv.mkDerivation {
+  name = "cc";
+  timezone = "GMT 0 GMT 0\n";
+  inherit src;
+  sourceRoot = "source/sys/src/cmd";
+  nativeBuildInputs = [ buildPackages.yacc ];
+  buildInputs = [
+    libc
+    libbio
+    libstdio
+  ];
+  postUnpack = "rm -f 6c/enam.c";
+  buildPhase = ''
+    @{ cd cc; mk install }
+    for(command in 6c 6a 6l cpp) @{ cd $command; mk }
+    6c -FTVw pcc.c
+    6l -o pcc pcc.6
+  '';
+  installPhase = ''
+    mkdir -p $out/bin
+    for(command in 6c 6a 6l cpp) cp $command/6.out $out/bin/$command
+    cp pcc $out/bin/pcc
+  '';
+  meta.description = "Plan 9 and APE C toolchain";
+}

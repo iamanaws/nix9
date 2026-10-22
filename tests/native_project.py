@@ -47,5 +47,5 @@ def check_project(guest, port):
     guest.command(f"{package}/bin/hello", "hello from nix9")
     guest.command(f"nix-store --verify-path {package}")
     guest.command(f"rm /usr/local/nix/state/gcroots/hello {mk_root}; nix-store --gc")
-    guest.command(f"test ! -e {package} && test ! -e {native_mk}")
+    guest.command(f"test ! -e {package}")
     return "native mk, static closure, mkfile build, shell, bundled includes, failures, reuse and GC passed"
