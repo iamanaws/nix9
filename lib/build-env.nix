@@ -116,13 +116,15 @@ mkDerivation {
     echo ${quote ''
       #!/bin/rc -e
       rfork ne
-    ''} > $out/session
-    echo '. '$out^'/activate' >> $out/session
+    ''} > $out/session.rc
+    echo '. '$out^'/activate' >> $out/session.rc
     echo ${quote ''
       ${namespace}
       if(~ $#* 0) exec /bin/rc -i
       if not exec $*
-    ''} >> $out/session
-    chmod +x $out/session
+    ''} >> $out/session.rc
+    echo '#!/bin/rc -e
+    exec nix-build --run-session '^$out^' $*' > $out/session
+    chmod +x $out/session $out/session.rc
   '';
 }

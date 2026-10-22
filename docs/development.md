@@ -117,8 +117,9 @@ reveals the original files.
 
 Run `$environment/session COMMAND ARGS...` for a private session, or omit the
 command for an interactive rc shell. The optional `namespace` rc snippet runs
-after activation. Mounts made there disappear when the session's last process
-exits. Sourcing `activate` does not run the snippet.
+after activation. Session processes keep the environment rooted during GC.
+Mounts disappear when the last process exits. Sourcing `activate` does not run
+the snippet.
 
 The bootstrap includes a [ramfs example](../examples/ramfs) that writes and reads
 a file in a private memory filesystem:

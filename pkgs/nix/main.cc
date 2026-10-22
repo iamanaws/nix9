@@ -10,6 +10,10 @@
 
 namespace nix {
 
+#ifdef NIX_BUILD
+[[noreturn]] void runEnvironmentSession(int argc, char **argv);
+#endif
+
 RegisterLegacyCommand::Commands & RegisterLegacyCommand::commands()
 {
     static Commands commands;
@@ -70,6 +74,8 @@ int main(int argc, char ** argv)
 #if defined(NIX_INSTANTIATE) || defined(NIX_BUILD)
         nix::initGC();
 #ifdef NIX_BUILD
+        if (argc > 1 && std::string_view(argv[1]) == "--run-session")
+            nix::runEnvironmentSession(argc - 2, argv + 2);
         nix::RegisterLegacyCommand::commands().at("nix-build")(argc, argv);
 #else
         nix::RegisterLegacyCommand::commands().at("nix-instantiate")(argc, argv);
