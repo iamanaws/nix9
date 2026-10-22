@@ -31,12 +31,16 @@ def main():
         for name in ("main.6", "callee.6", "abi-tests"):
             shutil.copyfile(Path(cross) / name, Path(directory) / name)
         if toolchain:
-            for name in ("6a", "6c", "6l"):
+            for name in ("6a", "6c", "6l", "cpp", "pcc"):
                 shutil.copyfile(Path(toolchain[0]) / "bin" / name, Path(directory) / name)
             Path(directory, "answer.s").write_text("TEXT answer(SB), 1, $0\nMOVL $42, AX\nRET\n")
             Path(directory, "answer.c").write_text(
                 '#include <u.h>\n#include <libc.h>\nint answer(void);\n'
                 'void main(void) { assert(answer() == 42); exits(nil); }\n'
+            )
+            Path(directory, "ape.c").write_text(
+                '#include <stdio.h>\n#if ANSWER != 42\n#error wrong macro\n#endif\n'
+                'int main(void) { puts("APE compiler PASS"); return 0; }\n'
             )
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
         with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
@@ -46,9 +50,9 @@ def main():
                     url = f"http://10.0.2.2:{server.server_port}"
                     guest.command("mkdir /tmp/abi")
                     if toolchain:
-                        for name in ("6a", "6c", "6l", "answer.s", "answer.c"):
+                        for name in ("6a", "6c", "6l", "cpp", "pcc", "answer.s", "answer.c", "ape.c"):
                             guest.command(f"hget -o /tmp/abi/{name} {url}/{name}")
-                        for name in ("6a", "6c", "6l"):
+                        for name in ("6a", "6c", "6l", "cpp", "pcc"):
                             guest.command(f"chmod +x /tmp/abi/{name}; bind /tmp/abi/{name} /bin/{name}")
                     for name in ("main.c", "callee.c", "abi.h", "main.6", "callee.6", "abi-tests"):
                         guest.command(f"hget -o /tmp/abi/{name} {url}/{name}")
@@ -75,6 +79,8 @@ def main():
                         if not any(line.startswith("CC-STATUS:") and line != "CC-STATUS:" for line in result.splitlines()):
                             raise RuntimeError("compiler accepted invalid C")
                         results["assembler"] = "assembly linked with C and returned 42"
+                        guest.command("pcc '-DANSWER=42' -o ape ape.c && ./ape", "APE compiler PASS")
+                        results["ape"] = "source-built preprocessor and compiler driver passed"
             finally:
                 server.shutdown()
     destination = Path(output_dir)

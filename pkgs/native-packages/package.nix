@@ -62,6 +62,7 @@ runCommand "native-packages" { } ''
   cp ${../libthread/native.nix} "$out/pkgs/libthread.nix"
   cp ${../ramfs/native.nix} "$out/pkgs/ramfs.nix"
   cp ${../libbio/native.nix} "$out/pkgs/libbio.nix"
+  cp ${../libstdio/native.nix} "$out/pkgs/libstdio.nix"
   cp ${../libc/native.nix} "$out/pkgs/libc.nix"
   cp ${../cc/native.nix} "$out/pkgs/cc.nix"
   cp ${../ar/native.nix} "$out/pkgs/ar.nix"

@@ -3,6 +3,7 @@
   src,
   libc,
   libbio,
+  libstdio,
   yacc,
 }:
 stdenv.mkDerivation {
@@ -14,15 +15,19 @@ stdenv.mkDerivation {
   buildInputs = [
     libc
     libbio
+    libstdio
   ];
   postUnpack = "rm -f 6c/enam.c";
   buildPhase = ''
     @{ cd cc; mk install }
-    for(command in 6c 6a 6l) @{ cd $command; mk }
+    for(command in 6c 6a 6l cpp) @{ cd $command; mk }
+    6c -FTVw pcc.c
+    6l -o pcc pcc.6
   '';
   installPhase = ''
     mkdir -p $out/bin
-    for(command in 6c 6a 6l) cp $command/6.out $out/bin/$command
+    for(command in 6c 6a 6l cpp) cp $command/6.out $out/bin/$command
+    cp pcc $out/bin/pcc
   '';
-  meta.description = "Plan 9 C compiler, assembler and linker";
+  meta.description = "Plan 9 and APE C toolchain";
 }

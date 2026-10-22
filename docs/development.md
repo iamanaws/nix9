@@ -61,8 +61,8 @@ In the guest, activate it and compile native Plan 9 C:
 ./main
 ```
 
-Use `pcc -o program source.c` for POSIX C through APE. The wrappers use the guest's
-tools with installed headers and rebuilt runtimes. `pcc` sets up a private
+Use `pcc -o program source.c` for POSIX C through APE. The wrappers use source-built
+tools with installed headers and runtimes. `pcc` sets up a private
 namespace for APE's standard paths. `guest-development-tests` verifies builds
 with the image's headers and libraries hidden.
 
@@ -185,7 +185,7 @@ The store persists at `/usr/local/nix/store`.
 Roots are files containing store paths, not symlinks. Remove a root file to release
 it, then run `nix-store --gc` to collect unused paths. Running programs outside a
 Nix build need an explicit root. Close other store clients before collection.
-Packages use `stdenv.mkDerivation` with native rc, `6a`, `6c`, `6l`, libc and mk.
+Packages use `stdenv.mkDerivation` with native rc, the C toolchain, libc and mk.
 `mkDerivation` remains an alias. With a mkfile, the default phases
 run `mk` and `mk install BIN=$out/bin`. Set `makefile` for another filename and use
 the list attributes `makeFlags`, `buildFlags` and `installFlags` for arguments.

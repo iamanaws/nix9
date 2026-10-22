@@ -39,6 +39,10 @@ def main():
                     guest.command("mkdir /tmp/build /tmp/empty")
                     for name in ("hello.c", "main.c", "callee.c", "abi.h", "posix.c", "bsd.c"):
                         guest.command(f"hget -o /tmp/build/{name} {url}/{name}")
+                    guest.command("echo '#!/bin/rc\nexit image-compiler-unavailable' > /tmp/blocked-compiler")
+                    guest.command("chmod +x /tmp/blocked-compiler")
+                    for tool in ("6a", "6c", "6l", "cpp", "pcc"):
+                        guest.command(f"bind /tmp/blocked-compiler /amd64/bin/{tool}")
                     # Hide the image's headers and libraries in this disposable namespace.
                     for path in ("/sys/include", "/amd64/include", "/amd64/lib"):
                         guest.command(f"bind /tmp/empty {path}")
@@ -80,7 +84,7 @@ def main():
     destination = Path(output_dir)
     destination.mkdir(parents=True)
     (destination / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    print("\nPASS: guest C and APE builds use installed headers and rebuilt runtimes")
+    print("\nPASS: guest C and APE builds use source-built tools, headers and runtimes")
 
 
 if __name__ == "__main__":

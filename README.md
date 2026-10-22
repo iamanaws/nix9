@@ -35,8 +35,7 @@ A missing-display message from `rio` is expected. Run inside the VM:
 
 ```rc
 ip/ipconfig ether /net/ether0
-hget -o /tmp/nix.tar http://10.0.2.2:8000/result-native-bootstrap
-cd / && tar xf /tmp/nix.tar
+cd / && hget http://10.0.2.2:8000/result-native-bootstrap | tar x
 . /usr/local/pkg/nix9/activate
 roots=/usr/local/nix/state/gcroots
 nix-build $nix9/environment.nix --out-link $roots/environment

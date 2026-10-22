@@ -29,6 +29,10 @@ let
       mkDerivation = seedStdenv.mkDerivation;
       src = ./fortune-source/sys/src/libbio;
     };
+    libstdio = callPackage ./pkgs/libstdio.nix {
+      mkDerivation = seedStdenv.mkDerivation;
+      src = ./cc-source/sys/src/libstdio;
+    };
     libregexp = callPackage ./pkgs/libregexp.nix {
       mkDerivation = seedStdenv.mkDerivation;
       src = ./mk-source/sys/src/libregexp;

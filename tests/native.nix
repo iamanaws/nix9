@@ -19,6 +19,8 @@
     files = [
       ./rc.nix
       ./bootstrap-inputs.nix
+      ./cc.nix
+      ./libc.c
       ./build-tools.nix
       ./build-tools.rc
     ];

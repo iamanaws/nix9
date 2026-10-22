@@ -12,7 +12,7 @@ pkgs.runCommand "native-image-tools" { requiredSystemFeatures = [ "kvm" ]; } ''
     ]
   }/export_tree.py \
     ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-    "$TMPDIR/tools.tar" amd64/bin/cpp amd64/bin/pcc amd64/bin/webfs amd64/bin/mpc \
+    "$TMPDIR/tools.tar" amd64/bin/webfs amd64/bin/mpc \
     amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
   mkdir -p "$out"
   tar -xf "$TMPDIR/tools.tar" -C "$out"

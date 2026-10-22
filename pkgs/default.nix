@@ -17,6 +17,7 @@ pkgs.lib.makeScope pkgs.newScope (
     cross = {
       build-tools = callPackage ./build-tools { source = sources.buildToolsSource; };
       libbio = callPackage ./libbio { source = sources.fortuneSource; };
+      libstdio = callPackage ./libstdio { source = sources.ccSource; };
       libregexp = callPackage ./libregexp { source = sources.mkSource; };
       mk = callPackage ./mk { source = sources.mkSource; };
       yacc = callPackage ./yacc { source = sources.yaccSource; };

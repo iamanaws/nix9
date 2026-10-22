@@ -6,6 +6,7 @@
   sysroot,
   libc,
   libbio,
+  libstdio,
   source,
 }:
 runCommand "cc"
@@ -25,12 +26,14 @@ runCommand "cc"
     rm -f 6c/enam.c
     (cd 6c; T=6 9 rc -c 'fn ed { ${ed}/bin/ed $* }; . ../cc/mkenam')
     test -s 6c/enam.c
-    for command in cc 6c 6a 6l; do
+    for command in cc 6c 6a 6l cpp; do
       (
         cd "$command"
         sed -n '/^OFILES=/,/^$/p' mkfile | sed 's/^OFILES=//' | \
           sed -n 's/^[[:space:]]*\([a-zA-Z0-9_.]*\)\.\$O.*/\1/p' > units
         test -s units
+        flags=()
+        if test "$command" = cpp; then flags=(-B); fi
         while read -r unit; do
           input="$unit.c"
           if ! test -f "$input"; then
@@ -39,7 +42,7 @@ runCommand "cc"
               *) input=../cc/$unit.c ;;
             esac
           fi
-          6c -D_Noreturn= -I ${sysroot}/amd64/include -I ${sysroot}/sys/include \
+          6c "''${flags[@]}" -D_Noreturn= -I ${sysroot}/amd64/include -I ${sysroot}/sys/include \
             -o "$unit.6" "$input"
         done < units
         if test "$command" = cc; then
@@ -49,9 +52,12 @@ runCommand "cc"
           if test "$command" = 6c; then
             set -- "$@" ../cc/cc.a6
           fi
-          6l -H2 -L ${libc}/lib -L ${libbio}/lib -o "$command" "$@"
+          6l -H2 -L ${libc}/lib -L ${libbio}/lib -L ${libstdio}/lib -o "$command" "$@"
           install -Dm755 "$command" "$out/bin/$command"
         fi
       )
     done
+    6c -D_Noreturn= -I ${sysroot}/amd64/include -I ${sysroot}/sys/include -o pcc.6 pcc.c
+    6l -H2 -L ${libc}/lib -o pcc pcc.6
+    install -Dm755 pcc "$out/bin/pcc"
   ''

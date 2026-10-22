@@ -33,7 +33,7 @@ def archive_dates(path):
 
 
 qemu, image, nix_archive, nix_prefix, packages_archive, packages, output = sys.argv[1:]
-names = ("buildTools", "patch", "ar", "cc", "libc", "libbio", "libmach", "libregexp", "mk", "rc", "yacc")
+names = ("buildTools", "patch", "ar", "cc", "libc", "libbio", "libstdio", "libmach", "libregexp", "mk", "rc", "yacc")
 runs = []
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)
@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory() as directory:
                                 guest.command("@{ cd $original/bin; for(file in *) cmp $file $rebuilt/bin/$file }")
                                 files = ()
                             elif name == "cc":
-                                files = ("bin/6a", "bin/6c", "bin/6l")
+                                files = ("bin/6a", "bin/6c", "bin/6l", "bin/cpp", "bin/pcc")
                             elif name == "yacc":
                                 files = ("libexec/yacc",)
                             elif name.startswith("lib"):

@@ -90,6 +90,10 @@ let
       mkDerivation = buildStdenv.mkDerivation;
       src = ./fortune-source/sys/src/libbio;
     };
+    libstdio = callPackage ./pkgs/libstdio.nix {
+      mkDerivation = buildStdenv.mkDerivation;
+      src = ./cc-source/sys/src/libstdio;
+    };
     libmach = callPackage ./pkgs/libmach.nix {
       mkDerivation = buildStdenv.mkDerivation;
       src = ./libmach-source;

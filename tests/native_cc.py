@@ -39,4 +39,4 @@ def check_cc(guest, packages, port):
     guest.command("nix-store --gc")
     for attribute in ("rebuilt", "program", "rebuiltProgram"):
         guest.command(f"test ! -e {outputs[attribute]}")
-    return "native 6a/6c/6l, compiler rebuild, default stdenv, masked seed compilers, native/APE consumers, invalid C, shell, reuse and GC passed"
+    return "native 6a/6c/6l/cpp/pcc, compiler rebuild, default stdenv, masked seed compilers, native/APE consumers, preprocessing, invalid C, shell, reuse and GC passed"

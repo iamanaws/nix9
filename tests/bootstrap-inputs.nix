@@ -19,8 +19,8 @@ let
         }
       '';
       buildCommand = ''
-        for(command in 6a 6c 6l ar mk rc) test ! -e $tools/bin/$command
-        for(command in 6a 6c 6l) test `{whatis $command} '=' ${pkgs.cc}/bin/$command
+        for(command in 6a 6c 6l cpp pcc ar mk rc) test ! -e $tools/bin/$command
+        for(command in 6a 6c 6l cpp pcc) test `{whatis $command} '=' ${pkgs.cc}/bin/$command
         test `{whatis ar} '=' ${pkgs.ar}/bin/ar
         test `{whatis mk} '=' ${pkgs.mk}/bin/mk
         test `{whatis rc} '=' ${pkgs.rc}/bin/rc

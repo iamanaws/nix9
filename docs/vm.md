@@ -33,8 +33,7 @@ In the guest, run `ip/ipconfig ether /net/ether0` if networking is not configure
 then install and activate the environment:
 
 ```sh
-hget -o /tmp/package.tar http://10.0.2.2:8000/result-package
-cd / && tar xf /tmp/package.tar
+cd / && hget http://10.0.2.2:8000/result-package | tar x
 . /usr/local/env/default/activate
 lua -e 'print(_VERSION)'
 ```

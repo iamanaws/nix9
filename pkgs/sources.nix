@@ -63,9 +63,9 @@ in
     '';
   };
   ccSource = exportSource "9front-cc-source" {
-    paths = "sys/src/cmd/cc sys/src/cmd/6a sys/src/cmd/6c sys/src/cmd/6l sys/src/cmd/ar.c";
+    paths = "sys/src/cmd/cc sys/src/cmd/6a sys/src/cmd/6c sys/src/cmd/6l sys/src/cmd/cpp sys/src/cmd/pcc.c sys/src/cmd/ar.c sys/src/libstdio";
     check = ''
-      for command in cc 6a 6c 6l; do
+      for command in cc 6a 6c 6l cpp; do
         test -s "$out/sys/src/cmd/$command/mkfile"
       done
     '';

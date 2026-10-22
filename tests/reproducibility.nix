@@ -22,6 +22,7 @@ in
       inherit (pkgs) patch;
     };
     libbio = pkgs.libbio.override { inherit (pkgs.stdenv) mkDerivation; };
+    libstdio = pkgs.libstdio.override { inherit (pkgs.stdenv) mkDerivation; };
     libmach = pkgs.libmach.override { inherit (pkgs.stdenv) mkDerivation; };
     libregexp = pkgs.libregexp.override { inherit (pkgs.stdenv) mkDerivation; };
     mk = pkgs.mk.override { inherit (pkgs.stdenv) mkDerivation; };
