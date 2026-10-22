@@ -1,0 +1,19 @@
+flag e +
+ifs='
+'
+fn greet { echo hello $* }
+test `{greet 'two words'} '=' 'hello two words'
+values=(one two three)
+test $#values '=' 3
+for(value in $values) echo $value >> /tmp/rc-values
+test `{cat /tmp/rc-values | tr a-z A-Z | sed -n '2p'} '=' TWO
+test `{ /tmp/rc -c 'echo $RC_TEST' } '=' inherited
+test `{ /tmp/rc -c 'echo nested' } '=' nested
+if(~ foo f*) echo pattern-PASS
+switch(bar){
+case bar
+  echo switch-PASS
+case *
+  exit switch-failed
+}
+echo cross-rc-PASS

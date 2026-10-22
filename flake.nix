@@ -110,7 +110,7 @@
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
-          amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test \
+          amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/mkdir amd64/bin/test \
           amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr amd64/bin/ed amd64/bin/date \
           amd64/lib/libmach.a \
           amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
@@ -122,7 +122,7 @@
           mv "$out/bin/$command" "$out/bootstrap/bin/"
         done
         cp ${mk}/bin/mk "$out/bootstrap/bin/mk"
-        mv "$out/bin/rc" "$out/bootstrap/rc/bin/"
+        cp ${rc}/bin/rc "$out/bootstrap/rc/bin/rc"
         cp rc/lib/rcmain "$out/rcmain"
         cp -r ${sysroot}/sys/include "$out/sys/"
         cp -r ${sysroot}/amd64/include "$out/amd64/"
@@ -299,6 +299,24 @@
           ]
         }/mk.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${mk}/bin/mk "$out"
+      '';
+      yacc = pkgs.callPackage ./pkgs/yacc {
+        inherit mkPlan9Program libbio;
+        source = yaccSource;
+      };
+      rc = pkgs.callPackage ./pkgs/rc {
+        inherit cTools sysroot libc;
+        source = rcSource;
+      };
+      rcYaccTests = pkgs.runCommand "rc-yacc-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/rc_yacc.py
+            ./tests/cross-rc.rc
+            ./tests/yacc/parser.y
+          ]
+        }/rc_yacc.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${rc}/bin/rc ${yacc} "$out"
       '';
       sha1sum = pkgs.callPackage ./pkgs/sha1sum { inherit mkPlan9Program libsec; };
       sha1sumTests =
@@ -633,7 +651,7 @@
                 ./tests/bootstrap-inputs.nix
               ]
             }/native_bootstrap.py \
-              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} ${mk}/bin/mk "$out"
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} ${mk}/bin/mk ${rc}/bin/rc "$out"
           '';
       nativePatchTests = pkgs.runCommand "native-patch-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
@@ -901,8 +919,15 @@
         inherit libsec;
         inherit libmp;
         inherit libthread;
-        inherit libbio libregexp mk;
+        inherit
+          libbio
+          libregexp
+          mk
+          yacc
+          rc
+          ;
         mk-tests = mkTests;
+        rc-yacc-tests = rcYaccTests;
         inherit mpc;
         libsec-tests = secTests;
         libbz2-tests = libbz2Tests;

@@ -16,9 +16,9 @@ def rooted(guest, root):
     return paths[0]
 
 
-qemu, image, archive, seed_mk, output = sys.argv[1:]
+qemu, image, archive, seed_mk, seed_rc, output = sys.argv[1:]
 roots = "/usr/local/nix/state/gcroots"
-fixtures = {"bootstrap.tar": archive, "seed-mk": seed_mk}
+fixtures = {"bootstrap.tar": archive, "seed-mk": seed_mk, "seed-rc": seed_rc}
 for name in ("rc.nix", "bootstrap-inputs.nix"):
     fixtures[name] = Path(__file__).with_name(name)
 with files_guest(qemu, image, fixtures) as guest:
@@ -27,6 +27,7 @@ with files_guest(qemu, image, fixtures) as guest:
     guest.command("cd / && tar xf /tmp/bootstrap.tar; rm /tmp/bootstrap.tar")
     guest.command(". /usr/local/pkg/nix9/activate")
     guest.command("cmp /tmp/seed-mk $nix9/packages/tools/bootstrap/bin/mk")
+    guest.command("cmp /tmp/seed-rc $nix9/packages/tools/bootstrap/rc/bin/rc")
     guest.command("nix-instantiate --eval --expr '(import <nix9>).stdenv.cc.name'", '"cc"')
     for name in ("environment", "shell"):
         result = guest.command(f"nix-build $nix9/{name}.nix --out-link {roots}/{name}")
