@@ -9,6 +9,7 @@
   sources,
   includeDirs ? [ ],
   libraries ? [ ],
+  cFlags ? [ ],
   meta ? { },
 }:
 let
@@ -38,7 +39,7 @@ pkgs.runCommand name
   }
   ''
     ${lib.concatMapStringsSep "\n" (unit: ''
-      6c -D_Noreturn= ${includes} -o ${unit.object} ${lib.escapeShellArg "${unit.source}"}
+      6c -D_Noreturn= ${lib.escapeShellArgs cFlags} ${includes} -o ${unit.object} ${lib.escapeShellArg "${unit.source}"}
     '') units}
     6l -H2 -L ${libc}/lib ${
       lib.concatMapStringsSep " " (library: "-L ${lib.escapeShellArg "${library}/lib"}") libraries

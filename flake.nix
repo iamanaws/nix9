@@ -108,19 +108,17 @@
           ]
         }/export_tree.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-          "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
+          "$TMPDIR/tools.tar" amd64/bin/awk \
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
           amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/mkdir amd64/bin/test \
           amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr amd64/bin/ed amd64/bin/date \
-          amd64/lib/libmach.a \
           amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
         cp amd64/bin/* "$out/bin/"
         mkdir -p "$out/bootstrap/bin" "$out/bootstrap/rc/bin" "$out/bootstrap/lib"
-        for command in 6a 6c 6l ar; do
-          mv "$out/bin/$command" "$out/bootstrap/bin/"
-        done
+        cp ${ar}/bin/ar "$out/bootstrap/bin/ar"
+        cp ${cc}/bin/* "$out/bootstrap/bin/"
         cp ${mk}/bin/mk "$out/bootstrap/bin/mk"
         cp ${rc}/bin/rc "$out/bootstrap/rc/bin/rc"
         cp rc/lib/rcmain "$out/rcmain"
@@ -128,8 +126,7 @@
         cp -r ${sysroot}/amd64/include "$out/amd64/"
         cp amd64/mkfile "$out/amd64/"
         cp -r sys/src "$out/sys/"
-        cp ${libc}/lib/libc.a ${libbio}/lib/libbio.a "$out/bootstrap/lib/"
-        cp amd64/lib/libmach.a "$out/bootstrap/lib/"
+        cp ${libc}/lib/libc.a ${libbio}/lib/libbio.a ${libmach}/lib/libmach.a "$out/bootstrap/lib/"
         mkdir -p "$out/amd64/lib/ape"
         cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
       '';
@@ -308,6 +305,31 @@
         inherit cTools sysroot libc;
         source = rcSource;
       };
+      cc = pkgs.callPackage ./pkgs/cc {
+        inherit
+          cTools
+          sysroot
+          libc
+          libbio
+          ;
+        source = ccSource;
+      };
+      libmach = pkgs.callPackage ./pkgs/libmach {
+        inherit mkPlan9Library;
+        source = machSource;
+      };
+      ar = pkgs.callPackage ./pkgs/ar {
+        inherit mkPlan9Program libmach libbio;
+        source = ccSource;
+      };
+      arTests = pkgs.runCommand "ar-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${testSupport [ ./tests/ar.py ]}/ar.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${ar}/bin/ar ${abiCross} "$out"
+      '';
+      ccTests = pkgs.runCommand "cc-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${testSupport [ ./tests/c_abi.py ]}/c_abi.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${./tests/c-abi} ${abiCross} "$out" ${cc}
+      '';
       rcYaccTests = pkgs.runCommand "rc-yacc-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -506,7 +528,7 @@
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 "$TMPDIR/source.tar" \
           sys/src/libmach \
           sys/src/cmd/2c/2.out.h sys/src/cmd/5c/5.out.h sys/src/cmd/6c/6.out.h \
-          sys/src/cmd/7c/7.out.h sys/src/cmd/8c/8.out.h sys/src/cmd/kc/k.out.h \
+          sys/src/cmd/7c/7.out.h sys/src/cmd/8c/8.out.h sys/src/cmd/9c/9.out.h sys/src/cmd/kc/k.out.h \
           sys/src/cmd/qc/q.out.h sys/src/cmd/vc/v.out.h \
           386/include/ureg.h 68020/include/ureg.h amd64/include/ureg.h \
           arm/include/ureg.h arm64/include/ureg.h mips/include/ureg.h \
@@ -651,7 +673,8 @@
                 ./tests/bootstrap-inputs.nix
               ]
             }/native_bootstrap.py \
-              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} ${mk}/bin/mk ${rc}/bin/rc "$out"
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} \
+              ${mk}/bin/mk ${rc}/bin/rc ${cc} ${ar}/bin/ar ${libmach}/lib/libmach.a "$out"
           '';
       nativePatchTests = pkgs.runCommand "native-patch-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
@@ -925,9 +948,14 @@
           mk
           yacc
           rc
+          cc
+          libmach
+          ar
           ;
         mk-tests = mkTests;
         rc-yacc-tests = rcYaccTests;
+        cc-tests = ccTests;
+        ar-tests = arTests;
         inherit mpc;
         libsec-tests = secTests;
         libbz2-tests = libbz2Tests;
