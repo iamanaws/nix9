@@ -24,10 +24,11 @@ void showManPage(const std::string &name)
 {
     if (name == "nix-shell") {
         std::cout << "Usage: nix-shell [OPTIONS] [FILE]\n"
-                     "  --attr NAME            Select a mkShell derivation\n"
+                     "  --attr NAME            Select a derivation\n"
                      "  --arg NAME EXPR        Pass a function argument\n"
                      "  --run COMMAND          Run an rc command and exit\n"
-                     "Defaults to shell.nix. Outputs stay rooted while the shell runs.\n";
+                     "Defaults to shell.nix or default.nix. Only dependencies are built.\n"
+                     "Dependencies stay rooted while the shell runs.\n";
         throw Exit();
     }
     if (name == "nix-build") {

@@ -12,7 +12,15 @@
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
 in
-''
+(
+  if interactive then
+    ''
+      $tools/bin/bind -b $tools/bin /bin
+    ''
+  else
+    ""
+)
++ ''
   $tools/bin/bind $tools/sys/include /sys/include
   $tools/bin/bind $tools/amd64/include /amd64/include
   $tools/bin/bind $tools/amd64/lib /amd64/lib

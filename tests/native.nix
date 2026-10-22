@@ -34,6 +34,16 @@
       ${mk}/bin/mk ${rc}/bin/rc ${cc} ${ar}/bin/ar ${libmach}/lib/libmach.a ${compressedText} "$out"
     '';
   };
+  native-shell-tests = vmTest "native-shell-tests" {
+    script = ./native_shell.py;
+    files = [
+      ./native_inputs.py
+      ./inputs.nix
+    ];
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-patch-tests = vmTest "native-patch-tests" {
     script = ./native_patches.py;
     files = [ ./patches.nix ];

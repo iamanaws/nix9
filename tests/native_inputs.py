@@ -3,9 +3,10 @@
 import re
 
 
-def check_shell(guest, packages, port):
+def check_shell(guest, packages, port=None):
     guest.command("nix-store --gc")
-    guest.command(f"hget -o /tmp/inputs.nix http://10.0.2.2:{port}/inputs.nix")
+    if port is not None:
+        guest.command(f"hget -o /tmp/inputs.nix http://10.0.2.2:{port}/inputs.nix")
     guest.command(f"shellPackages={packages}")
     guest.command("mkdir /tmp/shell-project; cp /tmp/inputs.nix /tmp/shell-project/shell.nix; cd /tmp/shell-project")
     guest.command("fn shellEnter { nix-shell --argstr packages $shellPackages -A $1 $*(2-) }")
@@ -45,8 +46,9 @@ def check_shell(guest, packages, port):
     guest.command("test ! -e /amd64/lib/ape/libanswer.a && ~ $#NIX9_SHELL_TEST 0")
     guest.command("~ $#NIX9_SHELL_HOOK 0")
     for variable, original in (("path", "outsidePath"), ("PATH", "outsidePATH")):
-        result = guest.command(f"echo ${variable}; echo ${original}")
-        lines = [line for line in result.splitlines() if line.startswith("/")]
+        result = guest.command(f"echo -n actual:; echo ${variable}; echo -n expected:; echo ${original}")
+        lines = [line.partition(":")[2] for line in result.splitlines()
+                 if line.startswith(("actual:", "expected:"))]
         if len(lines) != 2 or lines[0] != lines[1]:
             raise RuntimeError(f"development shell changed {variable}: {result}")
     guest.command("nix-shell /tmp/inputs.nix --argstr packages $shellPackages -A shell --run 'generate'", "#define BUILD_NUMBER 42")

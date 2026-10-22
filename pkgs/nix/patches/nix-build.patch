@@ -17,8 +17,8 @@
 +
 +#ifdef __plan9__
 +namespace nix {
-+[[noreturn]] void runDevelopmentShell(LocalStore &, const StorePath &,
-+    const std::filesystem::path &, const std::optional<std::string> &);
++[[noreturn]] void runDevelopmentShell(LocalStore &, const Derivation &, const StorePathSet &,
++    const std::filesystem::path &, const std::filesystem::path &, const std::optional<std::string> &);
 +}
 +#endif
  
@@ -133,30 +133,60 @@
      auto evalStore = myArgs.evalStoreUrl ? openStore(StoreReference{*myArgs.evalStoreUrl}) : store;
  
      auto state = std::make_shared<EvalState>(myArgs.lookupPath, evalStore, fetchSettings, evalSettings, store);
-@@ -453,6 +508,11 @@
-             store->buildPaths(paths, buildMode, evalStore);
-     };
+@@ -463,6 +518,7 @@
+         std::vector<DerivedPath> pathsToBuild;
+         RealisedPath::Set pathsToCopy;
+ 
++#ifndef __plan9__
+         /* Figure out what bash shell to use. If $NIX_BUILD_SHELL
+            is not set, then build bashInteractive from
+            <nixpkgs>. */
+@@ -497,6 +553,7 @@
+             }
+         }
+ 
++#endif
+         auto accumDerivedPath = [&](this auto & self,
+                                     ref<SingleDerivedPath> inputDrv,
+                                     const DerivedPathMap<StringSet>::ChildNode & inputNode) -> void {
+@@ -532,17 +589,28 @@
+         if (dryRun)
+             return;
+ 
++#ifndef __plan9__
+         if (shellDrv) {
+             auto shellDrvOutputs = store->queryPartialDerivationOutputMap(shellDrv.value(), &*evalStore);
+             shell = store->printStorePath(shellDrvOutputs.at("out").value()) + "/bin/bash";
+         }
+ 
++#endif
+         if (drv.shouldResolve()) {
+             auto resolvedDrv = drv.tryResolve(*store);
+             assert(resolvedDrv && "Successfully resolved the derivation");
+             drv = *resolvedDrv;
+         }
  
 +#ifdef __plan9__
-+    if (isNixShell && drvs.size() != 1)
-+        throw UsageError("nix-shell requires a single mkShell derivation");
-+#endif
-+#ifndef __plan9__
-     if (isNixShell) {
-         if (drvs.size() != 1)
-             throw UsageError("nix-shell requires a single derivation");
-@@ -681,7 +741,9 @@
++        StorePathSet inputs = drv.inputSrcs;
++        for (const auto & path : pathsToBuild) {
++            if (auto built = std::get_if<DerivedPath::Built>(&path.raw()))
++                for (const auto & [name, output] : resolveDerivedPath(*store, *built, &*evalStore))
++                    inputs.insert(output);
++        }
++        runDevelopmentShell(*local, drv, inputs, tmpDir.path(), roots / tmpDir.path().filename(), shellCommand);
++#else
+         // Set the environment.
+         auto env = getEnv();
+ 
+@@ -679,6 +747,7 @@
+         execvp(shell->c_str(), argPtrs.data());
+ 
          throw SysError("executing shell '%s'", *shell);
++#endif
      }
  
--    else {
-+    else
-+#endif
-+    {
- 
-         std::vector<DerivedPath> pathsToBuild;
-         std::vector<std::pair<StorePath, std::string>> pathsToBuildOrdered;
-@@ -734,12 +796,24 @@
+     else {
+@@ -734,7 +803,10 @@
                  std::string symlink = drvPrefix;
                  if (outputName != "out")
                      symlink += "-" + outputName;
@@ -168,20 +198,6 @@
              }
  
              outPaths.push_back(outputPath);
-         }
- 
-+#ifdef __plan9__
-+        if (isNixShell) {
-+            if (outPaths.size() != 1)
-+                throw UsageError("nix-shell requires a single shell output");
-+            auto root = roots / tmpDir.path().filename();
-+            deletePath(tmpDir);
-+            runDevelopmentShell(*local, outPaths.front(), root, shellCommand);
-+        }
-+#endif
-         logger->stop();
- 
-         for (auto & path : outPaths)
 --- a/src/libcmd/network-proxy.cc
 +++ b/src/libcmd/network-proxy.cc
 @@ -1,6 +1,7 @@

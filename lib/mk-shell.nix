@@ -9,13 +9,6 @@
   shellHook ? "",
 }@attrs:
 let
-  inherit (stdenv)
-    tools
-    shell
-    cc
-    initialPath
-    libc
-    ;
   mergeInputs =
     name:
     (attrs.${name} or [ ])
@@ -32,31 +25,6 @@ let
     builtins.foldl' (hooks: input: [ (input.shellHook or "") ] ++ hooks) [ ] inputsFrom ++ [ shellHook ]
   );
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] "${value}" + "'";
-  script = ''
-    #!${shell}
-    flag e +
-    rfork ne
-    tools=${quote tools}
-    $tools/bin/bind -b $tools/bin /bin
-    ${import ./setup-environment.nix {
-      inherit (inputs)
-        nativeBuildInputs
-        buildInputs
-        propagatedNativeBuildInputs
-        propagatedBuildInputs
-        ;
-      inherit
-        initialPath
-        shell
-        cc
-        libc
-        ;
-      interactive = true;
-    }}
-    ${hooks}
-    if(~ $#* 0) exec ${quote shell} -m $tools/rcmain -i
-    if not exec ${quote shell} -m $tools/rcmain $*
-  '';
 in
 stdenv.mkDerivation {
   inherit name;
@@ -69,7 +37,18 @@ stdenv.mkDerivation {
   shellHook = hooks;
   buildCommand = ''
     mkdir -p $out
-    echo ${quote script} > $out/shell
+    echo ${quote ''
+      #!${stdenv.shell}
+      flag e +
+      rfork ne
+      tools=${quote stdenv.tools}
+    ''} > $out/shell
+    echo $__nix9ShellSetup >> $out/shell
+    echo ${quote ''
+      ${hooks}
+      if(~ $#* 0) exec ${quote stdenv.shell} -m ${stdenv.tools}/rcmain -i
+      if not exec ${quote stdenv.shell} -m ${stdenv.tools}/rcmain $*
+    ''} >> $out/shell
     chmod +x $out/shell
   '';
 }

@@ -52,7 +52,7 @@ Try a C project with the cached toolchain:
 mkdir /tmp/hello
 cp $nix9/hello/* /tmp/hello
 cd /tmp/hello
-nix-shell --run 'mk && ./6.out'
+nix-shell default.nix --run 'mk && ./6.out'
 ```
 
 The result is `hello from nix9`. See [native development](docs/development.md#native-nix)

@@ -227,6 +227,26 @@ let
           ''
         ];
       }
+      // (
+        if setup == null then
+          {
+            __nix9ShellSetup = import ./setup-environment.nix {
+              inherit
+                nativeBuildInputs
+                buildInputs
+                propagatedNativeBuildInputs
+                propagatedBuildInputs
+                initialPath
+                shell
+                cc
+                libc
+                ;
+              interactive = true;
+            };
+          }
+        else
+          { }
+      )
       // builtins.removeAttrs attrs (
         [
           "name"

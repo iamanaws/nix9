@@ -43,7 +43,7 @@ def check_nix_build_cli(guest):
     guest.command("cliBuild /tmp/nix-build.nix -A other --dry-run -o $roots/dry")
     guest.command("test ! -e $roots/dry && test ! -e /tmp/nix9-cli-other")
     for args, reason, status in (("-A other -o /tmp/outside-root", "output roots must be", 1),
-                                 ("--run-env -A hello", "has no shell launcher", 1),
+                                 ("--run-env -A hello", "derivation has no rc shell setup", 1),
                                  ("-A failed", "failed", 100)):
         result = guest.command(f"cliBuild /tmp/nix-build.nix {args}; echo BUILD-STATUS:$status")
         if not re.search(rf"(?m)^BUILD-STATUS:.*cc9exit={status}$", result) or reason not in result:

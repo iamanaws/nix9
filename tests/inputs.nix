@@ -183,6 +183,17 @@ in
 {
   native = program false;
   ape = program true;
+  package = (program false).overrideAttrs (_: {
+    name = "shell-package";
+    buildCommand = "exit 'shell target must not be built'";
+    message = "spaces, 'quotes', $variables; and a newline\nsecond line";
+    passAsFile = [ "messageFile" ];
+    messageFile = "contents with 'quotes' and $variables\nsecond line\n";
+    shellHook = ''
+      test -f $messageFilePath
+      packageShellHook=ready
+    '';
+  });
   shell = mkShell {
     name = "input-shell";
     inputsFrom = [

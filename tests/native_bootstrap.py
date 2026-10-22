@@ -44,6 +44,7 @@ with files_guest(qemu, image, fixtures) as guest:
             raise RuntimeError(f"{name} did not substitute from the shipped cache: {result}")
     environment = rooted(guest, roots + "/environment")
     shell = rooted(guest, roots + "/shell")
+    guest.command(f"{shell}/shell -c 'if(~ $#nativeBuildInputs 0) exit missing-inputs; whatis mk && echo cached-shell-PASS'", "cached-shell-PASS")
     guest.command("rm -r $nix9/cache; NIX_CONFIG='substituters ='")
     guest.command("nix-instantiate --eval --expr 'let s=(import <nix9>).stdenv; in s.buildPlatform.system == s.hostPlatform.system'", "true")
     for attribute in ("default", "custom", "override", "noMkfile", "singleCommand"):
