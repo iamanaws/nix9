@@ -1,0 +1,21 @@
+diff --git a/clone.c b/clone.c
+index 7790ffd..37d0bec 100644
+--- a/clone.c
++++ b/clone.c
+@@ -247,6 +247,16 @@ dmtimeperms(char *src, char *dst)
+ 	char *sn, *dn;
+ 	Dir *dirs, *d, dd, *s;
+ 
++	d = dirstat(src);
++	if(d == nil){
++		error("can't stat: %r");
++		return;
++	}
++	if(!(d->mode & DMDIR)){
++		free(d);
++		return;
++	}
++	free(d);
+ 	dirs = nil;
+ 
+ 	fd = open(src, OREAD);

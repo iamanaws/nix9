@@ -106,6 +106,7 @@ let
       header = ./lex-source/sys/include/ape/libl.h;
     };
     fetchgit = callPackage ./pkgs/fetchgit.nix { };
+    clone = callPackage ./pkgs/clone.nix { upstream = import ./pkgs/clone-source.nix; };
     fetchurl = callPackage ./pkgs/fetchurl.nix { };
     liblua = callPackage ./pkgs/liblua.nix {
       inherit upstream;

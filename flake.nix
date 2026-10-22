@@ -618,6 +618,30 @@
             }/native_git.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
           '';
+      cloneRepository = pkgs.fetchgit (
+        import ./pkgs/clone/source.nix
+        // {
+          leaveDotGit = true;
+          deepClone = true;
+          hash = "sha256-xPcmrMzO5TpMo3iqQRhuJlomxzLDW4gB8hjhMuEDfJI=";
+        }
+      );
+      nativeCloneTests =
+        pkgs.runCommand "native-clone-tests"
+          {
+            requiredSystemFeatures = [ "kvm" ];
+            nativeBuildInputs = [ pkgs.git ];
+          }
+          ''
+            ${python}/bin/python ${
+              testSupport [
+                ./tests/native_clone.py
+                ./tests/clone.nix
+              ]
+            }/native_clone.py \
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+              ${nativeBootstrap} ${cloneRepository} "$out"
+          '';
       nativeReleaseTests =
         pkgs.runCommand "native-release-tests" { requiredSystemFeatures = [ "kvm" ]; }
           ''
@@ -807,6 +831,7 @@
         native-patch-tests = nativePatchTests;
         native-ramfs-tests = nativeRamfsTests;
         native-git-tests = nativeGitTests;
+        native-clone-tests = nativeCloneTests;
         native-release-tests = nativeReleaseTests;
         native-update-tests = nativeUpdateTests;
         native-reproducibility-tests = nativeReproducibilityTests;
