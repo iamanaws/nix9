@@ -1,0 +1,48 @@
+--- a/n9libc.c
++++ b/n9libc.c
+@@ -220,15 +220,15 @@
+  * rounding wastes up to 2x per large block; refine to finer sub-classes only if a
+  * memory profile shows it hurts (the blocks are reused, so churn stays bounded). */
+ static void *g_big[64];
+-/* Weak: a thread-free program never links pthread.o, and then everything is
+- * "main" and uses main_mc. Returns this thread's cache slot, or 0 for main. */
++/* Without pthread.o only the main thread uses main_mc. Otherwise pthread.c
++ * supplies a private slot, or no slot while a worker is being registered. */
+ extern void **cc9_thread_mcache(void) __attribute__((weak));
+ static mcache main_mc;
+ 
+ static mcache *mc_get(void){
+ 	if(!cc9_thread_mcache) return &main_mc;
+ 	void **slot = cc9_thread_mcache();
+-	if(!slot) return &main_mc;                  /* main thread: sole user, no race */
++	if(!slot) return 0;                        /* worker not registered yet */
+ 	if(!*slot){
+ 		mlock(); void *m = malloc_u(sizeof(mcache)); munlock();
+ 		if(!m) return 0;                        /* OOM: caller falls back to the heap */
+@@ -282,6 +282,8 @@
+ 			munlock();
+ 			return p;
+ 		}
++		mlock(); void *p = malloc_u(n); munlock();
++		return p;
+ 	}
+ 	/* Large path (n > MC_MAX): round up to a power of 2 and serve O(1) from the
+ 	 * per-class list or the bump region; only fall to K&R malloc_u for huge blocks
+--- a/pthread.c
++++ b/pthread.c
+@@ -985,9 +985,13 @@
+ 	return index;
+ }
+ 
+-/* This thread's malloc-cache slot (n9libc's tcache), or 0 for main — main has no
+- * th_tab slot and n9libc keeps its own. Same %rsp resolve as everything else. */
++/* Main and registered workers each own a cache. Before registration, a worker
++ * must use the locked heap: freeing the previous slot's arrays can overlap
++ * allocation on main, so it cannot borrow main's cache. */
++static void *main_mcache;
+ void **cc9_thread_mcache(void){
++	unsigned long sp; __asm__ volatile("movq %%rsp,%0":"=r"(sp));
++	if(on_main_stack(sp)) return &main_mcache;
+ 	int sl = th_slot();
+ 	return sl < 0 ? 0 : &th_tab[sl].mcache;
+ }

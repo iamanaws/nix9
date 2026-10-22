@@ -63,6 +63,16 @@
         '';
       };
       python = pkgs.python3.withPackages (p: [ p.pexpect ]);
+      cc9Tests = pkgs.runCommand "cc9-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        export CXX=${pkgs.llvmPackages_22.clang-unwrapped}/bin/clang++
+        export LD=${pkgs.llvmPackages_22.lld}/bin/ld.lld
+        export PYTHON=${python}/bin/python
+        bash ${./tests/cc9}/build.sh ${nixUtil.cc9} ${nixUtil.cc9.elf2aout} "$out"
+        ${python}/bin/python ${testSupport [ ./tests/smoke.py ]}/smoke.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+          "$out/runtime-tests" 'cc9 runtime tests PASS'
+        echo '{"runtime": "passed"}' > "$out/results.json"
+      '';
       nixUtil = pkgs.callPackage ./pkgs/nix { };
       nixProbe = pkgs.callPackage ./tests/libutil { inherit nixUtil; };
       testSupport =
@@ -813,6 +823,7 @@
         inherit lua;
         native-tools = nativeTools;
         nix-util = nixUtil;
+        cc9-tests = cc9Tests;
         nix-core-tests = nixCoreTests;
         nix-native-tests = nixNativeTests;
         nix-store-tests = nixStoreTests;

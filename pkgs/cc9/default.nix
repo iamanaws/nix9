@@ -38,7 +38,8 @@ stdenvNoCC.mkDerivation {
 
   postPatch = ''
     for patchFile in ${./exit-status.patch} ${./aligned-allocation.patch} \
-      ${./environment.patch} ${./exec-path.patch} ${./create-mode.patch} ${./poll-interruption.patch} ${./assert-noreturn.patch}; do
+      ${./environment.patch} ${./exec-path.patch} ${./create-mode.patch} ${./poll-interruption.patch} ${./assert-noreturn.patch} \
+      ${./thread-allocation.patch}; do
       patch --fuzz=0 -d runtime -p1 < "$patchFile"
     done
     substituteInPlace host/regen-libcxx.sh --replace-fail "sed -i ${"''"}" "sed -i"

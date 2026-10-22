@@ -1,4 +1,5 @@
 #include <cerrno>
+#include <atomic>
 #include <cmath>
 #include <stdexcept>
 #include <cstdint>
@@ -10,6 +11,7 @@
 #include <string>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -57,6 +59,50 @@ static void allocations() {
         auto p = std::make_shared<Aligned>();
         check(reinterpret_cast<uintptr_t>(p.get()) % 64 == 0 && !p->bytes[4095], "aligned shared allocation");
     }
+}
+
+static std::atomic<bool> cacheDone;
+static pthread_key_t cacheKey;
+
+static void *cacheChild(void *) {
+    static thread_local volatile int value;
+    value = 37;
+    check(pthread_setspecific(cacheKey, reinterpret_cast<void *>(1)) == 0, "thread-specific data");
+    return nullptr;
+}
+
+static void *cacheCreator(void *) {
+    // Recycling slots frees the previous worker's TLS arrays before registration.
+    for (int i = 0; i < 10000; ++i) {
+        pthread_t thread;
+        check(pthread_create(&thread, nullptr, cacheChild, nullptr) == 0, "create cache worker");
+        check(pthread_join(thread, nullptr) == 0, "join cache worker");
+    }
+    cacheDone.store(true);
+    return nullptr;
+}
+
+static void threadAllocations() {
+    check(pthread_key_create(&cacheKey, nullptr) == 0, "create cache key");
+    pthread_t creator;
+    check(pthread_create(&creator, nullptr, cacheCreator, nullptr) == 0, "create worker parent");
+    unsigned rounds = 0;
+    while (!cacheDone.load()) {
+        unsigned char *blocks[64];
+        for (int i = 0; i < 64; ++i) {
+            blocks[i] = static_cast<unsigned char *>(std::malloc(2048));
+            check(blocks[i], "allocate alongside worker registration");
+            std::memset(blocks[i], i + 1, 2048);
+        }
+        for (int i = 0; i < 64; ++i) {
+            for (int j = 0; j < 2048; ++j)
+                check(blocks[i][j] == i + 1, "live allocation overwritten during worker registration");
+            std::free(blocks[i]);
+        }
+        ++rounds;
+    }
+    check(pthread_join(creator, nullptr) == 0 && rounds > 0, "concurrent allocation completed");
+    check(pthread_key_delete(cacheKey) == 0, "delete cache key");
 }
 
 static void math() {
@@ -215,7 +261,7 @@ int main(int argc, char **argv) {
     check(mkdir(scratch.c_str(), 0755) == 0 && chdir(scratch.c_str()) == 0, "test directory");
     const char *selected = argc == 2 ? argv[1] : "all";
     bool matched = false;
-    for (auto [name, test] : {std::pair{"allocation", allocations}, {"environment", environment},
+    for (auto [name, test] : {std::pair{"allocation", allocations}, {"threads", threadAllocations}, {"environment", environment},
                             {"path", execPath}, {"copy", copies}, {"poll", polling},
                             {"math", math}, {"exceptions", exceptions}}) {
         if (std::strcmp(selected, "all") && std::strcmp(selected, name)) continue;
@@ -233,7 +279,7 @@ int main(int argc, char **argv) {
         waitFor(child, 42);
         std::puts("PASS: exit");
     }
-    check(matched && argc <= 2, "unknown test (allocation, environment, path, copy, poll, math, exceptions, exit, all)");
+    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, poll, math, exceptions, exit, all)");
     check(chdir("/tmp") == 0 && rmdir(scratch.c_str()) == 0, "remove test directory");
     std::puts("cc9 runtime tests PASS");
 }
