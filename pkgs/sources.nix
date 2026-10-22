@@ -28,25 +28,13 @@ let
     );
 in
 {
-  sysroot =
-    pkgs.runCommand "9front-11952-amd64-sysroot"
-      {
-        requiredSystemFeatures = [ "kvm" ];
-      }
-      ''
-        ${python}/bin/python ${
-          testSupport [
-            ../tests/export_tree.py
-            ../tests/artifacts.py
-          ]
-        }/export_tree.py \
-          ${pkgs.qemu}/bin/qemu-system-x86_64 \
-          ${vm}/9front.qcow2 "$TMPDIR/sysroot.tar" sys/include amd64/include amd64/lib
-        mkdir -p "$out"
-        tar -xf "$TMPDIR/sysroot.tar" -C "$out"
-        test -s "$out/amd64/lib/libc.a"
-        test -s "$out/sys/include/libc.h"
-      '';
+  sysroot = exportSource "9front-11952-amd64-sysroot" {
+    paths = "sys/include amd64/include";
+    check = ''
+      test -s "$out/sys/include/libc.h"
+      test -s "$out/amd64/include/u.h"
+    '';
+  };
   apeSource = exportSource "9front-ape-source" {
     paths = "sys/src/ape sys/src/libc";
   };

@@ -42,6 +42,7 @@ pkgs.lib.makeScope pkgs.newScope (
   // sources
   // cross
   // rec {
+    imageTools = callPackage ./native-packages/image-tools.nix { };
     nativeTools = callPackage ./native-packages/tools.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
     hello = callPackage ./hello-plan9 { };
