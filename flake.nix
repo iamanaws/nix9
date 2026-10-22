@@ -111,23 +111,24 @@
           "$TMPDIR/tools.tar" amd64/bin/6a amd64/bin/6c amd64/bin/6l amd64/bin/ar amd64/bin/awk \
           amd64/bin/bind amd64/bin/cpp amd64/bin/pcc amd64/bin/tar amd64/bin/gunzip \
           amd64/bin/cat amd64/bin/chmod amd64/bin/sed amd64/bin/webfs amd64/bin/cp amd64/bin/echo amd64/bin/mpc amd64/bin/rc amd64/bin/mkdir amd64/bin/test \
-          amd64/bin/mk amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr amd64/bin/ed amd64/bin/date \
-          amd64/lib/libbio.a amd64/lib/libmach.a \
+          amd64/bin/rm amd64/bin/mv amd64/bin/pwd amd64/bin/ls amd64/bin/grep amd64/bin/tr amd64/bin/ed amd64/bin/date \
+          amd64/lib/libmach.a \
           amd64/mkfile sys/src/mkfile.proto sys/src/cmd/mkone sys/src/cmd/mklib sys/src/cmd/mkmany sys/src/cmd/mksyslib rc/lib/rcmain
         tar -xf "$TMPDIR/tools.tar"
         mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
         cp amd64/bin/* "$out/bin/"
         mkdir -p "$out/bootstrap/bin" "$out/bootstrap/rc/bin" "$out/bootstrap/lib"
-        for command in 6a 6c 6l ar mk; do
+        for command in 6a 6c 6l ar; do
           mv "$out/bin/$command" "$out/bootstrap/bin/"
         done
+        cp ${mk}/bin/mk "$out/bootstrap/bin/mk"
         mv "$out/bin/rc" "$out/bootstrap/rc/bin/"
         cp rc/lib/rcmain "$out/rcmain"
         cp -r ${sysroot}/sys/include "$out/sys/"
         cp -r ${sysroot}/amd64/include "$out/amd64/"
         cp amd64/mkfile "$out/amd64/"
         cp -r sys/src "$out/sys/"
-        cp ${libc}/lib/libc.a amd64/lib/libbio.a "$out/bootstrap/lib/"
+        cp ${libc}/lib/libc.a ${libbio}/lib/libbio.a "$out/bootstrap/lib/"
         cp amd64/lib/libmach.a "$out/bootstrap/lib/"
         mkdir -p "$out/amd64/lib/ape"
         cp ${libap}/lib/libap.a ${libbsd}/lib/libbsd.a "$out/amd64/lib/ape/"
@@ -271,6 +272,34 @@
           ;
       };
       helloCross = pkgs.callPackage ./pkgs/hello-c-cross { inherit mkPlan9Program; };
+      mkPlan9Library = pkgs.callPackage ./lib/mk-plan9-library.nix { inherit cTools sysroot; };
+      libbio = pkgs.callPackage ./pkgs/libbio {
+        inherit mkPlan9Library;
+        source = fortuneSource;
+      };
+      libregexp = pkgs.callPackage ./pkgs/libregexp {
+        inherit mkPlan9Library;
+        source = mkSource;
+      };
+      mk = pkgs.callPackage ./pkgs/mk {
+        inherit
+          cTools
+          sysroot
+          libc
+          libbio
+          libregexp
+          ;
+        source = mkSource;
+      };
+      mkTests = pkgs.runCommand "mk-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/mk.py
+            ./tests/mkfile
+          ]
+        }/mk.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${mk}/bin/mk "$out"
+      '';
       sha1sum = pkgs.callPackage ./pkgs/sha1sum { inherit mkPlan9Program libsec; };
       sha1sumTests =
         pkgs.runCommand "sha1sum-tests"
@@ -436,7 +465,7 @@
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
       libthread = pkgs.callPackage ./pkgs/libthread {
-        inherit cTools sysroot;
+        inherit mkPlan9Library;
         source = ramfsSource;
       };
       clone = pkgs.callPackage ./pkgs/clone { inherit mkPlan9Program libthread; };
@@ -604,7 +633,7 @@
                 ./tests/bootstrap-inputs.nix
               ]
             }/native_bootstrap.py \
-              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} "$out"
+              ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${nativeBootstrap} ${mk}/bin/mk "$out"
           '';
       nativePatchTests = pkgs.runCommand "native-patch-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
@@ -872,6 +901,8 @@
         inherit libsec;
         inherit libmp;
         inherit libthread;
+        inherit libbio libregexp mk;
+        mk-tests = mkTests;
         inherit mpc;
         libsec-tests = secTests;
         libbz2-tests = libbz2Tests;

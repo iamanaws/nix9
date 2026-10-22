@@ -1,0 +1,12 @@
+NPROC=2
+<included.mk
+
+all:V: alpha.copy beta.copy
+	test $INCLUDED '=' yes
+
+([a-z]+)\.copy:R: \1.src
+	echo $prereq > $target
+	cat $prereq >> $target
+
+failed:V:
+	exit deliberate
