@@ -1,0 +1,44 @@
+flag e +
+mkdir work
+cd work
+test `{pwd} '=' $workRoot^/work
+echo alpha > input
+echo beta >> input
+cp input copy
+mv copy moved
+chmod 600 moved
+test -f moved
+ls moved | grep moved > listed
+test -s listed
+sed 's/beta/BETA/' input > changed
+grep BETA changed > matched
+test `{cat matched} '=' BETA
+test `{echo abc | tr a-z A-Z} '=' ABC
+awk 'function twice(x) { return 2*x } BEGIN { if(twice(21)!=42) exit 1 }'
+awk 'BEGIN { "echo pipe-ok" | getline x; close("echo pipe-ok"); if(x!="pipe-ok") exit 1 }'
+test `{awk 'END {print NR}' input} '=' 2
+date -un | awk '/^[0-9]+$/ {ok=1} END {if(!ok) exit 1}'
+ed - input <<'EOF'
+$a
+tail
+.
+w
+Q
+EOF
+grep tail input > tail
+test -s tail
+tar cf packed.tar input
+mkdir unpacked
+@{ cd unpacked; tar xf ../packed.tar; grep tail input > checked; test -s checked }
+gunzip -c $1 > inflated
+test `{cat inflated} '=' hello
+echo placeholder > mounted
+bind $workRoot/work/inflated $workRoot/work/mounted
+test `{cat mounted} '=' hello
+unmount $workRoot/work/inflated $workRoot/work/mounted
+test `{cat mounted} '=' placeholder
+rm moved
+test ! -e moved
+cd ..
+rm -r work
+echo build-tools-PASS

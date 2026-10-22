@@ -33,7 +33,7 @@ def archive_dates(path):
 
 
 qemu, image, nix_archive, nix_prefix, packages_archive, packages, output = sys.argv[1:]
-names = ("patch", "ar", "cc", "libc", "libbio", "libmach", "libregexp", "mk", "rc", "yacc")
+names = ("buildTools", "patch", "ar", "cc", "libc", "libbio", "libmach", "libregexp", "mk", "rc", "yacc")
 runs = []
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)
@@ -71,7 +71,10 @@ with tempfile.TemporaryDirectory() as directory:
                                 raise RuntimeError(f"{name} was substituted during self rebuild")
                             guest.command(f"original=`{{cat $roots/{name}}}; rebuilt=`{{cat $roots/rebuilt-{name}}}")
                             guest.command("test $original '!=' $rebuilt")
-                            if name == "cc":
+                            if name == "buildTools":
+                                guest.command("@{ cd $original/bin; for(file in *) cmp $file $rebuilt/bin/$file }")
+                                files = ()
+                            elif name == "cc":
                                 files = ("bin/6a", "bin/6c", "bin/6l")
                             elif name == "yacc":
                                 files = ("libexec/yacc",)

@@ -24,11 +24,12 @@ let
     tools = ./tools;
     shell = "${pkgs.rc}/bin/rc";
     inherit (pkgs) cc libc;
-    initialPath = [
-      pkgs.mk
-      pkgs.ar
-      pkgs.rc
-      pkgs.patch
+    initialPath = with pkgs; [
+      mk
+      ar
+      rc
+      patch
+      buildTools
     ];
   };
   upstream = import ./pkgs/lua-source.nix;
@@ -36,6 +37,11 @@ let
     inherit stdenv;
     inherit (stdenv) mkDerivation;
     callPackage = import ./call-package.nix pkgs;
+    buildTools = callPackage ./pkgs/build-tools/native.nix {
+      stdenv = buildStdenv;
+      src = ./build-tools-source;
+      inherit (bootstrap) yacc libbio libregexp;
+    };
     cc = callPackage ./pkgs/cc.nix {
       stdenv = toolchainStdenv;
       src = ./cc-source;

@@ -68,17 +68,15 @@ with tempfile.TemporaryDirectory() as directory:
         thread.start()
         try:
             with boot(qemu, disk, snapshot=False) as guest:
-                guest.child.timeout = 300
-                guest.command(f"hget -o /tmp/package.tar http://10.0.2.2:{server.server_port}/package.tar")
-                guest.command("cd / && tar xf /tmp/package.tar")
+                guest.child.timeout = 600
+                guest.command(f"cd / && hget http://10.0.2.2:{server.server_port}/package.tar | tar x")
                 guest.command(f"hget -o /tmp/recovery.nix http://10.0.2.2:{server.server_port}/recovery.nix")
                 guest.command(f"hget -o /tmp/store-probe http://10.0.2.2:{server.server_port}/store-probe")
                 guest.command("chmod +x /tmp/store-probe")
                 guest.command(f". {prefix}/activate")
                 guest.command("nix-instantiate --eval --expr '6 * 7'", "42")
                 guest.command(f"test ! -e {prefix}/share/nix9")
-                guest.command(f"hget -o /tmp/packages.tar http://10.0.2.2:{server.server_port}/packages.tar")
-                guest.command("cd / && tar xf /tmp/packages.tar && rm /tmp/packages.tar")
+                guest.command(f"cd / && hget http://10.0.2.2:{server.server_port}/packages.tar | tar x")
                 # Keep the shared toolchain through the package tests' GC runs.
                 stdenv_root = "/usr/local/nix/state/gcroots/stdenv"
                 guest.command(f"nix-build --expr 'let p=import {packages}; in p.buildEnv {{ name=\"test-toolchain\"; paths=[p.cc p.libc]; }}' --out-link {stdenv_root}")
@@ -123,7 +121,6 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"echo -n abc | {package}/bin/sha1sum", "a9993e364706816aba3e25717850c26c9cd0d89d")
                 guest.command(f"nix-store --verify-path {drv} {package}")
                 guest.command(f"rm {stdenv_root}")
-                guest.command("rm /tmp/package.tar")
         finally:
             server.shutdown()
             thread.join()

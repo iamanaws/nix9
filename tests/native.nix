@@ -3,6 +3,7 @@
   ar,
   cc,
   cloneRepository,
+  compressedText,
   libmach,
   mk,
   nativeBootstrap,
@@ -18,10 +19,12 @@
     files = [
       ./rc.nix
       ./bootstrap-inputs.nix
+      ./build-tools.nix
+      ./build-tools.rc
     ];
     args = ''
       ${nativeBootstrap} \
-      ${mk}/bin/mk ${rc}/bin/rc ${cc} ${ar}/bin/ar ${libmach}/lib/libmach.a "$out"
+      ${mk}/bin/mk ${rc}/bin/rc ${cc} ${ar}/bin/ar ${libmach}/lib/libmach.a ${compressedText} "$out"
     '';
   };
   native-patch-tests = vmTest "native-patch-tests" {

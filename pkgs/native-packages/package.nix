@@ -1,6 +1,7 @@
 {
   runCommand,
   nativeTools,
+  buildToolsSource,
   ccSource,
   libcSource,
   secSource,
@@ -18,6 +19,10 @@
 runCommand "native-packages" { } ''
   mkdir -p "$out/pkgs" "$out/bin"
   cp -r ${nativeTools} "$out/tools"
+  cp -r ${buildToolsSource} "$out/build-tools-source"
+  mkdir "$out/pkgs/build-tools"
+  cp ${../build-tools/native.nix} "$out/pkgs/build-tools/native.nix"
+  cp ${../build-tools/commands.nix} "$out/pkgs/build-tools/commands.nix"
   cp -r ${ccSource} "$out/cc-source"
   cp ${ccSource}/sys/src/cmd/ar.c "$out/ar.c"
   cp ${patchSource}/sys/src/cmd/patch.c "$out/patch.c"

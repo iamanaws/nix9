@@ -5,6 +5,9 @@
   callPackage,
 }:
 {
+  compressedText = pkgs.runCommand "build-tools-input.gz" { nativeBuildInputs = [ pkgs.gzip ]; } ''
+    printf 'hello\n' | gzip -n > "$out"
+  '';
   nixProbe = callPackage ./libutil { };
   nativePackages = pkgs.runCommand "native-package-inputs" { } ''
     mkdir "$out"

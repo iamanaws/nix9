@@ -4,6 +4,8 @@
   apeCross,
   ar,
   cc,
+  buildTools,
+  compressedText,
   clone,
   development,
   guestDevelopment,
@@ -26,6 +28,13 @@
   yacc,
 }:
 {
+  build-tools-tests = vmTest "build-tools-tests" {
+    script = ./build_tools.py;
+    files = [ ./build-tools.rc ];
+    args = ''
+      ${buildTools} ${rc}/bin/rc ${compressedText} "$out"
+    '';
+  };
   mk-tests = vmTest "mk-tests" {
     script = ./mk.py;
     files = [ ./mkfile ];

@@ -1,6 +1,7 @@
 {
   pkgs,
   imageTools,
+  buildTools,
   ar,
   cc,
   mk,
@@ -15,6 +16,7 @@
 pkgs.runCommand "9front-native-tools" { } ''
   mkdir -p "$out/bin" "$out/sys" "$out/amd64/lib"
   cp ${imageTools}/amd64/bin/* "$out/bin/"
+  cp ${buildTools}/bin/* "$out/bin/"
   mkdir -p "$out/bootstrap/bin" "$out/bootstrap/rc/bin" "$out/bootstrap/lib"
   cp ${ar}/bin/ar "$out/bootstrap/bin/ar"
   cp ${cc}/bin/* "$out/bootstrap/bin/"

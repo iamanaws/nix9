@@ -35,6 +35,13 @@ in
       test -s "$out/amd64/include/u.h"
     '';
   };
+  buildToolsSource = exportSource "build-tools-source" {
+    paths =
+      "sys/src/cmd/awk sys/src/cmd/grep sys/src/cmd/gzip sys/src/libString sys/src/libflate "
+      + pkgs.lib.concatMapStringsSep " " (name: "sys/src/cmd/${name}.c") (
+        import ./build-tools/commands.nix
+      );
+  };
   apeSource = exportSource "9front-ape-source" {
     paths = "sys/src/ape sys/src/libc";
   };

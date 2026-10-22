@@ -16,13 +16,13 @@ def rooted(guest, root):
     return paths[0]
 
 
-qemu, image, archive, seed_mk, seed_rc, seed_cc, seed_ar, seed_libmach, output = sys.argv[1:]
+qemu, image, archive, seed_mk, seed_rc, seed_cc, seed_ar, seed_libmach, compressed, output = sys.argv[1:]
 roots = "/usr/local/nix/state/gcroots"
 fixtures = {"bootstrap.tar": archive, "seed-mk": seed_mk, "seed-rc": seed_rc,
-            "seed-ar": seed_ar, "seed-libmach.a": seed_libmach}
+            "seed-ar": seed_ar, "seed-libmach.a": seed_libmach, "input.gz": compressed}
 for name in ("6a", "6c", "6l"):
     fixtures[name] = Path(seed_cc) / "bin" / name
-for name in ("rc.nix", "bootstrap-inputs.nix"):
+for name in ("rc.nix", "bootstrap-inputs.nix", "build-tools.nix", "build-tools.rc"):
     fixtures[name] = Path(__file__).with_name(name)
 with files_guest(qemu, image, fixtures) as guest:
     guest.child.timeout = 300
@@ -43,6 +43,7 @@ with files_guest(qemu, image, fixtures) as guest:
     environment = rooted(guest, roots + "/environment")
     shell = rooted(guest, roots + "/shell")
     guest.command("rm -r $nix9/cache; NIX_CONFIG='substituters ='")
+    guest.command("nix-build /tmp/build-tools.nix --argstr packages $nix9/packages --arg compressed /tmp/input.gz --no-out-link", "build-tools-PASS")
     guest.command(f"nix-build $nix9/packages -A rc --out-link {roots}/rc")
     rc = rooted(guest, roots + "/rc")
     guest.command("nix-instantiate --eval --expr 'let p=import <nix9>; in p.stdenv.shell == p.rc + \"/bin/rc\"'", "true")

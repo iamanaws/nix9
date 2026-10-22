@@ -15,6 +15,7 @@ pkgs.lib.makeScope pkgs.newScope (
       inherit (support) python testSupport;
     };
     cross = {
+      build-tools = callPackage ./build-tools { source = sources.buildToolsSource; };
       libbio = callPackage ./libbio { source = sources.fortuneSource; };
       libregexp = callPackage ./libregexp { source = sources.mkSource; };
       mk = callPackage ./mk { source = sources.mkSource; };
@@ -42,6 +43,7 @@ pkgs.lib.makeScope pkgs.newScope (
   // sources
   // cross
   // rec {
+    buildTools = cross.build-tools;
     imageTools = callPackage ./native-packages/image-tools.nix { };
     nativeTools = callPackage ./native-packages/tools.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };

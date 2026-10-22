@@ -4,6 +4,14 @@ let
 in
 {
   rebuilt = {
+    buildTools = pkgs.buildTools.override {
+      inherit (pkgs)
+        stdenv
+        yacc
+        libbio
+        libregexp
+        ;
+    };
     cc = pkgs.cc.override { inherit (pkgs) stdenv; };
     libc = pkgs.libc.override { inherit (pkgs) stdenv; };
     rc = pkgs.rc.override { inherit (pkgs) stdenv yacc; };
