@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory() as directory:
                     inherit name;
                     value = pkgs.${name}.drvPath;
                   }) [ "cc" "ar" "rc" "patch" "libc" "libmp" "libsec" "libbio" "libmach" "libregexp"
-                       "lib9p" "libauth" "libthread" "ramfs" "libflate" "git" "mk" "yacc" "lex" "libl" "liblua" "lua" "fortune" "sha1sum" ])
+                       "lib9p" "libauth" "libthread" "ramfs" "libflate" "git" "mk" "yacc" "mpc" "lex" "libl" "liblua" "lua" "fortune" "sha1sum" ])
                   else pkgs.buildEnv {''')
                 (root / f"{name}.nix").write_text(expression.replace(hashes["one"], digest))
             with boot(qemu, image) as guest:

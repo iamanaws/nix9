@@ -3,13 +3,13 @@
   cTools,
   sysroot,
   source,
-  mpc,
+  buildMpc,
 }:
 runCommand "9front-libsec"
   {
     nativeBuildInputs = [
       cTools
-      mpc
+      buildMpc
     ];
     ccroot = sysroot;
     passthru = { inherit source; };

@@ -85,6 +85,7 @@ let
     libthread = callPackage ./pkgs/libthread.nix { src = ./ramfs-source/sys/src/libthread; };
     ramfs = callPackage ./pkgs/ramfs.nix { src = ./ramfs-source/sys/src/cmd/ramfs.c; };
     libmp = callPackage ./pkgs/libmp.nix { src = ./libsec-source; };
+    mpc = callPackage ./pkgs/mpc.nix { src = ./libsec-source; };
     libsec = callPackage ./pkgs/libsec.nix { src = ./libsec-source; };
     libbio = callPackage ./pkgs/libbio.nix {
       mkDerivation = buildStdenv.mkDerivation;

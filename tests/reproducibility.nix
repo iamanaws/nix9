@@ -16,6 +16,7 @@ in
     libc = pkgs.libc.override { inherit (pkgs) stdenv; };
     rc = pkgs.rc.override { inherit (pkgs) stdenv yacc; };
     yacc = pkgs.yacc.override { inherit (pkgs) stdenv; };
+    mpc = pkgs.mpc.override { yacc = pkgs.yacc.override { inherit (pkgs) stdenv; }; };
     patch = pkgs.patch.override { inherit (pkgs.stdenv) mkDerivation; };
     ar = pkgs.ar.override {
       inherit (pkgs.stdenv) mkDerivation;

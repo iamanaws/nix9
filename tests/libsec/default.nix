@@ -5,6 +5,7 @@
   libc,
   libsec,
   libmp,
+  mpc,
 }:
 runCommand "libsec-cross-tests"
   {
@@ -13,6 +14,8 @@ runCommand "libsec-cross-tests"
   }
   ''
     mkdir -p "$out/bin" "$out/src"
+    cp ${mpc}/bin/mpc "$out/bin/"
+    cp ${libsec.source}/sys/src/libsec/port/*.mp "$out/src/"
     for test in sha2 hmac chacha aesgcm eg; do
       cp ${libsec.source}/sys/src/libsec/test/$test.c "$out/src/"
     done

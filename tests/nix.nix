@@ -64,6 +64,7 @@ rec {
       ./libsec.py
       ./libsec/native.nix
       ./libsec/mp.c
+      ./libsec/generated.sha256
       ./native_project.py
       ./native_yacc.py
       ./yacc.nix

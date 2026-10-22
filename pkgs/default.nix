@@ -14,6 +14,7 @@ pkgs.lib.makeScope pkgs.newScope (
       inherit pkgs vm;
       inherit (support) python testSupport;
     };
+    buildMpc = callPackage ./mpc/build.nix { source = sources.secSource; };
     cross = {
       build-tools = callPackage ./build-tools { source = sources.buildToolsSource; };
       libbio = callPackage ./libbio { source = sources.fortuneSource; };
@@ -33,7 +34,10 @@ pkgs.lib.makeScope pkgs.newScope (
       libthread = callPackage ./libthread { source = sources.ramfsSource; };
       clone = callPackage ./clone { };
       libmp = callPackage ./libmp { source = sources.secSource; };
-      libsec = callPackage ./libsec { source = sources.secSource; };
+      libsec = callPackage ./libsec {
+        source = sources.secSource;
+        inherit buildMpc;
+      };
       lua = callPackage ./lua { };
       libbz2 = callPackage ./libbz2 { };
     };

@@ -24,6 +24,8 @@ for name in ("6a", "6c", "6l", "cpp", "pcc"):
     fixtures[name] = Path(seed_cc) / "bin" / name
 for name in ("rc.nix", "bootstrap-inputs.nix", "build-tools.nix", "build-tools.rc", "cc.nix", "libc.c"):
     fixtures[name] = Path(__file__).with_name(name)
+for name in ("native.nix", "mp.c", "generated.sha256"):
+    fixtures["crypto.nix" if name == "native.nix" else name] = Path(__file__).with_name("libsec") / name
 with files_guest(qemu, image, fixtures) as guest:
     guest.child.timeout = 300
     guest.command("test ! -e /usr/local/nix/store")
@@ -43,6 +45,10 @@ with files_guest(qemu, image, fixtures) as guest:
     environment = rooted(guest, roots + "/environment")
     shell = rooted(guest, roots + "/shell")
     guest.command("rm -r $nix9/cache; NIX_CONFIG='substituters ='")
+    guest.command("test ! -e $nix9/packages/tools/bin/mpc; bind /dev/null /amd64/bin/mpc")
+    guest.command("nix-build $nix9/packages -A mpc --no-out-link")
+    guest.command("nix-build $nix9/packages -A mpc --check --no-out-link")
+    guest.command("nix-build /tmp/crypto.nix --argstr packages $nix9/packages --no-out-link")
     guest.command("nix-build /tmp/build-tools.nix --argstr packages $nix9/packages --arg compressed /tmp/input.gz --no-out-link", "build-tools-PASS")
     for attribute in ("program", "rebuiltProgram"):
         guest.command(f"nix-build /tmp/cc.nix --argstr packages $nix9/packages -A {attribute} --no-out-link", "APE cc PASS")
@@ -105,5 +111,6 @@ Path(output, "results.json").write_text(json.dumps({
     "native-project": "passed",
     "rebuilt-shell": "passed",
     "declared-build-inputs": "passed",
+    "native-mpc-and-crypto": "passed",
     "update-and-rollback": "passed",
 }, indent=2) + "\n")

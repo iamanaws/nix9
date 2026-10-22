@@ -1,8 +1,16 @@
-{ mkDerivation, src }:
+{
+  mkDerivation,
+  src,
+  mpc,
+}:
 mkDerivation {
   name = "libsec";
   inherit src;
+  nativeBuildInputs = [ mpc ];
   sourceRoot = "source/sys/src/libsec";
+  postUnpack = ''
+    for(unit in secp256r1 secp384r1 secp256k1 jacobian) rm -f port/$unit.c
+  '';
   makeFlags = [ "LIB=../libsec.a" ];
   installPhase = ''
     mkdir -p $out/lib

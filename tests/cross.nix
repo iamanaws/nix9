@@ -80,7 +80,7 @@
   libsec-tests = vmTest "libsec-tests" {
     script = ./libsec.py;
     args = ''
-      ${secCross} "$out"
+      ${secCross} ${./libsec/generated.sha256} "$out"
     '';
   };
   guest-development-tests = vmTest "guest-development-tests" {

@@ -2,6 +2,7 @@
   pkgs,
   secSource,
   sha1sum,
+  mpc,
   callPackage,
 }:
 {
@@ -13,6 +14,7 @@
     mkdir "$out"
     cp -r ${secSource} "$out/libsec"
     cp ${../pkgs/libsec/native.nix} "$out/libsec.nix"
+    cp -r ${mpc} "$out/mpc"
     cp ${../pkgs/sha1sum/native.nix} "$out/sha1sum.nix"
     cp ${../lib/mk-derivation.nix} "$out/mk-derivation.nix"
     cp ${../lib/setup-environment.nix} "$out/setup-environment.nix"

@@ -48,6 +48,7 @@ runCommand "native-packages" { } ''
   chmod +x "$out/bin/nix-profile"
   cp ${../libsec/native.nix} "$out/pkgs/libsec.nix"
   cp ${../libmp/native.nix} "$out/pkgs/libmp.nix"
+  cp ${../mpc/native.nix} "$out/pkgs/mpc.nix"
   cp ${../sha1sum/native.nix} "$out/pkgs/sha1sum.nix"
   cp ${../libmach/native.nix} "$out/pkgs/libmach.nix"
   cp ${../libflate/native.nix} "$out/pkgs/libflate.nix"

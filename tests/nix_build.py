@@ -48,6 +48,7 @@ def build_fixtures(root, hello, abi, packages, tools):
         abi = import ./abi/native.nix { inherit mkDerivation; };
         libsec = import ./packages/libsec.nix {
           inherit mkDerivation; src = ./packages/libsec;
+          mpc = ./packages/mpc;
         };
         multiple = mk "native-multiple" ''
           /bin/echo ran >> /tmp/n9-multiple-count

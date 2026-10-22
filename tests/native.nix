@@ -21,6 +21,9 @@
       ./bootstrap-inputs.nix
       ./cc.nix
       ./libc.c
+      ./libsec/native.nix
+      ./libsec/mp.c
+      ./libsec/generated.sha256
       ./build-tools.nix
       ./build-tools.rc
     ];
