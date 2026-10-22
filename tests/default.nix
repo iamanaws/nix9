@@ -1,0 +1,34 @@
+{ pkgs, packages }:
+let
+  baseCallPackage = pkgs.newScope packages;
+  callPackages = pkgs.lib.callPackagesWith (packages // fixtures // { inherit pkgs vmTest; });
+  vmTest = baseCallPackage ./vm-test.nix { };
+  fixtures = pkgs.lib.callPackagesWith packages ./fixtures.nix {
+    inherit pkgs;
+    callPackage = baseCallPackage;
+  };
+  tests = pkgs.lib.mergeAttrsList (
+    map (file: callPackages file { }) [
+      ./cross.nix
+      ./native.nix
+      ./nix.nix
+    ]
+  );
+  inherit (packages) hello;
+in
+{
+  packages = tests // {
+    c-abi-cross = fixtures.abiCross;
+    ape-cross = fixtures.apeCross;
+  };
+  checks.hello-format =
+    pkgs.runCommand "hello-plan9-format"
+      {
+        nativeBuildInputs = [ pkgs.go ];
+      }
+      ''
+        export HOME="$TMPDIR" GOCACHE="$TMPDIR/go-cache" GOPROXY=off GOTOOLCHAIN=local
+        go run ${./format.go} ${hello}/bin/hello
+        touch "$out"
+      '';
+}
