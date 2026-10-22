@@ -1,0 +1,18 @@
+#!/bin/rc -e
+copy=$1
+mkdir -p /mnt/source/nested
+echo copied > /mnt/source/nested/message
+cp /tmp/payload /mnt/source/payload
+touch /mnt/source/empty
+$copy -b 4096 -p 2:4 /mnt/source /mnt/destination
+cmp /mnt/source/nested/message /mnt/destination/nested/message
+cmp /mnt/source/payload /mnt/destination/payload
+test -f /mnt/destination/empty
+test ! -s /mnt/destination/empty
+echo replacement > /mnt/source/nested/message
+$copy /mnt/source/nested/message /mnt/destination/nested/message
+cmp /mnt/source/nested/message /mnt/destination/nested/message
+$copy /mnt/source/payload /mnt/source/empty /mnt/multiple
+cmp /mnt/source/payload /mnt/multiple/payload
+test -f /mnt/multiple/empty
+echo upstream-clone-PASS

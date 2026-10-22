@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-import re
 import shutil
 import socket
 import subprocess
@@ -11,6 +10,7 @@ import tempfile
 import time
 
 from guest import files_guest
+from clone import check_copy, copy_fixtures
 
 
 qemu, image, archive, repository, output = sys.argv[1:]
@@ -35,30 +35,9 @@ with tempfile.TemporaryDirectory() as directory:
                 time.sleep(0.05)
         else:
             raise RuntimeError("Git daemon did not start")
-        (root / "payload").write_bytes(bytes(range(256)) * 2048)
-        (root / "copy.rc").write_text('''#!/bin/rc -e
-mkdir -p /mnt/source/nested
-echo copied > /mnt/source/nested/message
-cp /tmp/payload /mnt/source/payload
-touch /mnt/source/empty
-clone -b 4096 -p 2:4 /mnt/source /mnt/destination
-cmp /mnt/source/nested/message /mnt/destination/nested/message
-cmp /mnt/source/payload /mnt/destination/payload
-test -f /mnt/destination/empty
-test ! -s /mnt/destination/empty
-echo replacement > /mnt/source/nested/message
-clone /mnt/source/nested/message /mnt/destination/nested/message
-cmp /mnt/source/nested/message /mnt/destination/nested/message
-clone /mnt/source/payload /mnt/source/empty /mnt/multiple
-cmp /mnt/source/payload /mnt/multiple/payload
-test -f /mnt/multiple/empty
-echo upstream-clone-PASS
-''')
-        fixtures = {
+        fixtures = copy_fixtures(directory) | {
             "bootstrap.tar": archive,
             "clone.nix": Path(__file__).with_name("clone.nix"),
-            "copy.rc": root / "copy.rc",
-            "payload": root / "payload",
         }
         with files_guest(qemu, image, fixtures) as guest:
             guest.child.timeout = 600
@@ -71,22 +50,10 @@ echo upstream-clone-PASS
             guest.command("fn cloneBuild { nix-build /tmp/clone.nix --argstr packages $nix9/packages --argstr url $url $* }")
             guest.command(f"cloneBuild -A environment --out-link {roots}/copy")
             guest.command(f"environment=`{{cat {roots}/copy}}")
-            namespace = guest.command("cat /proc/$pid/ns")
-            guest.command("$environment/session rc /tmp/copy.rc", "upstream-clone-PASS")
-            guest.command("test ! -f /mnt/destination/payload")
-            if guest.command("cat /proc/$pid/ns") != namespace:
-                raise RuntimeError("copy session changed its parent's namespace")
             guest.command(f"cloneBuild -A clone --out-link {roots}/clone")
             guest.command(f"package=`{{cat {roots}/clone}}; test -s $package/man/1/clone")
             guest.command("test -s $package/share/doc/clone/LICENSE")
-            guest.command("$package/bin/clone /tmp/payload /tmp/copied")
-            guest.command("cmp /tmp/payload /tmp/copied")
-            guest.command("mkdir -p /tmp/tree/nested; echo persistent > /tmp/tree/nested/message")
-            guest.command("$package/bin/clone /tmp/tree /tmp/copied-tree")
-            guest.command("cmp /tmp/tree/nested/message /tmp/copied-tree/nested/message")
-            result = guest.command("$environment/session clone /tmp/nonexistent /mnt/missing; echo COPY-STATUS:$status")
-            if not re.search(r"(?m)^COPY-STATUS:.+", result):
-                raise RuntimeError("clone did not report a missing source")
+            check_copy(guest, "$package/bin/clone", "$environment/session")
             guest.command("cloneBuild -A clone --check --no-out-link")
             daemon.terminate()
             daemon.wait()

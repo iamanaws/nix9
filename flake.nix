@@ -435,6 +435,20 @@
         mkdir -p "$out"
         tar -xf "$TMPDIR/source.tar" -C "$out"
       '';
+      libthread = pkgs.callPackage ./pkgs/libthread {
+        inherit cTools sysroot;
+        source = ramfsSource;
+      };
+      clone = pkgs.callPackage ./pkgs/clone { inherit mkPlan9Program libthread; };
+      cloneTests = pkgs.runCommand "clone-tests" { requiredSystemFeatures = [ "kvm" ]; } ''
+        ${python}/bin/python ${
+          testSupport [
+            ./tests/clone.py
+            ./tests/clone.rc
+          ]
+        }/clone.py \
+          ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 ${clone}/bin/clone "$out"
+      '';
       machSource = pkgs.runCommand "9front-libmach-source" { requiredSystemFeatures = [ "kvm" ]; } ''
         ${python}/bin/python ${
           testSupport [
@@ -647,6 +661,8 @@
               testSupport [
                 ./tests/native_clone.py
                 ./tests/clone.nix
+                ./tests/clone.py
+                ./tests/clone.rc
               ]
             }/native_clone.py \
               ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
@@ -816,6 +832,8 @@
         hello-plan9 = hello;
         hello-c-cross = helloCross;
         inherit sha1sum;
+        inherit clone;
+        clone-tests = cloneTests;
         sha1sum-tests = sha1sumTests;
         c-abi-cross = abiCross;
         ape-cross = apeCross;
@@ -853,6 +871,7 @@
         inherit libc;
         inherit libsec;
         inherit libmp;
+        inherit libthread;
         inherit mpc;
         libsec-tests = secTests;
         libbz2-tests = libbz2Tests;
