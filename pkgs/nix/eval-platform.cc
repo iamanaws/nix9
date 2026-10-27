@@ -1,22 +1,29 @@
 #include "nix/fetchers/tarball.hh"
 #include "nix/store/store-api.hh"
-#include "nix/util/memory-source-accessor.hh"
+#include "nix/util/fs-sink.hh"
+#include "nix/util/posix-source-accessor.hh"
 #include "nix/util/tarfile.hh"
 
 namespace nix::fetchers {
 
 struct ArchiveSink : ExtendedFileSystemObjectSink
 {
-    MemorySink sink;
+    RestoreSink sink{false};
 
-    explicit ArchiveSink(MemorySourceAccessor &tree) : sink(tree) {}
+    explicit ArchiveSink(const std::filesystem::path &root)
+    {
+        sink.dstPath = root;
+        sink.createDirectory(CanonPath::root);
+    }
 
-    void createDirectory(const CanonPath &path) override { sink.createDirectory(path); }
+    void createDirectory(const CanonPath &path) override { createDirs(sink.dstPath / path.rel()); }
 
     void createRegularFile(const CanonPath &path, fun<void(CreateRegularFileSink &)> contents) override
     {
-        if (sink.dst.pathExists(path))
+        if (pathExists(sink.dstPath / path.rel()))
             throw Error("duplicate archive member '%s'", path);
+        if (auto parent = path.parent())
+            createDirectory(*parent);
         sink.createRegularFile(path, contents);
     }
 
@@ -31,26 +38,32 @@ struct ArchiveSink : ExtendedFileSystemObjectSink
     }
 };
 
+struct TarballAccessor : PosixSourceAccessor
+{
+    AutoDelete cleanup;
+
+    TarballAccessor(std::filesystem::path root, AutoDelete cleanup)
+        : PosixSourceAccessor(std::move(root)), cleanup(std::move(cleanup)) {}
+};
+
 ref<SourceAccessor> downloadTarball(Store &store, const Settings &settings, const std::string &url)
 {
     auto file = downloadFile(store, settings, parseURL(url), "source");
-    auto data = store.requireStoreObjectAccessor(file.storePath)->readFile(CanonPath::root);
-    StringSource source{data};
-    TarArchive archive{source};
-    auto tree = make_ref<MemorySourceAccessor>();
-    ArchiveSink sink{*tree};
-    sink.createDirectory(CanonPath::root);
+    auto accessor = store.requireStoreObjectAccessor(file.storePath);
+    auto source = sinkToSource([&](Sink &sink) { accessor->readFile(CanonPath::root, sink); });
+    TarArchive archive{*source};
+    AutoDelete temp{createTempDir("", "nix-tarball", 0700)};
+    auto root = temp.path() / "contents";
+    ArchiveSink sink{root};
     unpackTarfileToSink(archive, sink);
     archive.close();
 
     // Strip one enclosing directory, as the upstream tarball fetcher does.
-    using Directory = MemorySourceAccessor::File::Directory;
-    auto &entries = std::get<Directory>(tree->root->raw).entries;
-    if (entries.size() == 1 && std::holds_alternative<Directory>(entries.begin()->second.raw)) {
-        auto root = std::move(entries.begin()->second);
-        tree->root = std::move(root);
-    }
-    return tree;
+    auto tree = makeFSSourceAccessor(root);
+    auto entries = tree->readDirectory(CanonPath::root);
+    if (entries.size() == 1 && tree->lstat(CanonPath{entries.begin()->first}).type == SourceAccessor::tDirectory)
+        root /= entries.begin()->first;
+    return make_ref<TarballAccessor>(std::move(root), std::move(temp));
 }
 
 } // namespace nix::fetchers

@@ -51,14 +51,14 @@ class SerialLog:
 
 
 @contextlib.contextmanager
-def boot(qemu, disk, *, snapshot=True, forward_port=None):
+def boot(qemu, disk, *, snapshot=True, forward_port=None, memory="2G"):
     network = "user"
     if forward_port is not None:
         network += f",hostfwd=tcp:127.0.0.1:{forward_port}-:17010"
     child = pexpect.spawn(
         qemu,
         [
-            "-enable-kvm", "-m", "2G", "-smp", "2",
+            "-enable-kvm", "-m", memory, "-smp", "2",
             "-display", "none", "-monitor", "none", "-serial", "stdio",
             "-drive", f"file={disk},format=qcow2,if=virtio",
             "-nic", network,

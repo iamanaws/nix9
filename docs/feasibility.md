@@ -15,7 +15,7 @@ the content hash. Its HTTPS transport does not validate server certificates.
 Content integrity relies on the pinned hash. Signed `file://` and read-only HTTP(S)
 caches support native substitution and repair. Network caches use mounted webfs
 with the same TLS limitation. `builtins.fetchurl` and `builtins.fetchTarball`
-download evaluator inputs. Archive trees are held in memory and support regular
+download evaluator inputs. Archives unpack to temporary files and support regular
 files and directories; links and duplicate files are rejected.
 Flakes and `builtins.fetchGit` remain unported.
 

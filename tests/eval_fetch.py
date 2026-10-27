@@ -4,11 +4,18 @@ import base64
 import functools
 import hashlib
 import http.server
+import json
+from pathlib import Path
 import re
+import shutil
 import ssl
+import subprocess
+import sys
+import tempfile
 import threading
 
-from eval_tarball import check_eval_tarball
+from eval_tarball import check_eval_tarball, check_large_tarball
+from guest import boot
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -25,7 +32,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
 
-def check_eval_fetch(guest, root):
+def check_eval_fetch(guest, root, *, large=False):
     source = b"{ answer = 42; }\n"
     (root / "eval-source.nix").write_bytes(source)
     (root / "eval-fetch.nix").write_text('''
@@ -92,6 +99,8 @@ def check_eval_fetch(guest, root):
             if "requires a 'sha256'" not in result or not re.search(r"(?m)^FETCH-ERROR:.+$", result):
                 raise RuntimeError(f"pure evaluation accepted an unpinned fetch: {result}")
             check_eval_tarball(guest, root, base, f"https://10.0.2.2:{secure.server_port}")
+            if large:
+                check_large_tarball(guest, root, base)
         finally:
             for server in servers:
                 server.shutdown()
@@ -110,3 +119,33 @@ def check_eval_fetch(guest, root):
     guest.command("XDG_CACHE_HOME=$previousEvalCache")
     guest.command("webfs -m /mnt/web -T 60000")
     return "evaluator file/archive fetching, hashes, imports, permissions, unsafe members, pure evaluation, offline reuse and GC passed"
+
+
+if __name__ == "__main__":
+    qemu, image, archive, prefix, output = sys.argv[1:]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        shutil.copyfile(archive, root / "package.tar")
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", str(root / "key.pem"), "-out", str(root / "cert.pem"),
+            "-days", "1", "-subj", "/CN=wrong.example",
+            "-addext", "subjectAltName=DNS:wrong.example",
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=root)
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with boot(qemu, image, memory="512M") as guest:
+                    guest.child.timeout = 900
+                    guest.command(f"cd / && hget http://10.0.2.2:{server.server_port}/package.tar | tar x")
+                    guest.command(f". {prefix}/activate")
+                    result = check_eval_fetch(guest, root, large=True)
+            finally:
+                server.shutdown()
+                thread.join()
+    Path(output).mkdir()
+    Path(output, "results.json").write_text(json.dumps({
+        "fetching": result, "memory-MiB": 512, "archive-MiB": 640,
+    }) + "\n")

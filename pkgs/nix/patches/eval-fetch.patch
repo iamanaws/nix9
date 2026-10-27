@@ -34,7 +34,46 @@
  } // namespace nix
 --- a/src/libfetchers/tarball.cc
 +++ b/src/libfetchers/tarball.cc
-@@ -104,6 +104,7 @@
+@@ -47,8 +47,19 @@
+     if (cached)
+         request.expectedETag = getStrAttr(cached->value, "etag");
+     FileTransferResult res;
++    std::optional<StorePath> storePath;
+     try {
++#ifdef __plan9__
++        auto source = sinkToSource([&](Sink & sink) {
++            getFileTransfer()->download(std::move(request), sink, [&](FileTransferResult result) {
++                res = std::move(result);
++            });
++        });
++        storePath = store.addToStoreFromDump(
++            *source, name, FileSerialisationMethod::Flat, ContentAddressMethod::Raw::Flat);
++#else
+         res = getFileTransfer()->download(request);
++#endif
+     } catch (FileTransferError & e) {
+         if (cached) {
+             warn("%s; using cached version", e.message());
+@@ -64,8 +75,7 @@
+     if (res.immutableUrl)
+         infoAttrs.emplace("immutableUrl", *res.immutableUrl);
+ 
+-    std::optional<StorePath> storePath;
+-
++#ifndef __plan9__
+     if (res.cached) {
+         assert(cached);
+         storePath = std::move(cached->storePath);
+@@ -88,6 +98,8 @@
+         storePath = std::move(info.path);
+     }
+ 
++#endif
++
+     /* Cache metadata for all URLs in the redirect chain. */
+     for (auto & url : res.urls) {
+         key.second.insert_or_assign("url", url);
+@@ -104,6 +116,7 @@
      };
  }
  
@@ -42,7 +81,7 @@
  static DownloadTarballResult downloadTarball_(
      const Settings & settings, const std::string & urlS, const Headers & headers, const std::string & displayPrefix)
  {
-@@ -527,4 +528,6 @@
+@@ -527,4 +540,6 @@
  static auto rTarballInputScheme = OnStartup([] { registerInputScheme(std::make_unique<TarballInputScheme>()); });
  static auto rFileInputScheme = OnStartup([] { registerInputScheme(std::make_unique<FileInputScheme>()); });
  

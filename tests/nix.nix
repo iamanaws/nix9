@@ -107,6 +107,17 @@ rec {
       ${nixProbe}/probe.elf ${nixUtil.cc9.elf2aout} ${../examples/hello}
     '';
   };
+  nix-fetch-tests = vmTest "nix-fetch-tests" {
+    script = ./eval_fetch.py;
+    files = [ ./eval_tarball.py ];
+    nativeBuildInputs = [
+      pkgs.nix
+      pkgs.openssl
+    ];
+    args = ''
+      ${nixPackage} ${nixPackage.guestPrefix} "$out"
+    '';
+  };
   nix-store-tests = vmTest "nix-store-tests" {
     script = ./native_store.py;
     files = [
@@ -129,5 +140,6 @@ rec {
   nix-util-tests = pkgs.runCommand "nix-util-tests" { } ''
     mkdir -p "$out"
     cp ${nix-core-tests}/results.json ${nix-native-tests}/native-install.json ${nix-store-tests}/native-store.json "$out/"
+    cp ${nix-fetch-tests}/results.json "$out/fetch.json"
   '';
 }
