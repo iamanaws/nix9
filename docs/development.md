@@ -98,6 +98,7 @@ nix-shell
 Run `mk` to build and `mk clean` to remove build outputs. Exit to restore the
 original namespace, or use `nix-shell --run 'mk'` for one command.
 Use `nix-shell default.nix` to enter a package's build environment without building it.
+Use `--pure` to clear inherited variables and `--keep NAME` to retain one.
 The shell keeps its dependencies rooted until it exits. `mkShell` accepts
 `nativeBuildInputs`, `buildInputs` and an rc `shellHook`. Use `inputsFrom` to reuse
 a derivation's build dependencies and shell hook.

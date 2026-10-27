@@ -62,13 +62,37 @@ def check_shell(guest, packages, port=None):
     result = guest.command("shellEnter failedShell --run 'echo unexpected-shell-command'; echo SHELL-STATUS:$status")
     if not re.search(r"(?m)^SHELL-STATUS:.+$", result) or re.search(r"(?m)^unexpected-shell-command$", result):
         raise RuntimeError(f"shell hook failure did not stop entry: {result}")
-    for flag in ("--pure", "-p", "--out-link /tmp/shell-root"):
+    for flag in ("-p", "--out-link /tmp/shell-root"):
         result = guest.command(f"nix-shell {flag}; echo SHELL-STATUS:$status")
         if not re.search(r"(?m)^SHELL-STATUS:.+$", result):
             raise RuntimeError(f"unsupported shell option accepted: {result}")
     guest.command("for(i in 1 2 3 4 5) { if(test -e /usr/local/nix/state/gcroots/nix-shell-*) sleep 1 }; test ! -e /usr/local/nix/state/gcroots/nix-shell-*")
     guest.command("cd /")
     return "nix-shell interactive native/APE builds, commands, hook failures, GC roots and namespace restoration passed"
+
+
+def check_pure_shell(guest):
+    guest.command(". /tmp/pure-shell.rc setup")
+    guest.command("shellEnter shell --keep NIX9_KEEP_LIST --run 'rc -e /tmp/pure-shell.rc impure'", "parent-tool")
+    result = guest.command("whatis nix-store")
+    stores = re.findall(r"(?m)^(/[^\s]*/nix-store)$", result)
+    if len(stores) != 1:
+        raise RuntimeError(f"missing store command: {result}")
+    guest.command(f"shellEnter shell --pure --run 'rc -e /tmp/pure-shell.rc pure {stores[0]}'", "pure-shell-PASS")
+    # Retained /env files must preserve rc word lists and trailing newlines.
+    guest.child.sendline("nix9KeptShell; echo NIX9-PURE-EXIT:$status")
+    guest.child.expect(r"(?m)^NIX9-SHELL-READY\r*$")
+    guest.child.expect(r"(?m)^term% ")
+    guest.command("rc -e /tmp/pure-shell.rc kept", "raw-parent")
+    guest.child.sendline("exit")
+    guest.child.expect(r"(?m)^NIX9-PURE-EXIT:\r*$")
+    guest.child.expect(r"(?m)^term% ")
+    guest.command("shellEnter shell --pure --impure --run 'rc -e /tmp/pure-shell.rc impure'", "parent-tool")
+    result = guest.command("shellEnter failedShell --pure --run 'echo unexpected-shell-command'; echo SHELL-STATUS:$status")
+    if not re.search(r"(?m)^SHELL-STATUS:.+$", result) or re.search(r"(?m)^unexpected-shell-command$", result):
+        raise RuntimeError(f"pure shell hook failure did not stop entry: {result}")
+    guest.command("rc -e /tmp/pure-shell.rc parent", "raw-parent")
+    guest.command(". /tmp/pure-shell.rc cleanup")
 
 
 def check_inputs(guest, packages, port):

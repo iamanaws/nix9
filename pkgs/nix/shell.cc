@@ -4,10 +4,12 @@
 #include "nix/store/derivation-options.hh"
 #include "nix/store/globals.hh"
 #include "nix/util/current-process.hh"
+#include "nix/util/file-system.hh"
 #include "nix/util/util.hh"
 #include <unistd.h>
 
 extern "C" long n9_create(const char *, int, unsigned long);
+extern "C" long n9_rfork(int);
 extern "C" void cc9_kill_threads(void);
 extern "C" int cc9_errno_from_errstr_or(int);
 
@@ -42,7 +44,8 @@ namespace nix {
 
 [[noreturn]] void runDevelopmentShell(LocalStore &store, const Derivation &drv,
     const StorePathSet &inputs, const std::filesystem::path &directory,
-    const std::filesystem::path &root, const std::optional<std::string> &command)
+    const std::filesystem::path &root, const std::optional<std::string> &command,
+    bool pure, const StringSet &keepVars)
 {
     auto setup = drv.env.find("__nix9ShellSetup");
     if (setup == drv.env.end())
@@ -70,12 +73,13 @@ namespace nix {
     env["NIX_STORE"] = store.storeDir;
     env["NIX_BUILD_CORES"] = std::to_string(
         settings.getLocalSettings().buildCores ? settings.getLocalSettings().buildCores : settings.getDefaultCores());
-    env["IN_NIX_SHELL"] = "impure";
+    env["IN_NIX_SHELL"] = pure ? "pure" : "impure";
     std::string script = "rfork ne\nflag e +\nfn sigexit {\n"
         "  nix9ShellStatus=$status\n  " + quote(tools + "/bin/rm") + " -rf " + quote(directory.string()) +
         "\n  exit $nix9ShellStatus\n}\n";
     for (const auto &[name, value] : env)
         script += quote(name) + "=" + quote(value) + "\n";
+    if (pure) script += "path=()\nPATH=''\n";
     script += setup->second + "\n";
     if (auto hook = env.find("shellHook"); hook != env.end()) script += hook->second + "\n";
     auto shell = quote(drv.builder) + " -m " + quote(tools + "/rcmain");
@@ -85,6 +89,16 @@ namespace nix {
         ContentAddressMethod::Raw::Text, HashAlgorithm::SHA256, inputs, NoRepair);
     Strings args{"-m", tools + "/rcmain", "-e", store.printStorePath(launcher)};
     if (command) args.insert(args.end(), {"-c", *command});
+    if (pure) {
+        if (n9_rfork(1 << 1 /* RFENVG */) == -1)
+            throw SysError(cc9_errno_from_errstr_or(EIO), "creating shell environment");
+        // Leave retained /env files intact, including rc lists and functions.
+        Paths discarded;
+        for (const auto &entry : DirectoryIterator{"/env"})
+            if (!keepVars.contains(entry.path().filename().string()))
+                discarded.push_back(entry.path().string());
+        for (const auto &path : discarded) std::filesystem::remove(path);
+    }
     runRootedProgram(store, launcher, root, drv.builder, std::move(args));
 }
 

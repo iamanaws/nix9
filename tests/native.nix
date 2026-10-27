@@ -39,6 +39,7 @@
     files = [
       ./native_inputs.py
       ./inputs.nix
+      ./pure-shell.rc
     ];
     args = ''
       ${nativeBootstrap} "$out"

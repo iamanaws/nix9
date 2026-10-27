@@ -1,0 +1,79 @@
+switch($1) {
+case setup
+	cd /tmp/shell-project
+	NIX9_PARENT='parent value'
+	NIX9_KEEP_LIST=('first word' 'second word')
+	NIX9_KEEP_EMPTY=''
+	awk 'BEGIN { printf "first\nlast\n%c", 0 }' > /env/NIX9_KEEP_LINES
+	echo raw-parent > '/env/NIX9=parent'
+	fn nix9ParentFunction { echo parent-function }
+	fn nix9KeptShell {
+		shellEnter shell --pure --keep prompt --keep NIX9_KEEP_LIST \
+			--keep NIX9_KEEP_LINES --keep NIX9_KEEP_EMPTY --keep 'NIX9=parent'
+	}
+	for(name in NIX9_KEEP_LIST NIX9_KEEP_LINES NIX9_KEEP_EMPTY home user)
+		cp /env/$name /tmp/shell-parent-$name
+	mkdir /tmp/shell-parent-bin
+	echo '#!/bin/rc' > /tmp/shell-parent-bin/parent-tool
+	echo 'echo parent-tool' >> /tmp/shell-parent-bin/parent-tool
+	chmod +x /tmp/shell-parent-bin/parent-tool
+	pureParentPath=$path
+	pureParentPATH=$PATH
+	path=(/tmp/shell-parent-bin $path)
+	PATH=/tmp/shell-parent-bin
+case impure
+	~ $IN_NIX_SHELL impure
+	~ $NIX9_PARENT 'parent value'
+	nix9ParentFunction
+	parent-tool
+case pure
+	~ $IN_NIX_SHELL pure
+	test ! -e /env/NIX9_PARENT
+	test ! -e /env/NIX9_KEEP_LIST
+	test ! -e '/env/NIX9=parent'
+	test ! -e '/env/fn#nix9ParentFunction'
+	cmp /env/home /tmp/shell-parent-home
+	cmp /env/user /tmp/shell-parent-user
+	for(directory in $path) {
+		if(~ $directory /tmp/shell-parent-bin) exit parent-path-leaked
+		status=()
+	}
+	if(~ $PATH */tmp/shell-parent-bin*) exit parent-PATH-leaked
+	generate > generated.h
+	6c -I . -o pure-main.6 $shellSource
+	6l -s -o pure-answer pure-main.6
+	./pure-answer
+	pcc -I . -o pure-ape-answer $apeShellSource -lwrappedanswer -lanswer
+	./pure-ape-answer
+	NIX_STORE_DIR=/usr/local/nix/store NIX_STATE_DIR=/usr/local/nix/state \
+		NIX_LOG_DIR=/usr/local/nix/log $2 --gc
+	echo pure-shell-PASS
+case kept
+	~ $IN_NIX_SHELL pure
+	test ! -e /env/NIX9_PARENT
+	test ! -e '/env/fn#nix9ParentFunction'
+	~ $#NIX9_KEEP_LIST 2
+	~ $NIX9_KEEP_LIST(1) 'first word'
+	~ $NIX9_KEEP_LIST(2) 'second word'
+	for(name in NIX9_KEEP_LIST NIX9_KEEP_LINES NIX9_KEEP_EMPTY)
+		cmp /env/$name /tmp/shell-parent-$name
+	cat '/env/NIX9=parent'
+case parent
+	~ $NIX9_PARENT 'parent value'
+	nix9ParentFunction
+	parent-tool
+	for(name in NIX9_KEEP_LIST NIX9_KEEP_LINES NIX9_KEEP_EMPTY home user)
+		cmp /env/$name /tmp/shell-parent-$name
+	cat '/env/NIX9=parent'
+case cleanup
+	rm '/env/NIX9=parent'
+	path=$pureParentPath
+	PATH=$pureParentPATH
+	NIX9_PARENT=()
+	NIX9_KEEP_LIST=()
+	NIX9_KEEP_LINES=()
+	NIX9_KEEP_EMPTY=()
+	fn nix9ParentFunction
+	fn nix9KeptShell
+	cd /
+}

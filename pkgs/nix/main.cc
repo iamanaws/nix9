@@ -26,6 +26,8 @@ void showManPage(const std::string &name)
         std::cout << "Usage: nix-shell [OPTIONS] [FILE]\n"
                      "  --attr NAME            Select a derivation\n"
                      "  --arg NAME EXPR        Pass a function argument\n"
+                     "  --pure                 Clear inherited environment variables\n"
+                     "  --keep NAME            Retain a variable with --pure\n"
                      "  --run COMMAND          Run an rc command and exit\n"
                      "Defaults to shell.nix or default.nix. Only dependencies are built.\n"
                      "Dependencies stay rooted while the shell runs.\n";

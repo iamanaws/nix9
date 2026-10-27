@@ -10,7 +10,7 @@
  #include "nix/store/globals.hh"
  #include "nix/store/realisation.hh"
  #include "nix/store/derivations.hh"
-@@ -30,6 +33,13 @@
+@@ -30,6 +33,14 @@
  #include "nix/cmd/compatibility-settings.hh"
  #include "nix/util/fun.hh"
  #include "man-pages.hh"
@@ -18,13 +18,14 @@
 +#ifdef __plan9__
 +namespace nix {
 +[[noreturn]] void runDevelopmentShell(LocalStore &, const Derivation &, const StorePathSet &,
-+    const std::filesystem::path &, const std::filesystem::path &, const std::optional<std::string> &);
++    const std::filesystem::path &, const std::filesystem::path &, const std::optional<std::string> &,
++    bool, const StringSet &);
 +}
 +#endif
  
  using namespace nix;
  using namespace std::string_literals;
-@@ -125,6 +135,11 @@
+@@ -125,6 +136,11 @@
  {
      auto dryRun = false;
      auto isNixShell = std::regex_search(argv[0], std::regex("nix-shell$"));
@@ -36,7 +37,7 @@
      auto pure = false;
      auto fromArgs = false;
      auto packages = false;
-@@ -147,6 +162,9 @@
+@@ -147,6 +163,9 @@
      AutoDelete tmpDir(createTempDir("", myName));
  
      std::string outLink = "./result";
@@ -46,7 +47,17 @@
  
      // List of environment variables kept for --pure
      StringSet keepVars{
-@@ -197,6 +215,10 @@
+@@ -167,6 +186,9 @@
+         "SHLVL",
+     };
+     keepVars.insert(networkProxyVariables.begin(), networkProxyVariables.end());
++#ifdef __plan9__
++    keepVars.insert({"home", "user", "term"});
++#endif
+ 
+     Strings args;
+     for (int i = 1; i < argc; ++i)
+@@ -197,6 +219,10 @@
          }
      }
  
@@ -57,19 +68,19 @@
      struct MyArgs : LegacyArgs, MixEvalArgs
      {
          using LegacyArgs::LegacyArgs;
-@@ -208,6 +230,11 @@
+@@ -208,6 +234,11 @@
      };
  
      MyArgs myArgs(myName, [&](Strings::iterator & arg, const Strings::iterator & end) {
 +#ifdef __plan9__
-+        if (isNixShell && (*arg == "--pure" || *arg == "--keep" || *arg == "--exclude"
++        if (isNixShell && (*arg == "--exclude"
 +            || *arg == "-p" || *arg == "--packages" || *arg == "--command"))
 +            throw UsageError("'%s' is not supported by the rc development shell", *arg);
 +#endif
          if (*arg == "--help") {
              deletePath(tmpDir);
              showManPage(myName);
-@@ -219,8 +246,14 @@
+@@ -219,8 +250,14 @@
          else if (*arg == "--add-drv-link" || *arg == "--indirect")
              ; // obsolete
  
@@ -85,7 +96,7 @@
  
          else if (*arg == "--attr" || *arg == "-A")
              attrPaths.push_back(getArg(*arg, arg, end));
-@@ -228,8 +261,13 @@
+@@ -228,8 +265,13 @@
          else if (*arg == "--drv-link")
              getArg(*arg, arg, end); // obsolete
  
@@ -100,7 +111,7 @@
  
          else if (*arg == "--dry-run")
              dryRun = true;
-@@ -240,7 +278,11 @@
+@@ -240,7 +282,11 @@
          else if (isNixShell && (*arg == "--command" || *arg == "--run")) {
              if (*arg == "--run")
                  interactive = false;
@@ -112,7 +123,23 @@
          }
  
          else if (*arg == "--check")
-@@ -317,7 +359,20 @@
+@@ -312,12 +358,36 @@
+         return true;
+     });
+ 
++#ifdef __plan9__
++    // The evaluator also registers --impure; update shell purity with it.
++    myArgs.addFlag({
++        .longName = "impure",
++        .description = "Keep the inherited shell environment.",
++        .handler = {[&]() {
++            pure = false;
++            evalSettings.pureEval = false;
++        }},
++    });
++#endif
+     myArgs.parseCmdline(args);
+ 
      if (packages && fromArgs)
          throw UsageError("'-p' and '-E' are mutually exclusive");
  
@@ -133,7 +160,7 @@
      auto evalStore = myArgs.evalStoreUrl ? openStore(StoreReference{*myArgs.evalStoreUrl}) : store;
  
      auto state = std::make_shared<EvalState>(myArgs.lookupPath, evalStore, fetchSettings, evalSettings, store);
-@@ -463,6 +518,7 @@
+@@ -463,6 +533,7 @@
          std::vector<DerivedPath> pathsToBuild;
          RealisedPath::Set pathsToCopy;
  
@@ -141,7 +168,7 @@
          /* Figure out what bash shell to use. If $NIX_BUILD_SHELL
             is not set, then build bashInteractive from
             <nixpkgs>. */
-@@ -497,6 +553,7 @@
+@@ -497,6 +568,7 @@
              }
          }
  
@@ -149,7 +176,7 @@
          auto accumDerivedPath = [&](this auto & self,
                                      ref<SingleDerivedPath> inputDrv,
                                      const DerivedPathMap<StringSet>::ChildNode & inputNode) -> void {
-@@ -532,17 +589,28 @@
+@@ -532,17 +604,29 @@
          if (dryRun)
              return;
  
@@ -173,12 +200,13 @@
 +                for (const auto & [name, output] : resolveDerivedPath(*store, *built, &*evalStore))
 +                    inputs.insert(output);
 +        }
-+        runDevelopmentShell(*local, drv, inputs, tmpDir.path(), roots / tmpDir.path().filename(), shellCommand);
++        runDevelopmentShell(*local, drv, inputs, tmpDir.path(), roots / tmpDir.path().filename(),
++            shellCommand, pure, keepVars);
 +#else
          // Set the environment.
          auto env = getEnv();
  
-@@ -679,6 +747,7 @@
+@@ -679,6 +763,7 @@
          execvp(shell->c_str(), argPtrs.data());
  
          throw SysError("executing shell '%s'", *shell);
@@ -186,7 +214,7 @@
      }
  
      else {
-@@ -734,7 +803,10 @@
+@@ -734,7 +819,10 @@
                  std::string symlink = drvPrefix;
                  if (outputName != "out")
                      symlink += "-" + outputName;
