@@ -21,7 +21,7 @@
 }:
 let
   inherit (dependencies) compression sodium sqlite;
-  # These target libraries are built separately and do not all ship pkg-config files.
+  # Target libraries lack pkg-config files; compile_args exports their header paths.
   libraryProject = writeText "meson.build" ''
     project('nix9-libraries', 'cpp')
     assert(meson.get_compiler('cpp').links('int main() { return 0; }'), 'Cannot link against the target runtime')
@@ -37,22 +37,20 @@ let
     ]
       meson.override_dependency(dep[0], declare_dependency(
         version: dep[1],
-        include_directories: include_directories(dep[2], is_system: true),
+        compile_args: ['-isystem' + dep[2]],
         link_args: dep[3],
       ))
     endforeach
     foreach name : ['common', 'dec', 'enc']
       meson.override_dependency('libbrotli' + name, declare_dependency(
         version: '${brotli.version}',
-        include_directories: include_directories('${compression}/include', is_system: true),
+        compile_args: ['-isystem${compression}/include'],
         link_args: '${compression}/lib/libbrotli' + name + '.a',
       ))
     endforeach
-    nix_libraries = {}
     foreach part : ['util', 'store', 'fetchers', 'expr', 'main']
-      nix_libraries += {part: subproject('nix-' + part).get_variable('this_library')}
+      subproject('nix-' + part)
     endforeach
-    subdir('cli')
   '';
   setup = writeText "nix9-compile-setup" ''
     runtime=${cc9}
@@ -89,7 +87,6 @@ runCommand "nix-${version}-9front-libraries"
   ''
     mkdir -p "$out"
     cd "$out"
-    mkdir build
     tar -xzf ${source}
     cd nix-${version}
     patch -p1 < ${./patches/brotli-truncation.patch}
@@ -100,20 +97,12 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/gc-query.patch}
     patch -p1 < ${./patches/cc9-compat.patch}
     patch -p1 < ${./patches/9front.patch}
-    patch -p1 < ${./patches/nix-build.patch}
     patch -p1 < ${./patches/eval-fetch.patch}
     patch -p1 < ${./patches/meson.patch}
     cd ..
-    mkdir -p build/include/nix/{util,store}
-    mkdir -p build/include/nix/expr
     nixSource="$PWD/nix-${version}"
     mkdir -p library-project/subprojects
     cp ${libraryProject} library-project/meson.build
-    mkdir library-project/cli
-    cp ${./meson.build} library-project/cli/meson.build
-    cp ${./main.cc} library-project/cli/main.cc
-    cp ${./shell.cc} library-project/cli/shell.cc
-    ln -s "$nixSource/src" library-project/cli/src
     for part in util store fetchers expr main; do
       ln -s "$nixSource/src/lib$part" "library-project/subprojects/nix-$part"
     done
@@ -133,14 +122,13 @@ runCommand "nix-${version}-9front-libraries"
       -Dnix-util:cpuid=disabled -Dnix-store:seccomp-sandboxing=disabled \
       -Dnix-store:s3-aws-auth=disabled -Dnix-store:sandbox-shell= -Dnix-expr:gc=disabled
     ninja -C meson-build -j "$NIX_BUILD_CORES"
-    cp meson-build/subprojects/nix-util/include/nix/util/config.hh build/include/nix/util/
-    cp meson-build/subprojects/nix-util/util-config-private.hh build/include/
-    cp meson-build/subprojects/nix-util/unix/util-unix-config-private.hh build/include/
-    cp meson-build/subprojects/nix-store/include/nix/store/config.hh build/include/nix/store/
-    cp meson-build/subprojects/nix-store/store-config-private.hh build/include/
-    cp meson-build/subprojects/nix-expr/include/nix/expr/config.hh build/include/nix/expr/
-    cp meson-build/subprojects/nix-expr/expr-config-private.hh build/include/
-    for part in util store fetchers expr main; do
-      cp "meson-build/subprojects/nix-$part/libnix$part.a" build/
+    meson install -C meson-build --no-rebuild --destdir "$TMPDIR/install"
+    cp -R "$TMPDIR/install/nix/"{include,lib} "$out/"
+    for pc in "$out"/lib/pkgconfig/*.pc; do
+      substituteInPlace "$pc" --replace-fail 'prefix=/nix' "prefix=$out"
     done
+    cp meson-build/subprojects/nix-util/util-config-private.hh include/
+    cp meson-build/subprojects/nix-util/unix/util-unix-config-private.hh include/
+    cp meson-build/subprojects/nix-store/store-config-private.hh include/
+    cp meson-build/subprojects/nix-expr/expr-config-private.hh include/
   ''

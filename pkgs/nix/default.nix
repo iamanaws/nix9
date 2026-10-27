@@ -3,6 +3,9 @@
   runCommand,
   fetchurl,
   callPackage,
+  meson,
+  ninja,
+  pkg-config,
 }:
 let
   version = "2.34.8";
@@ -23,6 +26,11 @@ let
 in
 runCommand "nix-${version}"
   {
+    nativeBuildInputs = [
+      meson
+      ninja
+      pkg-config
+    ];
     passthru = {
       inherit
         source
@@ -38,6 +46,18 @@ runCommand "nix-${version}"
     };
   }
   ''
+    mkdir commands
+    cp -R ${libraries}/nix-${version}/src commands/src
+    chmod -R u+w commands
+    cd commands
+    patch -p1 < ${./patches/nix-build.patch}
+    cp ${./meson.build} meson.build
+    cp ${./main.cc} main.cc
+    cp ${./shell.cc} shell.cc
+    export PKG_CONFIG_LIBDIR=${libraries}/lib/pkgconfig
+    meson setup build --cross-file ${libraries}/cross.ini \
+      --wrap-mode=nofallback -Dbuildtype=plain
+    ninja -C build -j "$NIX_BUILD_CORES"
     mkdir -p "$out"
-    cp ${libraries}/meson-build/cli/nix-{store,instantiate,build}.elf "$out/"
+    cp build/nix-{store,instantiate,build}.elf "$out/"
   ''

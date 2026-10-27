@@ -1,10 +1,12 @@
 """Use upstream signed file caches to substitute a native package closure."""
 
 import lzma
+from pathlib import Path
 import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 
 from cache_publish import publish_cache
 
@@ -31,10 +33,19 @@ def cache_fixture(root):
                 info.write_text(text)
         else:
             for nar in (cache / "nar").glob("*.xz"):
-                data = lzma.decompress(nar.read_bytes())
-                if b"Lua" not in data:
-                    raise RuntimeError("missing Lua corruption fixture")
-                nar.write_bytes(lzma.compress(data.replace(b"Lua", b"Luz", 1)))
+                with tempfile.TemporaryDirectory() as directory:
+                    tree = Path(directory) / "nar"
+                    subprocess.run(["nix-store", "--restore", str(tree)],
+                                   input=lzma.decompress(nar.read_bytes()), check=True)
+                    files = [tree] if tree.is_file() else tree.rglob("*")
+                    target = next(path for path in files if path.is_file() and path.stat().st_size)
+                    target.chmod(target.stat().st_mode | 0o200)
+                    with target.open("r+b") as contents:
+                        byte = contents.read(1)[0]
+                        contents.seek(0)
+                        contents.write(bytes([byte ^ 1]))
+                    data = subprocess.check_output(["nix-store", "--dump", str(tree)])
+                    nar.write_bytes(lzma.compress(data))
     with tarfile.open(root / "cache.tar", "w") as archive:
         for name in ("cache", "bad-signature", "bad-content", "cache.pub"):
             archive.add(root / name, arcname=name)
