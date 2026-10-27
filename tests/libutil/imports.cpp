@@ -81,10 +81,20 @@ void checkImports() {
         store->narFromPath(info.path, repaired);
         require(repaired.s == nar, "repair did not restore the original NAR");
 
-        // Exercise both the in-memory and temporary-directory ingestion paths.
-        for (size_t limit : {size_t{1 << 20}, size_t{8}}) {
+        // A NAR producer can return short records. Exercise fragmented reads,
+        // buffer growth and spills at both chunk and complete-NAR boundaries.
+        struct FragmentedSource : StringSource {
+            using StringSource::StringSource;
+            size_t read(char *data, size_t length) override {
+                return StringSource::read(data, std::min(length, size_t{17}));
+            }
+        };
+        auto oldLimit = settings.getLocalSettings().narBufferSize.get();
+        Finally restoreLimit([&] { settings.getLocalSettings().narBufferSize = oldLimit; });
+        for (size_t limit : {size_t{0}, size_t{8}, size_t{65536}, size_t{65537},
+                             nar.size() - 1, nar.size(), nar.size() + 1, size_t{1 << 20}}) {
             settings.getLocalSettings().narBufferSize = limit;
-            StringSource stream(nar);
+            FragmentedSource stream(nar);
             auto imported = store->addToStoreFromDump(stream, "stream-" + std::to_string(limit),
                 FileSerialisationMethod::NixArchive, ContentAddressMethod::Raw::NixArchive,
                 HashAlgorithm::SHA256, {info.path}, NoRepair);
@@ -93,6 +103,11 @@ void checkImports() {
             StringSink roundtrip;
             store->narFromPath(imported, roundtrip);
             require(roundtrip.s == nar, "stream import changed contents");
+            FragmentedSource duplicate(nar);
+            require(store->addToStoreFromDump(duplicate, "stream-" + std::to_string(limit),
+                        FileSerialisationMethod::NixArchive, ContentAddressMethod::Raw::NixArchive,
+                        HashAlgorithm::SHA256, {info.path}, NoRepair) == imported &&
+                    duplicate.drain().empty(), "cached stream import changed or left unread bytes");
             expected.insert(imported);
         }
         for (auto &entry : std::filesystem::directory_iterator(config->realStoreDir.get()))

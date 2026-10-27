@@ -97,6 +97,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/gc-query.patch}
     patch -p1 < ${./patches/cc9-compat.patch}
     patch -p1 < ${./patches/9front.patch}
+    patch -p1 < ${./patches/source-import-buffer.patch}
     patch -p1 < ${./patches/eval-fetch.patch}
     patch -p1 < ${./patches/meson.patch}
     cd ..

@@ -17,7 +17,7 @@ runCommand "cc9-digests" { nativeBuildInputs = [ perl ]; } ''
   cd ..
   crypto="$PWD/openssl-${openssl.version}"
     cflags=(
-      "''${cc9Flags[@]}" -std=c11
+      "''${cc9Flags[@]}" -std=c11 -O2
       -I "$crypto/include" -I "$crypto"
     )
     for source in md5/md5_dgst sha/sha1dgst sha/sha256 sha/sha512 mem_clr; do

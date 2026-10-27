@@ -34,6 +34,7 @@ The builds and tests work with the Nix sandbox enabled.
 
 The [native development benchmark](development.md#measure-native-development)
 uses a persistent disk on the output filesystem and checks project builds,
+source edits, ignored files, restoration of previous sources,
 environment upgrades, rollback and GC across offline reboots. It records timing
 samples separately from the reproducible test outputs.
 

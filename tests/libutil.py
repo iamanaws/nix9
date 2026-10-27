@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory() as directory:
         fixtures[name] = subprocess.check_output(["nix-store", "--dump", str(path)])
     store_tree = root / "store-tree"
     (store_tree / "empty").mkdir(parents=True)
-    (store_tree / "binary").write_bytes((tree / "binary").read_bytes())
+    (store_tree / "binary").write_bytes(bytes(range(256)) * 513)
     (store_tree / "executable").write_text("#!/bin/rc\necho imported\n")
     (store_tree / "executable").chmod(0o755)
     fixtures["import"] = subprocess.check_output(["nix-store", "--dump", str(store_tree)])

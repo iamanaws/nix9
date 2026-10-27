@@ -29,7 +29,9 @@ nix run .#benchmark-native -- nix9-performance
 Choose a new output directory for each run. The benchmark creates a temporary
 VM disk there, installs the bootstrap and measures downloads, extraction,
 evaluation, source import, the first project build, cached builds and development
-shells. It also checks environment updates, offline reboots, rollback and GC.
+shells. It also checks that source edits rebuild, ignored files preserve cached
+outputs, and restoring sources reuses the original output. Environment updates,
+offline reboots, rollback and GC are checked too.
 The VM disk is removed when the run exits. `timings.json` records completed
 measurements; `results.json` is written only after all checks pass.
 Times depend on host storage and load. Stop other VM tests when comparing runs.
@@ -43,6 +45,10 @@ preprocessing for APE. Nix and its C++ dependencies use Clang, LLD and the cc9 r
 `elf2aout` converts the executable format. Go examples use `GOOS=plan9`.
 Nix libraries and commands compile with `-O2`. Installed Nix commands omit symbol
 tables; `nix build .#nix-util` retains the original ELF files for debugging.
+Digest implementations also compile with `-O2`. Source imports grow their memory
+buffer geometrically, avoiding repeated full-buffer copies with cc9's allocator.
+Inputs are still hashed on each invocation; the configured NAR buffer limit
+continues to determine when imports spill to disk.
 
 Use `nix develop .#cross` for C development on Linux. In `examples/hello`, run
 `mk` to build `6.out` for Plan 9. The shell keeps its sysroot and adapted

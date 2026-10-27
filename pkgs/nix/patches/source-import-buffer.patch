@@ -1,0 +1,35 @@
+--- a/src/libstore/local-store.cc
++++ b/src/libstore/local-store.cc
+@@ -1141,6 +1141,7 @@
+ 
+     std::unique_ptr<char, Free> dumpBuffer(nullptr);
+     std::string_view dump;
++    size_t dumpCapacity = 0;
+ 
+     /* Fill out buffer, and decide whether we are working strictly in
+        memory based on whether we break out because the buffer is full
+@@ -1150,11 +1151,19 @@
+         auto oldSize = dump.size();
+         constexpr size_t chunkSize = 65536;
+         auto want = std::min(chunkSize, localSettings.narBufferSize - oldSize);
+-        if (auto tmp = realloc(dumpBuffer.get(), oldSize + want)) {
+-            dumpBuffer.release();
+-            dumpBuffer.reset((char *) tmp);
+-        } else {
+-            throw std::bad_alloc();
++        if (dumpCapacity - oldSize < want) {
++            // A source may return tiny NAR records. Grow geometrically rather
++            // than reallocating for every read: cc9's realloc always copies.
++            // Never allocate beyond the configured spill threshold.
++            auto capacity = std::max(oldSize + want,
++                dumpCapacity + std::min(dumpCapacity, localSettings.narBufferSize - dumpCapacity));
++            if (auto tmp = realloc(dumpBuffer.get(), capacity)) {
++                dumpBuffer.release();
++                dumpBuffer.reset((char *) tmp);
++                dumpCapacity = capacity;
++            } else {
++                throw std::bad_alloc();
++            }
+         }
+         auto got = 0;
+         Finally cleanup([&]() { dump = {dumpBuffer.get(), dump.size() + got}; });

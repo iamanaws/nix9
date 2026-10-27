@@ -40,8 +40,8 @@ def main():
     roots = "/usr/local/nix/state/gcroots"
     profile = roots + "/environment"
 
-    def cached_build(guest, name):
-        result = measure(guest, name, f"nix-build --out-link {roots}/hello", hello)
+    def cached_build(guest, name, expected=None):
+        result = measure(guest, name, f"nix-build --out-link {roots}/hello", expected or hello)
         if "building '" in result or "copying path" in result:
             raise RuntimeError(f"cached build rebuilt or downloaded an output: {result}")
 
@@ -86,6 +86,18 @@ def main():
                         cached_build(guest, "cached-build")
                         measure(guest, "shell-startup", "nix-shell --run 'echo shell-ready'", "shell-ready")
                         measure(guest, "development-shell", "nix-shell --run 'mk && ./6.out && mk clean'", "hello from nix9")
+                    guest.command("echo ignored > ignored-build-artifact")
+                    cached_build(guest, "cached-build-ignored-file")
+                    guest.command("cp hello.c /tmp/hello-original.c; sed 's/hello from nix9/hello from edit/' /tmp/hello-original.c > hello.c")
+                    result = measure(guest, "source-edit-build", f"nix-build --out-link {roots}/hello")
+                    edited = rooted(guest, roots + "/hello")
+                    if edited == hello or "building '" not in result:
+                        raise RuntimeError(f"source edit did not rebuild the project: {result}")
+                    guest.command(f"{edited}/bin/hello", "hello from edit")
+                    cached_build(guest, "cached-build-after-edit", edited)
+                    measure(guest, "shell-after-edit", "nix-shell --run 'mk && ./6.out && mk clean'", "hello from edit")
+                    guest.command("cp /tmp/hello-original.c hello.c; rm /tmp/hello-original.c ignored-build-artifact")
+                    cached_build(guest, "cached-build-restored-source")
                     guest.command("cd /")
                     guest.command('echo \'let p=import <nix9>; in p.buildEnv { name="updated-tools"; paths=[p.fortune]; }\' > /tmp/update.nix')
                     measure(guest, "build-update", f"nix-build /tmp/update.nix --out-link {roots}/candidate")
@@ -123,6 +135,7 @@ def main():
     (output / "results.json").write_text(json.dumps({
         "persistent-development": "passed",
         "offline-update-and-rollback": "passed",
+        "source-edits-and-filtering": "passed",
         "bootstrap": str(Path(archive).resolve()),
         "bootstrap-bytes": Path(archive).stat().st_size,
         "vm-image": str(Path(image).resolve()),
