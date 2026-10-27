@@ -13,8 +13,8 @@ Use the second command when a `-tests` target exists. Tests save `results.json`.
 Add `--rebuild` to rerun a cached test. Compiler and POSIX checks are available
 as `c-abi-tests` and `ape-tests`.
 
-Nix builders need KVM access to extract bootstrap sources and headers and run
-guest tests. Cross-builds run on Linux with the cached extracts.
+Cross-builds use pinned sources and run on Linux without KVM.
+Native bootstrap preparation and guest tests need KVM access for Nix builders.
 `nix flake check` checks the Go executable format. Run the test targets to check
 execution in the guest. Use `nix fmt` to format all Nix files.
 

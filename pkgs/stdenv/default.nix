@@ -3,7 +3,6 @@
   cTools,
   sysroot,
   libc ? null,
-  imageTools,
   ccSource,
 }:
 let
@@ -64,8 +63,8 @@ let
       ${tools}/bin/mkdir -p $NIX9_ROOT/sys $NIX9_ROOT/amd64/lib
       ${tools}/bin/cp -r ${sysroot}/sys/include $NIX9_ROOT/sys/
       ${tools}/bin/cp -r ${sysroot}/amd64/include $NIX9_ROOT/amd64/
-      ${tools}/bin/cp -r ${imageTools}/sys/src $NIX9_ROOT/sys/
-      ${tools}/bin/cp ${imageTools}/amd64/mkfile $NIX9_ROOT/amd64/
+      ${tools}/bin/cp -r ${sysroot}/sys/src $NIX9_ROOT/sys/
+      ${tools}/bin/cp ${sysroot}/amd64/mkfile $NIX9_ROOT/amd64/
       ${tools}/bin/chmod -R u+w $NIX9_ROOT
       ${import ../../lib/collect-inputs.nix (
         (builtins.removeAttrs inputs [ "interactive" ]) // { inherit initialPath libc; }

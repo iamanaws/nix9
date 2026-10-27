@@ -10,10 +10,7 @@ pkgs.lib.makeScope pkgs.newScope (
     support = import ../tests/support.nix { inherit pkgs; };
     vmTools = import ../vm { inherit pkgs ninefront; };
     inherit (vmTools) vm setup run;
-    sources = import ./sources.nix {
-      inherit pkgs vm;
-      inherit (support) python testSupport;
-    };
+    sources = import ./sources.nix { inherit pkgs; };
     buildPackages = pkgs // {
       awkMaketab = pkgs.callPackage ./awk-maketab/build.nix { source = sources.buildToolsSource; };
       yacc = pkgs.runCommand "build-yacc" { } ''
