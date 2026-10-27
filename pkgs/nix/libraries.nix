@@ -118,7 +118,7 @@ runCommand "nix-${version}-9front-libraries"
       --subst-var-by llvm ${llvmPackages.llvm} \
       --subst-var-by lld ${llvmPackages.lld}
     meson setup meson-build library-project --cross-file "$PWD/cross.ini" \
-      --wrap-mode=nofallback -Dbuildtype=plain --prefix=/nix --sysconfdir=/etc \
+      --wrap-mode=nofallback -Dbuildtype=plain -Doptimization=2 --prefix=/nix --sysconfdir=/etc \
       -Dnix-util:cpuid=disabled -Dnix-store:seccomp-sandboxing=disabled \
       -Dnix-store:s3-aws-auth=disabled -Dnix-store:sandbox-shell= -Dnix-expr:gc=disabled
     ninja -C meson-build -j "$NIX_BUILD_CORES"

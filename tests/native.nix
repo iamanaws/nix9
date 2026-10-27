@@ -10,7 +10,10 @@
   nativePackageSource,
   nativePackagesArchive,
   nixPackage,
+  python,
   rc,
+  testSupport,
+  vm,
   webfs,
   vmTest,
 }:
@@ -108,6 +111,14 @@
     files = [ ./releases.nix ];
     args = ''
       ${nativeBootstrap} "$out"
+    '';
+  };
+  benchmark-native = pkgs.writeShellApplication {
+    name = "benchmark-native";
+    text = ''
+      exec ${python}/bin/python ${testSupport [ ./native_performance.py ]}/native_performance.py \
+        ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+        ${nativeBootstrap} "''${1:-nix9-performance}"
     '';
   };
   native-update-tests = vmTest "native-update-tests" {

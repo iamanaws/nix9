@@ -56,7 +56,7 @@ runCommand "nix-${version}"
     cp ${./shell.cc} shell.cc
     export PKG_CONFIG_LIBDIR=${libraries}/lib/pkgconfig
     meson setup build --cross-file ${libraries}/cross.ini \
-      --wrap-mode=nofallback -Dbuildtype=plain
+      --wrap-mode=nofallback -Dbuildtype=plain -Doptimization=2
     ninja -C build -j "$NIX_BUILD_CORES"
     mkdir -p "$out"
     cp build/nix-{store,instantiate,build}.elf "$out/"

@@ -32,5 +32,10 @@ Evaluator fetch tests cover file and archive hashes, relative imports, executabl
 bits, malformed archives, path confinement, pure evaluation and offline reuse.
 The builds and tests work with the Nix sandbox enabled.
 
+The [native development benchmark](development.md#measure-native-development)
+uses a persistent disk on the output filesystem and checks project builds,
+environment upgrades, rollback and GC across offline reboots. It records timing
+samples separately from the reproducible test outputs.
+
 See [development](development.md) for commands and saved results, and
 [toolchain limitations](feasibility.md) for scope.

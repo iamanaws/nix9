@@ -18,11 +18,31 @@ Native bootstrap preparation and guest tests need KVM access for Nix builders.
 `nix flake check` checks the Go executable format. Run the test targets to check
 execution in the guest. Use `nix fmt` to format all Nix files.
 
+## Measure native development
+
+Run the benchmark from a checkout on persistent storage:
+
+```sh
+nix run .#benchmark-native -- nix9-performance
+```
+
+Choose a new output directory for each run. The benchmark creates a temporary
+VM disk there, installs the bootstrap and measures downloads, extraction,
+evaluation, source import, the first project build, cached builds and development
+shells. It also checks environment updates, offline reboots, rollback and GC.
+The VM disk is removed when the run exits. `timings.json` records completed
+measurements; `results.json` is written only after all checks pass.
+Times depend on host storage and load. Stop other VM tests when comparing runs.
+The benchmark runs as an app so timing samples do not become nondeterministic
+Nix build outputs.
+
 ## Toolchains
 
 Cross-builds use Plan9port's `rc` and `mk`, goken9cc's `6c` and `6l`, and GCC
 preprocessing for APE. Nix and its C++ dependencies use Clang, LLD and the cc9 runtime;
 `elf2aout` converts the executable format. Go examples use `GOOS=plan9`.
+Nix libraries and commands compile with `-O2`. Installed Nix commands omit symbol
+tables; `nix build .#nix-util` retains the original ELF files for debugging.
 
 Use `nix develop .#cross` for C development on Linux. In `examples/hello`, run
 `mk` to build `6.out` for Plan 9. The shell keeps its sysroot and adapted
