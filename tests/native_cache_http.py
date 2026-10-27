@@ -37,7 +37,7 @@ class CacheHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
 
-def check_http_cache(guest, root):
+def check_http_cache(guest, root, *, program="lua", arguments="-e 'print(6 * 7)'"):
     handler = functools.partial(CacheHandler, directory=root)
     with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server, \
             http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as tls:
@@ -76,7 +76,7 @@ def check_http_cache(guest, root):
             if "copying path" not in result or "building '" in result:
                 raise RuntimeError(f"HTTP closure was not substituted: {result}")
             guest.command("nix-store --verify-path $package $library")
-            guest.command("chmod +w $package/bin/lua; echo damaged > $package/bin/lua")
+            guest.command(f"chmod +w $package/bin/{program}; echo damaged > $package/bin/{program}")
             guest.command("cached --repair-path $package")
             guest.command("nix-store --verify-path $package $library")
             guest.command("rm /usr/local/nix/state/gcroots/http-cache; nix-store --gc")
@@ -89,7 +89,7 @@ def check_http_cache(guest, root):
             for thread in threads:
                 thread.join()
     guest.command("cached --realise $package; nix-store --gc")
-    guest.command("$package/bin/lua -e 'print(6 * 7)'", "42")
+    guest.command(f"$package/bin/{program} {arguments}", "42")
     guest.command("rm /usr/local/nix/state/gcroots/http-cache; nix-store --gc")
     guest.command("test ! -e $package && test ! -e $library")
     guest.command("cache=$previousCache")

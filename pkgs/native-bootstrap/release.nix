@@ -31,7 +31,7 @@ pkgs.stdenv.mkDerivation {
         "nix-profile"
       ]
     )}
-    tar cf /fd/1 packages cache hello environment.nix shell.nix release.nix activate.rc cache.pub | @{ cd $out; tar xf /fd/0 }
+    tar cf /fd/1 . | @{ cd $out; tar xf /fd/0 }
     echo 'nix9Next='$out > $out/activate
     cat activate.rc >> $out/activate
     echo 'substituters = file://'$out'/cache?store=/usr/local/nix/store' > $out/nix.conf

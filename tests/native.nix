@@ -11,9 +11,30 @@
   nativePackagesArchive,
   nixPackage,
   rc,
+  webfs,
   vmTest,
 }:
 {
+  webfs-tests = vmTest "webfs-tests" {
+    script = ./webfs.py;
+    files = [
+      ./webfs.nix
+      ./eval_fetch.py
+      ./eval_tarball.py
+      ./native_cache.py
+      ./native_cache_http.py
+      ./cache_publish.py
+      ./artifacts.py
+    ];
+    nativeBuildInputs = [
+      pkgs.nix
+      pkgs.openssl
+    ];
+    args = ''
+      ${nixPackage} ${nixPackage.guestPrefix} \
+      ${nativePackagesArchive} ${nativePackagesArchive.guestPrefix} ${webfs} "$out"
+    '';
+  };
   native-bootstrap-tests = vmTest "native-bootstrap-tests" {
     script = ./native_bootstrap.py;
     files = [

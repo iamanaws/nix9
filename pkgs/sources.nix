@@ -86,6 +86,9 @@ in
   ramfsSource = selectSource "9front-ramfs-source" {
     paths = "sys/src/cmd/ramfs.c sys/man/4/ramfs sys/src/lib9p sys/src/libauth sys/src/libthread";
   };
+  webfsSource = selectSource "9front-webfs-source" {
+    paths = "sys/src/cmd/webfs";
+  };
   machSource = selectSource "9front-libmach-source" {
     paths = ''
       sys/src/libmach \
