@@ -39,7 +39,7 @@
     {
       lib = {
         inherit (project) mkPlan9Program mkGuestPackage mkGuestEnvironment;
-        inherit (project) stdenv callPackage;
+        inherit (project) stdenv callPackage mkShell;
         mkDerivation = import ./lib/mk-derivation.nix;
       };
       packages.${system} = project.flakePackages // tests.packages;
@@ -55,13 +55,21 @@
             inherit (tests.packages) smoke-test smoke-test-c-cross;
           };
       checks.${system} = tests.checks;
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [
-          pkgs.go
-          pkgs.qemu
-          project.python
-          pkgs.nixfmt-tree
-        ];
+      devShells.${system} = {
+        default = pkgs.mkShell {
+          packages = [
+            pkgs.go
+            pkgs.qemu
+            project.python
+            pkgs.nixfmt-tree
+          ];
+        };
+        cross = project.mkShell {
+          buildInputs = [
+            project.libap
+            project.libbsd
+          ];
+        };
       };
       formatter.${system} = pkgs.nixfmt-tree;
     };

@@ -5,7 +5,7 @@
   mpc,
   callPackage,
 }:
-{
+rec {
   compressedText = pkgs.runCommand "build-tools-input.gz" { nativeBuildInputs = [ pkgs.gzip ]; } ''
     printf 'hello\n' | gzip -n > "$out"
   '';
@@ -26,6 +26,7 @@
   apeCross = callPackage ./ape { };
   secCross = callPackage ./libsec { };
   stdenvCross = callPackage ./stdenv-cross.nix { inherit pkgs; };
+  crossShellPrograms = callPackage ./cross-shell.nix { inherit pkgs stdenvCross; };
   cloneRepository = pkgs.fetchgit (
     import ../pkgs/clone/source.nix
     // {

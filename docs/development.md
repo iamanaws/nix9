@@ -24,6 +24,10 @@ Cross-builds use Plan9port's `rc` and `mk`, goken9cc's `6c` and `6l`, and GCC
 preprocessing for APE. Nix and its C++ dependencies use Clang, LLD and the cc9 runtime;
 `elf2aout` converts the executable format. Go examples use `GOOS=plan9`.
 
+Use `nix develop .#cross` for C development on Linux. In `examples/hello`, run
+`mk` to build `6.out` for Plan 9. The shell keeps its sysroot and adapted
+mkfiles in a temporary directory.
+
 ## Add a C package
 
 `lib.callPackage ./package.nix { }` supplies `stdenv` and dependencies.

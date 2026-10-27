@@ -6,6 +6,7 @@
   cc,
   buildTools,
   compressedText,
+  crossShellPrograms,
   clone,
   development,
   guestDevelopment,
@@ -29,6 +30,12 @@
   yacc,
 }:
 {
+  cross-shell-tests = vmTest "cross-shell-tests" {
+    script = ./cross_shell.py;
+    args = ''
+      ${crossShellPrograms} "$out"
+    '';
+  };
   stdenv-tests = vmTest "stdenv-tests" {
     script = ./smoke.py;
     args = ''

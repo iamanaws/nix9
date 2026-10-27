@@ -60,7 +60,7 @@ pkgs.lib.makeScope pkgs.newScope (
   // rec {
     inherit buildPackages sources packageDefinitions;
     stdenv = callPackage ./stdenv { };
-    inherit (stdenv) mkDerivation;
+    inherit (stdenv) mkDerivation mkShell;
     buildTools = cross.build-tools;
     imageTools = callPackage ./native-packages/image-tools.nix { };
     nativeTools = callPackage ./native-packages/tools.nix { };
