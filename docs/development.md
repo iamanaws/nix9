@@ -273,6 +273,7 @@ in
 pkgs.mkSystem {
   hostName = "nix9";
   networking.enable = true;
+  services.webfs.enable = true;
   packages = [ pkgs.fortune ];
   files."motd" = "Welcome to nix9.\n";
   # webfs.certificatePins."example.org" = [ "64 hexadecimal SHA-256 digits" ];
@@ -316,7 +317,9 @@ the same host's existing file in that namespace. Removing a declared host
 reveals any underlying manual policy. Other host files and the existing
 `revoked` file remain in place. Activation creates an empty revocation file if
 one is missing. Keep revocations configured as described below.
-Restart an already-running webfs in the refreshed namespace to use its new pins.
+Enable `services.webfs` as described below to start it with these pins and
+replace its policy namespace when refreshing into a different generation.
+Restart a manually started webfs yourself to use new pins.
 
 The first switch installs wrappers for `/rc/bin/termrc.local` and
 `/rc/lib/rcmain.local`. Existing scripts are retained with a `.nix9-original`
@@ -324,7 +327,7 @@ suffix and run before the managed hook. Later switches reject edited or removed
 wrappers. Terminal boot sets the hostname and retains the booted generation at
 `system-boot`; terminal and login activation expose the managed environment.
 This version targets terminal systems. CPU-server startup,
-service management, kernel builds and disk configuration are separate work.
+general service management, kernel builds and disk configuration are separate work.
 
 `rollback` selects the previous retained generation and applies its hostname;
 refresh the session afterward. Use `nix9-rebuild delete NUMBER` to release an
@@ -385,6 +388,40 @@ starting `cs` or `dns` before the managed boot hook causes a visible networking
 error. Startup errors are printed on the console and terminal boot continues.
 Disabling managed networking returns the next boot to native 9front startup;
 it does not promise an offline machine.
+
+### Managed webfs
+
+`services.webfs.enable = true` starts the bootstrap's bundled `webfs` after
+activating the system's certificate pins. It is disabled by default and does
+not require managed networking if the network is configured another way.
+HTTP is available immediately in the activated namespace; HTTPS also requires
+the appropriate `webfs.certificatePins` or existing manual trust policy.
+
+Terminal boot and login activation start the service. After `switch` or
+`rollback`, source `/usr/local/pkg/nix9/system` to update the current session.
+A different generation or bootstrap starts a new server with the current TLS
+namespace. Repeated activation of the same generation reuses the server.
+Other sessions retain their own mounts and trust policy until refreshed.
+Changes to the shared revocation file still take effect on existing connections.
+
+The service mounts at `/mnt/nix9-webfs` and overlays `/mnt/web` in the session's
+private namespace. Disabling it removes its mounts and reveals any inherited
+manual webfs. It does not stop servers used in other namespaces. An activation
+check rejects manually replaced managed mounts, an occupied private webfs mount
+or a preexisting rc function named `webfs`. Rebuild preflight checks these
+conditions without starting a daemon or replacing the caller's mounts.
+
+Managed activation supplies a small rc function that makes bare `webfs` startup
+idempotent, including glenda's usual login profile. Calls with explicit arguments
+still run the bundled program. To change the managed mount, update the system
+configuration rather than mounting another server over it. The private mount
+point is reserved while the service is enabled.
+
+The current bootstrap also removes its managed overlay when refreshing into an
+older generation that predates services. Such generations retain their manual
+startup behavior. A rescue shell created after a failed graphical session is
+outside the boot activation namespace; source `/usr/local/pkg/nix9/system`
+there, as for the managed package environment.
 
 ### Native Go
 

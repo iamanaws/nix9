@@ -5,6 +5,7 @@
   files ? { },
   webfs ? { },
   networking ? { },
+  services ? { },
 }:
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
@@ -56,6 +57,20 @@ let
     inherit hostName;
     configuration = networking;
   };
+  managedWebfs =
+    (
+      {
+        webfs ? { },
+      }:
+      (
+        {
+          enable ? false,
+        }:
+        enable
+      )
+        webfs
+    )
+      services;
   write = path: contents: ''
     mkdir -p $out/${builtins.dirOf path}
     echo -n ${quote contents} > $out/${path}
@@ -77,11 +92,13 @@ else if !validFiles then
   throw "mkSystem: files must map relative file paths without traversal or parent conflicts to text"
 else if !validPins then
   throw "mkSystem: certificatePins must map lowercase DNS hosts to nonempty lists of SHA-256 hex fingerprints"
+else if !builtins.isBool managedWebfs then
+  throw "mkSystem: services.webfs.enable must be a boolean"
 else
   builtins.seq network (mkDerivation {
     name = "nix9-system-${hostName}";
     buildCommand = ''
-      mkdir -p $out/files $out/webfs/hosts $out/hooks
+      mkdir -p $out/files $out/webfs/hosts $out/hooks $out/services
       echo nix9-system-1 > $out/system
       echo ${quote hostName} > $out/hostName
       echo ${environment} > $out/environment
@@ -99,6 +116,8 @@ else
       ${write "boot" (builtins.readFile ./boot.rc)}
       ${if network == "" then "" else write "network" network}
       ${write "profile" (builtins.readFile ./profile.rc)}
+      ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
+      ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
       ${write "hooks/termrc.local" (hook "/rc/bin/termrc.local" "boot")}
       ${write "hooks/rcmain.local" (hook "/rc/lib/rcmain.local" "profile")}
     '';

@@ -16,3 +16,14 @@ NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr
 NIX_PATH='nix9='^$nix9/packages
 NIX_CONF_DIR=$nix9
 status=''
+# Older system generations predate managed services. Drop our private overlay
+# before their activation so an inherited daemon cannot keep a newer TLS policy.
+if(~ $#nix9WebfsSystem 1 && test -r /usr/local/nix/state/gcroots/system &&
+  ! test -f `{cat /usr/local/nix/state/gcroots/system}^/services/webfs.rc) {
+  rfork ne && {
+    nix9WebfsStop=1
+    if(. $nix9WebfsSystem/services/webfs.rc) { nix9WebfsStop=(); status='' }
+    if not { nix9WebfsStop=(); status='webfs activation failed' }
+  }
+}
+if not status=''

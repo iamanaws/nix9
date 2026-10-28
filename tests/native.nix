@@ -19,6 +19,22 @@
   vmTest,
 }:
 {
+  native-services-tests = vmTest "native-services-tests" {
+    script = ./native_services.py;
+    files = [
+      ./services.nix
+      ./services-legacy.rc
+      ./services-retained.rc
+      ./tls.py
+      ./webfs_tls.py
+    ];
+    nativeBuildInputs = [ pkgs.openssl ];
+    # Retain the VM inside a --keep-failed build directory for diagnosis.
+    env.NIX9_SERVICES_TEST_STATE = "services-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-network-tests = vmTest "native-network-tests" {
     script = ./native_network.py;
     files = [ ./networks.nix ];

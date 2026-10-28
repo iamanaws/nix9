@@ -4,6 +4,7 @@ let
     networking:
     pkgs.mkSystem {
       hostName = "nix9-network";
+      services.webfs.enable = true;
       networking = {
         enable = true;
       }

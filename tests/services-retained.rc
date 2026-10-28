@@ -1,0 +1,6 @@
+rfork ne
+. /usr/local/pkg/nix9/system || exit 'retained session activation failed'
+echo ready > /tmp/retained-ready
+while(! test -f /tmp/retained-go) sleep 1
+hget $serviceOldURL > /tmp/retained-output && echo passed > /tmp/retained-status
+if not echo failed > /tmp/retained-status

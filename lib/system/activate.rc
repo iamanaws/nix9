@@ -27,7 +27,7 @@ rfork ne && {
         nix9System=$nix9NextSystem
         sysname=`{cat $nix9System/hostName}
         nix9NextSystem=()
-        status=''
+        . $nix9System/services/webfs.rc
       }
   }
 }

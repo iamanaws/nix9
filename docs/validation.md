@@ -50,6 +50,13 @@ selected configuration. Invalid networking configurations must fail without
 changing the selected generation. These tests cover one Ethernet interface,
 not external IPv6 or DHCP renewal across lease expiration. Run it with
 `nix build .#native-network-tests`.
+`native-services-tests` checks managed webfs activation, repeated activation and
+bare startup, HTTP/HTTPS and native Nix fetches, pin changes and rollback, login
+namespace isolation, disabling the overlay and selecting a generation predating
+services. Two subsequent boots fetch without manual interface or service setup.
+The VM uses a headless terminal profile in place of rio; its bare webfs invocation
+also checks compatibility with glenda's startup behavior. All HTTP and TLS servers
+run on host loopback. Run it with `nix build .#native-services-tests`.
 `native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
 and checks offline rebuilding and rollback after GC.
 `native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.

@@ -1,0 +1,33 @@
+# System activation from b9b9909, before managed services.
+rfork ne && {
+  /$cputype/bin/test -d /cfg &&
+  @{
+    for(directory in /cfg/nix9 /cfg/nix9/files /sys/lib/tls/webfs /sys/lib/tls/webfs/hosts) {
+      if(! /$cputype/bin/test -e $directory) {
+        /$cputype/bin/mkdir $directory && /$cputype/bin/chmod 755 $directory ||
+          exit 'cannot create system mount point'
+      }
+      /$cputype/bin/test -d $directory || exit 'invalid system mount point'
+    }
+    if(! /$cputype/bin/test -e /sys/lib/tls/webfs/revoked) {
+      echo -n > /sys/lib/tls/webfs/revoked &&
+        /$cputype/bin/chmod 644 /sys/lib/tls/webfs/revoked ||
+          exit 'cannot create revocation file'
+    }
+    /$cputype/bin/test -f /sys/lib/tls/webfs/revoked &&
+      /$cputype/bin/test -r /sys/lib/tls/webfs/revoked
+  } &&
+  . `{cat $nix9NextSystem/environment}^/activate && {
+    if(! ~ $#nix9System 0) {
+      /$cputype/bin/unmount $nix9System/files /cfg/nix9/files
+      /$cputype/bin/unmount $nix9System/webfs/hosts /sys/lib/tls/webfs/hosts
+    }
+    /$cputype/bin/bind $nix9NextSystem/files /cfg/nix9/files &&
+      /$cputype/bin/bind -b $nix9NextSystem/webfs/hosts /sys/lib/tls/webfs/hosts && {
+        nix9System=$nix9NextSystem
+        sysname=`{cat $nix9System/hostName}
+        nix9NextSystem=()
+        status=''
+      }
+  }
+}

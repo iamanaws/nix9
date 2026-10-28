@@ -1,0 +1,63 @@
+# A private overlay leaves the inherited, manually started webfs underneath it.
+# Use the kernel's server identity, rather than trusting an environment marker
+# after a mount has been changed by hand.
+@{
+  rfork e
+  path=(/$cputype/bin /rc/bin)
+  fn fail {
+    echo 'nix9: webfs activation failed:' $* >[1=2]
+    exit 'webfs activation failed'
+  }
+  fn identity { ls -ld $1 | awk '{print $2 ":" $3}' }
+  if(! ~ $#nix9WebfsSystem 0) {
+    if(! ~ `{identity /mnt/nix9-webfs} $nix9WebfsId)
+      fail 'the managed mount at /mnt/nix9-webfs was changed'
+    if(! ~ `{identity /mnt/web} $nix9WebfsId)
+      fail 'the managed overlay at /mnt/web was changed'
+  }
+  if(! ~ $nix9WebfsStop 1 && test -f $nix9System/services/webfs-enabled) {
+    test -x $nix9/bin/webfs || fail 'bundled webfs is unavailable'
+    test -d /mnt/web && test -d /mnt/nix9-webfs || fail 'invalid mount point'
+    if(~ $#nix9WebfsSystem 0) {
+      if(test -e /mnt/nix9-webfs/clone)
+        fail '/mnt/nix9-webfs is already in use'
+      if(test -s '/env/fn#webfs')
+        fail 'an existing rc function owns the webfs command'
+    }
+  }
+  # Rebuild checks the target without starting services in its temporary namespace.
+  if(~ $nix9SystemCheck 1) exit ''
+  if(! ~ $#nix9WebfsSystem 0) {
+    if(! ~ $nix9WebfsStop 1 && ~ $nix9WebfsSystem $nix9System && ~ $nix9WebfsRuntime $nix9) exit ''
+    unmount /mnt/nix9-webfs /mnt/web || fail 'cannot remove the managed overlay'
+    unmount /mnt/nix9-webfs || fail 'cannot remove the managed mount'
+  }
+  if(! ~ $nix9WebfsStop 1 && test -f $nix9System/services/webfs-enabled) {
+    $nix9/bin/webfs -m /mnt/nix9-webfs -t /sys/lib/tls/webfs || fail 'cannot start bundled webfs'
+    test -r /mnt/nix9-webfs/clone || fail 'webfs did not mount'
+    bind -b /mnt/nix9-webfs /mnt/web || fail 'cannot install the managed overlay'
+  }
+  status=''
+} && {
+  if(! ~ $nix9SystemCheck 1) {
+    if(! ~ $nix9WebfsStop 1 && test -f $nix9System/services/webfs-enabled) {
+      nix9WebfsSystem=$nix9System
+      nix9WebfsRuntime=$nix9
+      nix9WebfsId=`{/$cputype/bin/ls -ld /mnt/nix9-webfs | /$cputype/bin/awk '{print $2 ":" $3}'}
+      # The stock glenda profile runs webfs after rcmain.local. Reuse our mount
+      # for a bare invocation; explicit arguments still run the bundled command.
+      fn webfs {
+        if(~ $#* 0 && ~ `{/$cputype/bin/ls -ld /mnt/web | /$cputype/bin/awk '{print $2 ":" $3}'} $nix9WebfsId)
+          status=''
+        if not $nix9/bin/webfs $*
+      }
+    }
+    if not if(! ~ $#nix9WebfsSystem 0) {
+      fn webfs
+      nix9WebfsSystem=()
+      nix9WebfsRuntime=()
+      nix9WebfsId=()
+    }
+  }
+  status=''
+}

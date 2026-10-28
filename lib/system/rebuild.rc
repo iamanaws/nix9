@@ -71,7 +71,7 @@ for(file in activate boot profile hostName environment hooks/termrc.local hooks/
   if(! test -f $target/$file) fail 'incomplete system:' $file
 nix-store --verify-path $target
 # Activation runs in a private namespace before any boot selection changes.
-@{ fn sigexit; . $target/activate } || fail 'activation check failed'
+@{ fn sigexit; nix9SystemCheck=1; . $target/activate } || fail 'activation check failed'
 
 # Adopt local startup scripts once, and refuse to overwrite later manual edits.
 for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {

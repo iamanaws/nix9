@@ -64,8 +64,6 @@ def network(guest, address, prefix, dns):
 
 
 def download(guest, host, port):
-    # The headless rescue console does not inherit glenda's webfs mount.
-    guest.command("webfs -m /mnt/web -T 5000")
     # hget otherwise accepts an existing file after checking only its length.
     guest.command("echo -n > /tmp/download")
     guest.command(f"hget -o /tmp/download http://{host}:{port}/payload")
