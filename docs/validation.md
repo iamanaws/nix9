@@ -63,7 +63,16 @@ the guest must contact it and correct its clock. The suite checks exactly one
 timesync process, no service replacement during switching or login, rollback on
 reboot, restoration of native startup when management is disabled, and rejection
 of invalid settings. It does not use a public time server. Run it with
-`nix build .#native-timesync-tests`.
+`nix build .#native-timesync-tests`. NTP logging must record the correction in an
+append-only `/sys/log/timesync`, and its contents must survive rollback and reboot.
+`native-logging-tests` checks nontruncating preparation, append-only flags and
+declared permissions, preservation of existing and unmanaged files, preflight
+rejection of directories and special files without log mutations, and rejection
+of invalid names and modes. Successful selection and boot events must appear in
+order; failed selection and session refresh must not add events. Three subsequent
+boots check mode restoration, missing-file recreation, rollback without loss of
+history, and disabling management while retaining the files. Run it with
+`nix build .#native-logging-tests`.
 `native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
 and checks offline rebuilding and rollback after GC.
 `native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.

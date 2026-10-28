@@ -72,6 +72,9 @@ for(file in activate boot profile hostName environment hooks/termrc.local hooks/
 nix-store --verify-path $target
 # Activation runs in a private namespace before any boot selection changes.
 @{ fn sigexit; nix9SystemCheck=1; . $target/activate } || fail 'activation check failed'
+if(test -f $target/logging) {
+  @{ fn sigexit; nix9LogCheck=1; . $target/logging } || fail 'log configuration check failed'
+}
 
 # Adopt local startup scripts once, and refuse to overwrite later manual edits.
 for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
@@ -87,6 +90,9 @@ for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
 if(test -e /usr/local/pkg/nix9/system) {
   if(! cmp -s /usr/local/pkg/nix9/system $target/profile)
     fail 'system profile was edited: /usr/local/pkg/nix9/system'
+}
+if(test -f $target/logging) {
+  @{ fn sigexit; nix9LogCheck=(); . $target/logging } || fail 'log preparation failed'
 }
 for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
   if(! test -e $hook^.nix9-original) {
@@ -111,6 +117,11 @@ changing=1
 echo -n `{cat $target/hostName} > /dev/sysname
 nix-profile $root set $target
 changing=0
+eventSystem=$target
+if(! test -f $eventSystem/log-event && ~ $#previous 1) eventSystem=$previous
+if(test -f $eventSystem/log-event)
+  if(! /$cputype/bin/rc $eventSystem/log-event $action $target)
+    echo 'nix9-rebuild: system selected, but its event could not be recorded' >[1=2]
 echo 'Selected system:' $target
 echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
 if(test -f $target/network || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/network })

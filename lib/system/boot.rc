@@ -3,9 +3,14 @@
   nix-store --realise $nix9SelectedSystem --add-root /usr/local/nix/state/gcroots/system-boot > /dev/null && {
     sysname=`{cat $nix9SelectedSystem/hostName}
     echo -n $sysname > /dev/sysname && {
-      if(test -f $nix9SelectedSystem/network) . $nix9SelectedSystem/network
-      if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
-      . $nix9SelectedSystem/profile
+      if(! test -f $nix9SelectedSystem/logging || { nix9LogCheck=(); . $nix9SelectedSystem/logging }) {
+        if(test -f $nix9SelectedSystem/log-event)
+          if(! /$cputype/bin/rc $nix9SelectedSystem/log-event boot $nix9SelectedSystem)
+            echo 'nix9: cannot record boot event' >[1=2]
+        if(test -f $nix9SelectedSystem/network) . $nix9SelectedSystem/network
+        if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
+        . $nix9SelectedSystem/profile
+      }
     }
   }
 }

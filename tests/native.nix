@@ -19,6 +19,14 @@
   vmTest,
 }:
 {
+  native-logging-tests = vmTest "native-logging-tests" {
+    script = ./native_logging.py;
+    files = [ ./logging.nix ];
+    env.NIX9_LOGGING_TEST_STATE = "logging-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-timesync-tests = vmTest "native-timesync-tests" {
     script = ./native_timesync.py;
     files = [ ./timesync.nix ];

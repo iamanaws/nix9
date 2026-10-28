@@ -24,6 +24,7 @@ OFFSET = 120
 INVALID = {
     "invalidEnable": "enable", "invalidSource": "source", "invalidSourceType": "source",
     "invalidLocalTime": "rtcLocalTime", "missingServer": "server",
+    "invalidLogging": "logging", "disabledLogging": "logging",
     "invalidServerType": "server", "invalidServer": "server", "invalidIP": "server",
     "ambiguousIP": "server", "multicastIP": "server", "unspecifiedIP": "server",
     "invalidHostname": "server", "serverOption": "server", "serverPort": "server",
@@ -87,6 +88,16 @@ def select(guest, name, arguments, pid):
     return root(guest)
 
 
+def clock_records(guest):
+    return re.findall(r"(?m)^nix9-clock .+$", guest.command("cat /sys/log/timesync"))
+
+
+def retained_records(guest, history):
+    # The current client may append another sample before the next reboot.
+    if clock_records(guest)[:len(history)] != history:
+        raise RuntimeError("clock log history was lost during rollback or reboot")
+
+
 qemu, image, archive, output = sys.argv[1:]
 state = os.environ.get("NIX9_TIMESYNC_TEST_STATE")
 with ExitStack() as stack:
@@ -114,7 +125,7 @@ with ExitStack() as stack:
     base = f"http://10.0.2.2:{http.server_port}"
     native = ["-rLa1000000"]
     utc_args = ["-r"]
-    ntp_args = ["-n", f"udp!10.0.2.2!{ntp.server_address[1]}"]
+    ntp_args = ["-l", "-n", f"udp!10.0.2.2!{ntp.server_address[1]}"]
     local_args = ["-r", "-L"]
     with boot(qemu, disk, snapshot=False) as guest:
         guest.child.timeout = 900
@@ -162,6 +173,10 @@ with ExitStack() as stack:
         seconds = re.findall(r"(?m)^([0-9]{10})$", guest.command("date -n"))
         if len(seconds) != 1 or abs(int(seconds[0]) - time.time() - OFFSET) > 10:
             raise RuntimeError(f"timesync did not correct the guest clock: {seconds}")
+        guest.command("test -A /sys/log/timesync && test -A /sys/log/nix9")
+        corrections = clock_records(guest)
+        if not any(re.fullmatch(r"nix9-clock .* δ -?[0-9]+ avgδ [0-9]+ hz [0-9]+", line) for line in corrections):
+            raise RuntimeError(f"timesync did not log its clock correction: {corrections}")
         local = select(guest, "local", ntp_args, pid)
         disabled = select(guest, "disabled", ntp_args, pid)
         guest.command("nix9-rebuild rollback", "Clock synchronization changes take effect after reboot.")
@@ -171,6 +186,7 @@ with ExitStack() as stack:
         print("PASS: NTP corrects the clock; switch, login and rollback preserve one running client", flush=True)
     with boot(qemu, disk, **options) as guest:
         guest.command(f"cat {SYSTEM}-boot", local)
+        retained_records(guest, corrections)
         pid = process(guest, local_args)
         if select(guest, "disabled", local_args, pid) != disabled:
             raise RuntimeError("disabling timesync did not reuse the unmanaged generation")
@@ -180,6 +196,7 @@ with ExitStack() as stack:
         pid = process(guest, native)
         refresh(guest, native, pid)
         guest.command("test ! -f $nix9System/services/timesync.rc")
+        retained_records(guest, corrections)
         print("PASS: disabling management restores native terminal startup", flush=True)
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)
@@ -187,6 +204,6 @@ with ExitStack() as stack:
         "status": "passed", "utcSystem": utc, "ntpSystem": ntp_system,
         "localSystem": local, "unmanagedSystem": disabled,
         "rejectedConfigurations": list(INVALID), "configuredBoots": 4,
-        "checks": ["utc-rtc", "local-rtc", "local-ntp-clock-correction", "single-client",
+        "checks": ["utc-rtc", "local-rtc", "local-ntp-clock-correction", "timesync-logging", "single-client",
                    "boot-only-changes", "login", "rollback", "native-startup-restored"],
     }, indent=2) + "\n")

@@ -5,6 +5,7 @@
   files ? { },
   webfs ? { },
   networking ? { },
+  logging ? { },
   services ? { },
 }:
 let
@@ -73,10 +74,16 @@ let
           )
             webfs;
         timesync = import ./timesync.nix { configuration = timesync; };
+        timesyncLogging = timesync.logging or false;
       }
     )
       services;
   inherit (serviceConfiguration) managedWebfs timesync;
+  logConfiguration = import ./logging.nix {
+    configuration = logging;
+    inherit mkDerivation;
+    inherit (serviceConfiguration) timesyncLogging;
+  };
   write = path: contents: ''
     mkdir -p $out/${builtins.dirOf path}
     echo -n ${quote contents} > $out/${path}
@@ -101,7 +108,7 @@ else if !validPins then
 else if !builtins.isBool managedWebfs then
   throw "mkSystem: services.webfs.enable must be a boolean"
 else
-  builtins.deepSeq [ network timesync ] (mkDerivation {
+  builtins.deepSeq [ network timesync logConfiguration ] (mkDerivation {
     name = "nix9-system-${hostName}";
     buildCommand = ''
       mkdir -p $out/files $out/webfs/hosts $out/hooks $out/services
@@ -125,6 +132,8 @@ else
       ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
       ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
       ${if timesync == "" then "" else write "services/timesync.rc" timesync}
+      ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
+      ${if logConfiguration == null then "" else write "log-event" logConfiguration.event}
       ${write "hooks/termrc.local" (hook "/rc/bin/termrc.local" "boot")}
       ${write "hooks/rcmain.local" (hook "/rc/lib/rcmain.local" "profile")}
     '';

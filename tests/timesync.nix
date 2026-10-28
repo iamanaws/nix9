@@ -17,6 +17,7 @@ let
     source = "ntp";
     server = "10.0.2.2";
     port = fixture.port;
+    logging = true;
   };
 in
 {
@@ -29,6 +30,8 @@ in
   invalidSource = system (rtc // { source = "file"; });
   invalidSourceType = system (rtc // { source = 1; });
   invalidLocalTime = system (rtc // { rtcLocalTime = "yes"; });
+  invalidLogging = system (rtc // { logging = "yes"; });
+  disabledLogging = system { logging = true; };
   missingServer = system (builtins.removeAttrs ntp [ "server" ]);
   invalidServerType = system (ntp // { server = [ "10.0.2.2" ]; });
   invalidServer = system (ntp // { server = "time.example.org\nreboot"; });

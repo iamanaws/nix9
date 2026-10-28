@@ -9,6 +9,7 @@ in
     server ? null,
     port ? 123,
     rtcLocalTime ? false,
+    logging ? false,
   }:
   let
     split = separator: value: builtins.filter builtins.isString (builtins.split separator value);
@@ -52,6 +53,10 @@ in
     error "source must be rtc or ntp"
   else if !builtins.isBool rtcLocalTime then
     error "rtcLocalTime must be a boolean"
+  else if !builtins.isBool logging then
+    error "logging must be a boolean"
+  else if logging && !enable then
+    error "logging requires services.timesync.enable"
   else if !builtins.isInt port || port < 1 || port > 65535 then
     error "port must be an integer from 1 to 65535"
   else if source == "ntp" && !validServer server then
@@ -68,7 +73,7 @@ in
     ''
       # termrc starts aux/timesync after networking, with its native duplicate check.
       # Set this in the boot environment, never during session activation.
-      TIMESYNCARGS=(${arguments})
+      TIMESYNCARGS=(${if logging then "-l " else ""}${arguments})
     ''
 )
   configuration

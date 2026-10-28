@@ -433,6 +433,62 @@ to native 9front startup, which normally synchronizes against a local-time RTC;
 it does not stop synchronization. Generations predating this option also retain
 their native startup behavior.
 
+### Native logging
+
+9front's `syslog(2)` writes directly to existing files under `/sys/log`. Enable
+declarative preparation and Nix9 generation events with:
+
+```nix
+logging = {
+  enable = true;
+  files = {
+    cs.mode = "0660";
+    dns.mode = "0660";
+    application = { }; # Defaults to 0640.
+    nix9.mode = "0600";
+  };
+};
+```
+
+Logging always prepares `/sys/log/nix9`. `files` declares additional single-file
+log names and can override the default mode of `nix9` or a service's log. Names
+must start with a letter or digit, contain only letters, digits, dots, underscores
+or hyphens, and be at most 64 characters. Modes are four-digit octal permission
+strings with owner write permission; the default is `0640`. All declared logs
+are append-only. Existing owners and groups are preserved, so the startup user
+must have permission to set their modes and write to them.
+
+Selection and terminal boot prepare the files; boot does this before managed
+networking and native service startup. New files are created exclusively with
+their declared permissions and append flag. Existing contents are never truncated.
+Directories, exclusive-use files, temporary files and other special entries are
+rejected. Rebuild checks every declared file type without changing any log before
+preparing the selection. A later failure can leave newly created files or changed
+permissions in place, but does not write a successful selection event.
+Session refresh and login do not prepare logs or add generation events.
+
+`/sys/log/nix9` records the machine name, a native syslog timestamp, the event
+(`boot`, `switch` or `rollback`), and the system store path. A boot record identifies
+the selected generation before starting its managed services. Selection events
+are written only after the profile update succeeds. An event write failure is
+reported on the console without undoing an already successful selection.
+
+Set `services.timesync.logging = true` alongside `services.timesync.enable` to
+enable native clock-correction and failure records. This also enables log
+preparation and Nix9 events automatically, including `/sys/log/timesync`; a separate
+`logging.enable` is optional. The `-l` flag takes effect after reboot, like other
+timesync settings. Preparing `cs` or `dns` logs does not enable their debug flags.
+The timesync log defaults to `0660` so startup can write the stock image's
+`sys`-owned file through its group. Override it with `logging.files.timesync.mode`
+when using different ownership or permissions.
+
+Rollback reapplies the selected file permissions while retaining all log data.
+Removing a declaration or disabling logging leaves its files, contents and last
+permissions in place. Selecting an unmanaged generation writes one final event
+using the previous generation's logger, then subsequent unmanaged boots produce
+no Nix9 events. Logging is unmanaged by default; `files` requires `logging.enable`
+or enabled timesync logging. Rotation and remote forwarding are separate work.
+
 ### Managed webfs
 
 `services.webfs.enable = true` starts the bootstrap's bundled `webfs` after
