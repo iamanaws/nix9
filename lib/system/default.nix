@@ -135,6 +135,7 @@ else
       ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
       ${if logConfiguration == null then "" else write "log-event" logConfiguration.event}
       ${write "hooks/termrc.local" (hook "/rc/bin/termrc.local" "boot")}
+      ${write "hooks/cpurc.local" (builtins.readFile ./cpurc.local)}
       ${write "hooks/rcmain.local" (hook "/rc/lib/rcmain.local" "profile")}
     '';
   })

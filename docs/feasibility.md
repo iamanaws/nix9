@@ -29,8 +29,8 @@ The [system configuration layer](development.md#system-configuration) selects
 packages, hostname, Ethernet networking, generated files and webfs pins through
 retained generations. Managed webfs, native clock synchronization and log-file
 preparation with generation event records are optional.
-Terminal boot and login hooks apply the selection; CPU-server startup and general
-service management remain future work.
+Terminal and CPU-server boot hooks apply the selection, as do new login shells.
+General service management, authentication and listener configuration remain future work.
 
 ## Audit
 

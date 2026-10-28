@@ -77,14 +77,23 @@ if(test -f $target/logging) {
 }
 
 # Adopt local startup scripts once, and refuse to overwrite later manual edits.
-for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
+fn hookTemplate {
+  template=$target/hooks/`{basename $1}
+  # Retain the CPU loader when selecting a generation that predates CPU hooks.
+  if(~ $1 /rc/bin/cpurc.local && ! test -f $template)
+    template=$nix9/packages/system/cpurc.local
+  echo $template
+}
+for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
+  template=`{hookTemplate $hook}
+  if(! test -f $template) fail 'startup template is missing:' $hook
   if(test -e $hook && ! test -f $hook) fail 'startup hook is not a file:' $hook
   if(test -e $hook^.nix9-original) {
     if(! test -f $hook^.nix9-original) fail 'startup backup is not a file:' $hook
     if(! test -f $hook) fail 'startup hook was removed:' $hook
-    if(! cmp -s $hook $target/hooks/`{basename $hook}) fail 'startup hook was edited:' $hook
+    if(! cmp -s $hook $template) fail 'startup hook was edited:' $hook
   }
-  if not if(test -f $hook && cmp -s $hook $target/hooks/`{basename $hook})
+  if not if(test -f $hook && cmp -s $hook $template)
     fail 'startup backup is missing:' $hook
 }
 if(test -e /usr/local/pkg/nix9/system) {
@@ -94,7 +103,7 @@ if(test -e /usr/local/pkg/nix9/system) {
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=(); . $target/logging } || fail 'log preparation failed'
 }
-for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
+for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
   if(! test -e $hook^.nix9-original) {
     if(test -f $hook) mv $hook $hook^.nix9-original
     if not {
@@ -103,7 +112,7 @@ for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
     }
   }
   if(! test -e $hook) {
-    cp $target/hooks/`{basename $hook} $hook
+    cp `{hookTemplate $hook} $hook
     chmod u+w $hook
   }
 }

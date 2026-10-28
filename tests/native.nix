@@ -19,6 +19,17 @@
   vmTest,
 }:
 {
+  native-cpu-tests = vmTest "native-cpu-tests" {
+    script = ./native_cpu.py;
+    files = [
+      ./cpu.nix
+      ./ntp.py
+    ];
+    env.NIX9_CPU_TEST_STATE = "cpu-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-logging-tests = vmTest "native-logging-tests" {
     script = ./native_logging.py;
     files = [ ./logging.nix ];
@@ -29,7 +40,10 @@
   };
   native-timesync-tests = vmTest "native-timesync-tests" {
     script = ./native_timesync.py;
-    files = [ ./timesync.nix ];
+    files = [
+      ./timesync.nix
+      ./ntp.py
+    ];
     env.NIX9_TIMESYNC_TEST_STATE = "timesync-state";
     args = ''
       ${nativeBootstrap} "$out"

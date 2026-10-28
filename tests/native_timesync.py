@@ -9,7 +9,6 @@ from pathlib import Path
 import re
 import shutil
 import socketserver
-import struct
 import subprocess
 import sys
 import tempfile
@@ -17,10 +16,10 @@ import threading
 import time
 
 from guest import boot
+from ntp import NTP, OFFSET
 
 
 SYSTEM = "/usr/local/nix/state/gcroots/system"
-OFFSET = 120
 INVALID = {
     "invalidEnable": "enable", "invalidSource": "source", "invalidSourceType": "source",
     "invalidLocalTime": "rtcLocalTime", "missingServer": "server",
@@ -31,29 +30,6 @@ INVALID = {
     "invalidPort": "port", "invalidHighPort": "port", "invalidPortType": "port",
     "ntpLocalTime": "rtcLocalTime", "rtcServer": "server", "rtcPort": "port",
 }
-
-
-def timestamp():
-    seconds = time.time() + OFFSET + 2208988800
-    whole = int(seconds)
-    return struct.pack("!II", whole, int((seconds - whole) * 2**32))
-
-
-class NTP(socketserver.BaseRequestHandler):
-    def handle(self):
-        packet, connection = self.request
-        if len(packet) < 48 or packet[0] & 7 != 3:
-            return
-        # A stratum-1 reply with the client's transmit timestamp echoed as origin.
-        reply = bytearray(48)
-        reply[:4] = bytes((0x1c, 1, 6, 0xec))
-        reply[12:16] = b"LOCL"
-        reply[16:24] = timestamp()
-        reply[24:32] = packet[40:48]
-        reply[32:40] = timestamp()
-        reply[40:48] = timestamp()
-        connection.sendto(reply, self.client_address)
-        self.server.replied.set()
 
 
 def root(guest):

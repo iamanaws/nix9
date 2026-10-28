@@ -321,13 +321,27 @@ Enable `services.webfs` as described below to start it with these pins and
 replace its policy namespace when refreshing into a different generation.
 Restart a manually started webfs yourself to use new pins.
 
-The first switch installs wrappers for `/rc/bin/termrc.local` and
-`/rc/lib/rcmain.local`. Existing scripts are retained with a `.nix9-original`
-suffix and run before the managed hook. Later switches reject edited or removed
-wrappers. Terminal boot sets the hostname and retains the booted generation at
-`system-boot`; terminal and login activation expose the managed environment.
-This version targets terminal systems. CPU-server startup,
-general service management, kernel builds and disk configuration are separate work.
+The first switch installs wrappers for `/rc/bin/termrc.local`,
+`/rc/bin/cpurc.local` and `/rc/lib/rcmain.local`. Existing scripts are retained
+with a `.nix9-original` suffix and run before the managed hook. Later switches reject edited or removed
+wrappers or missing backups. Terminal and CPU-server boot set the hostname and
+retain the booted generation at `system-boot`; boot and login activation expose
+the managed environment. General service management, authentication and listener
+configuration, kernel builds and disk configuration are separate work.
+
+On a machine already configured for native CPU startup (`service=cpu` and CPU
+init), the CPU hook applies the same packages, files, pins, networking, logging
+and webfs configuration. It preserves the original local hook and native
+`/cfg/$sysname/cpurc` and `cpustart` scripts. Native listener and authentication
+startup continue using the machine's existing configuration. Nix9 does not change
+`plan9.ini` or convert a terminal into a CPU server.
+
+CPU init's console shell is not a login shell and can have a separate namespace
+from startup services. Source `/usr/local/pkg/nix9/system` there to activate the
+selection. New login shells activate it automatically. Existing service processes
+retain their namespaces across switches; reboot applies the selected generation
+to startup services. With the current bootstrap, selecting an older retained
+generation without a CPU hook uses the stable loader bundled with `nix9-rebuild`.
 
 `rollback` selects the previous retained generation and applies its hostname;
 refresh the session afterward. Use `nix9-rebuild delete NUMBER` to release an
@@ -345,7 +359,7 @@ continue using the complete-release workflow above to update Nix itself.
 
 ### System networking
 
-`networking.enable = true` configures `/net/ether0` with DHCP at terminal boot,
+`networking.enable = true` configures `/net/ether0` with DHCP at terminal or CPU boot,
 including native lease renewal, the offered gateway and DNS servers. Networking
 is unmanaged by default. `networking.interface` selects another Ethernet device,
 such as `ether1`. One primary interface is supported.
@@ -382,17 +396,17 @@ the configuration.
 Network changes take effect after reboot, including rollback. `switch` and
 sourcing `/usr/local/pkg/nix9/system` leave the running interfaces and resolver
 alone. Boot applies the network before activating the session namespace, so
-other terminal processes inherit the connection and DNS services. Remove
+subsequent startup processes inherit the connection and DNS services. Remove
 conflicting manual interface setup from startup scripts before enabling this;
 starting `cs` or `dns` before the managed boot hook causes a visible networking
-error. Startup errors are printed on the console and terminal boot continues.
+error. Startup errors are printed on the console and native boot continues.
 Disabling managed networking returns the next boot to native 9front startup;
 it does not promise an offline machine.
 
 ### Clock synchronization
 
-`services.timesync.enable = true` configures native `aux/timesync` at terminal
-boot. The default managed source is the hardware RTC, interpreted as UTC:
+`services.timesync.enable = true` configures native `aux/timesync` at terminal or
+CPU boot. The default managed source is the hardware RTC, interpreted as UTC:
 
 ```nix
 services.timesync = {
@@ -421,7 +435,14 @@ script provides the connection and resolver.
 Native NTP synchronization also updates a writable hardware RTC in UTC.
 
 The boot hook sets `TIMESYNCARGS`; native `/rc/bin/termrc` starts the client after
-network setup and skips it if a timesync process already exists. Remove manual
+network setup and skips it if a timesync process already exists. CPU startup
+does not read that variable, so the CPU hook starts the client with those
+arguments after managed boot activation. The native CPU script's later process
+check prevents a second client. This also honors clock settings from older
+retained generations. For prompt NTP synchronization on CPU servers, enable
+managed networking or provide the connection and resolver in the preserved
+local hook. Networking configured later by native CPU startup can make the
+first NTP sample fail until the client retries. Remove manual
 timesync invocations and conflicting `TIMESYNCARGS` assignments from other startup
 scripts so the selected settings are used.
 The client does not enable an NTP listener. Clock changes take effect after
@@ -429,9 +450,9 @@ reboot, including rollback. Switching generations, login and session refresh do
 not start or replace this machine-wide service.
 
 Clock synchronization is unmanaged by default. Disabling it returns the next boot
-to native 9front startup, which normally synchronizes against a local-time RTC;
-it does not stop synchronization. Generations predating this option also retain
-their native startup behavior.
+to native 9front startup: normally a local-time RTC on terminals and NTP on CPU
+servers; it does not stop synchronization. Generations predating this option also
+retain their native startup behavior.
 
 ### Native logging
 
@@ -458,7 +479,7 @@ strings with owner write permission; the default is `0640`. All declared logs
 are append-only. Existing owners and groups are preserved, so the startup user
 must have permission to set their modes and write to them.
 
-Selection and terminal boot prepare the files; boot does this before managed
+Selection and terminal or CPU boot prepare the files; boot does this before managed
 networking and native service startup. New files are created exclusively with
 their declared permissions and append flag. Existing contents are never truncated.
 Directories, exclusive-use files, temporary files and other special entries are

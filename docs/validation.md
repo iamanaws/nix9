@@ -38,7 +38,17 @@ generated files and webfs pins. It checks activation before selection, invalid
 configuration and failed-update rejection, preservation of terminal and login
 hooks, edited-hook rejection, generation reuse, offline terminal boots and
 logins, rollback and GC retention of the booted generation. It does not cover
-CPU-server startup or abrupt power loss while installing hooks or selecting a profile.
+abrupt power loss while installing hooks or selecting a profile.
+`native-cpu-tests` boots the native CPU init five times with harness networking
+disabled. A key-free NVRAM fixture supplies a test hostowner without interactive
+prompts. Native `cpustart` captures the boot namespace to check packages, hostname,
+files, webfs and HTTP access. The suite checks DHCP and static IPv4, RTC and local
+NTP clock correction, logging, fresh login activation, one clock client across
+switches, rollback after reboot, and a retained generation without a CPU template.
+Original local hooks and native machine startup scripts must be preserved; edited
+or removed CPU hooks and missing backups are rejected. Disabling clock management
+restores native CPU NTP startup against the local fixture. Authentication and
+remote CPU login are outside this suite. Run it with `nix build .#native-cpu-tests`.
 `native-network-tests` boots four times with the harness's interface setup
 disabled. It checks DHCP defaults, an explicit DNS override despite an offered
 DHCP resolver, static IPv4, both loopbacks, preservation of `/lib/ndb/local`,
