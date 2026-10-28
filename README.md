@@ -57,6 +57,8 @@ nix-shell default.nix --run 'mk && ./6.out'
 
 The result is `hello from nix9`. See [native development](docs/development.md#native-nix)
 for package builds, environment updates and rollback.
+The optional [Go bootstrap](docs/development.md#native-go) adds a Go toolchain
+that rebuilds inside 9front and builds command packages with vendored dependencies.
 The disk persists. Later, run only `run-vm` and source `/usr/local/pkg/nix9/activate` again.
 Keep `result-vm` to retain the backing image. Run `fshalt` before stopping QEMU
 with Ctrl-C. The host HTTP server can stop after installation.

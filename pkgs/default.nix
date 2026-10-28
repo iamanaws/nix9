@@ -61,7 +61,9 @@ pkgs.lib.makeScope pkgs.newScope (
     buildTools = cross.build-tools;
     nativeTools = callPackage ./native-packages/tools.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
+    nativeGoBootstrap = nativeBootstrap.override { nativePackageSet = nativeGoPackageSet; };
     hello = callPackage ./hello-plan9 { };
+    goBootstrap = callPackage ./go/bootstrap.nix { };
     cTools = callPackage ./goken9cc {
       source = goken9cc;
       inherit (pkgs) stdenv;
@@ -80,7 +82,11 @@ pkgs.lib.makeScope pkgs.newScope (
     };
     mkGuestEnvironment = import ../lib/mk-guest-environment.nix { inherit pkgs; };
     nativeNix = callPackage ./nix/package.nix { };
-    nativePackageSet = callPackage ./native-packages/package.nix { };
+    nativePackageSet = callPackage ./native-packages/package.nix { goBootstrap = null; };
+    nativeGoPackageSet = nativePackageSet.override {
+      inherit goBootstrap;
+      goSource = pkgs.fetchurl (import ./go/source.nix).src;
+    };
     nativePackagesArchive = mkGuestPackage {
       name = "native-packages";
       package = nativePackageSet;
@@ -120,6 +126,7 @@ pkgs.lib.makeScope pkgs.newScope (
       inherit (sources) sysroot;
       default = hello;
       hello-plan9 = hello;
+      go-bootstrap = goBootstrap;
       hello-c-cross = helloCross;
       native-tools = nativeTools;
       nix-util = nixUtil;
@@ -132,6 +139,7 @@ pkgs.lib.makeScope pkgs.newScope (
       native-packages = nativePackagesArchive;
       native-package-source = nativePackageSource;
       native-bootstrap = nativeBootstrap;
+      native-go-bootstrap = nativeGoBootstrap;
       goken9cc = cTools;
       vm-image = vm;
       setup-vm = setup;

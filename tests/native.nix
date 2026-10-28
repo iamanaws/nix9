@@ -7,6 +7,7 @@
   libmach,
   mk,
   nativeBootstrap,
+  nativeGoBootstrap,
   nativePackageSource,
   nativePackagesArchive,
   nixPackage,
@@ -18,6 +19,18 @@
   vmTest,
 }:
 {
+  native-go-tests = vmTest "native-go-tests" {
+    script = ./native_go.py;
+    files = [
+      ./go.nix
+      ./go
+      ./go-vendor
+      ./artifacts.py
+    ];
+    args = ''
+      ${nativeGoBootstrap} "$out"
+    '';
+  };
   webfs-tests = vmTest "webfs-tests" {
     script = ./webfs.py;
     files = [

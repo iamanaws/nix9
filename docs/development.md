@@ -260,6 +260,75 @@ Use `nix-native-tests` for native packages and shells, `nix-core-tests` for libr
 and commands, or `nix-store-tests` for transfers and caches. Store tests reuse the
 native suite's exported closure. `nix-util-tests` runs all three.
 
+### Native Go
+
+The optional Go bootstrap includes pinned Go 1.26.7 sources and a cross-built
+seed compiler. The usual `native-bootstrap` stays focused on C development.
+Build the Go archive on Linux and install it using the same steps as the
+README quick start, substituting this archive:
+
+```sh
+nix build .#native-go-bootstrap -o result-native-go-bootstrap
+```
+
+If a complete release is already selected, first upgrade it with
+`/usr/local/pkg/nix9/release.nix` and `nix-profile`, as described above.
+Unpacking a bootstrap archive preserves the existing release selection.
+
+Activate that installation in the guest, then rebuild Go through native Nix:
+
+```rc
+. /usr/local/pkg/nix9/activate
+roots=/usr/local/nix/state/gcroots
+nix-build $nix9/packages -A go --out-link $roots/go
+go=`{cat $roots/go}^/bin/go
+$go version
+```
+
+The compiler and tools build inside 9front using the upstream `make.rc` script.
+Local source and seed archives are imported with fixed-output hashes, so
+evaluation does not need to hash their contents on every invocation.
+The resulting toolchain has no runtime reference to the seed compiler.
+Build caches and temporary files live in the build directory. Automatic toolchain
+downloads, module proxies and checksum-service lookups are disabled.
+Use a VM with 4 GiB of memory for the native build and tests.
+Upstream tests that start local HTTP servers also need loopback interfaces:
+
+```rc
+ip/ipconfig -P loopback /dev/null 127.1
+ip/ipconfig -P loopback /dev/null ::1
+```
+
+The Go package set provides `buildGoModule` for command packages. For a project
+with a `go.mod`, use:
+
+```nix
+let
+  pkgs = import <nix9>;
+in
+pkgs.buildGoModule {
+  pname = "my-command";
+  version = "1";
+  src = ./.;
+  # vendor = ./prepared-vendor;
+}
+```
+
+Dependencies must already be vendored in `src/vendor`, or supplied as a prepared
+directory through `vendor`. The helper builds with `-mod=vendor`, runs `go test`
+and installs commands into `$out/bin`. `subPackages` defaults to `[ "." ]`;
+set it to paths such as `[ "./cmd/my-command" ]` for larger projects.
+Normal phase hooks and overrides remain available. Set `doCheck = false` to
+skip package tests.
+
+For a development shell, use `pkgs.mkShell { nativeBuildInputs = [ pkgs.go ]; }`
+and set `GOCACHE` to a writable directory. Go's Plan 9 port does not support
+cgo. Go HTTPS applications use `/sys/lib/tls/ca.pem` for CA certificates;
+webfs certificate pins configure Nix downloads separately.
+`native-go-tests` covers bootstrap compilation, the native rebuild, selected
+standard-library tests, package builds, development shells, signed substitution,
+seed collection and compilation after an offline reboot.
+
 ### Trust HTTPS servers
 
 The Nix package and complete releases include a rebuilt `webfs` with explicit

@@ -36,6 +36,13 @@ a C project and tests environment updates and rollback after GC.
 `native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
 and checks offline rebuilding and rollback after GC.
 `native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.
+`native-go-tests` uses the optional Go bootstrap in a 4 GiB VM. It checks the seed
+compiler inside a Nix build, rejects a wrong local archive hash, rebuilds Go 1.26.7
+natively, then collects the seed.
+Package tests exercise Unicode, files and subprocesses. Selected upstream
+standard-library tests, a rebuild comparison, development shells, signed cache
+substitution and compilation after an offline reboot use the rebuilt compiler.
+These checks do not cover the full upstream Go suite or cgo.
 Evaluator fetch tests cover file and archive hashes, relative imports, executable
 bits, malformed archives, path confinement, pure evaluation and offline reuse.
 The builds and tests work with the Nix sandbox enabled.

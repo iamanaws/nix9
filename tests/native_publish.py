@@ -63,9 +63,10 @@ with tempfile.TemporaryDirectory() as directory:
         try:
             # All package compilation happens natively. The host only collects the cache.
             with boot(qemu, image) as guest:
-                guest.child.timeout = 300
+                guest.child.timeout = 900
                 guest.command(f"hget -o /tmp/bootstrap.tar http://10.0.2.2:{server.server_port}/bootstrap.tar")
                 guest.command("cd / && tar xf /tmp/bootstrap.tar")
+                guest.child.timeout = 300
                 guest.command(". /usr/local/pkg/nix9/activate")
                 roots = "/usr/local/nix/state/gcroots"
                 guest.command(f"nix-build $nix9/environment.nix --out-link {roots}/environment")

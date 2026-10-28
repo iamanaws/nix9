@@ -22,6 +22,9 @@ files and directories; links and duplicate files are rejected.
 Flakes and `builtins.fetchGit` remain unported.
 
 See the [toolchains](development.md#toolchains) used for cross-builds.
+The optional [Go bootstrap](development.md#native-go) rebuilds the Go toolchain
+inside 9front and supports native command packages with vendored dependencies.
+Nix itself and its C++ dependencies still cross-compile on Linux.
 
 ## Audit
 

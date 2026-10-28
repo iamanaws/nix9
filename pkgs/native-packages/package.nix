@@ -4,7 +4,10 @@
   nativeTools,
   sources,
   packageDefinitions,
+  goBootstrap ? null,
+  goSource ? null,
 }:
+assert (goBootstrap == null) == (goSource == null);
 let
   copy = destination: source: ''cp -r ${source} "$out/${destination}"'';
   files = {
@@ -16,7 +19,16 @@ let
     "pkgs/fetchgit" = ../fetchgit;
     "profile" = ../../lib/profile.rc;
     "bin/nix-profile" = ../../lib/nix-profile.rc;
-  };
+  }
+  // (lib.optionalAttrs (goBootstrap != null) {
+    "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";
+    "go-bootstrap.sha256" = runCommand "go-bootstrap.sha256" { } ''
+      sha256sum ${goBootstrap}/go-bootstrap.tar.gz | cut -d ' ' -f1 > "$out"
+    '';
+    "sources/go.tar.gz" = goSource;
+    "pkgs/go" = ../go;
+    "build-go-module.nix" = ../../lib/build-go-module.nix;
+  });
 in
 runCommand "native-packages" { } ''
   mkdir -p "$out/pkgs" "$out/bin" "$out/sources"
