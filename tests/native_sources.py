@@ -11,6 +11,7 @@ import subprocess
 import threading
 
 from lua import EXPECTED
+from tls import trust_certificate
 
 
 @contextmanager
@@ -18,7 +19,7 @@ def source_server(root, archive):
     shutil.copyfile(archive, root / "lua-5.4.8.tar.gz")
     for name in ("sources.nix", "isolation.nix", "lua/check.lua", "lua/fixture.lua"):
         shutil.copyfile(Path(__file__).parent / name, root / Path(name).name)
-    # Deliberately untrusted and for a different host: webfs currently accepts it.
+    # The guest explicitly trusts this disposable server's certificate.
     key, cert = root / "key.pem", root / "cert.pem"
     subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
                     "-keyout", str(key), "-out", str(cert), "-days", "1",
@@ -38,7 +39,8 @@ def source_server(root, archive):
             thread.join()
 
 
-def check_sources(guest, packages, http_port, tls_port):
+def check_sources(guest, packages, http_port, tls_port, certificate):
+    trust_certificate(guest, certificate)
     base = f"http://10.0.2.2:{http_port}"
     guest.command("mkdir /tmp/lua")
     guest.command(f"hget -o /tmp/sources.nix {base}/sources.nix")
@@ -94,5 +96,5 @@ def check_sources(guest, packages, http_port, tls_port):
         raise RuntimeError(f"HTTPS did not reach hash verification: {result}")
     guest.command("badOut=`{nix-store -q --outputs $badDrv}; test ! -e $badOut")
     return {"package": package, "library": library, "https": "passed", "archive-build": "passed",
-            "lua-checks": len(EXPECTED), "certificate-validation": "unsupported (untrusted, wrong host accepted)",
+            "lua-checks": len(EXPECTED), "certificate-validation": "host-pinned SHA-256 certificate",
             "https-hash-mismatch": "passed", "toolchain-isolation": "passed"}

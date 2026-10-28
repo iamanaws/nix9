@@ -57,6 +57,7 @@ rec {
     files = [
       ./native_fetch.py
       ./eval_fetch.py
+      ./tls.py
       ./eval_tarball.py
       ./native_sources.py
       ./native_fortune.py
@@ -109,7 +110,10 @@ rec {
   };
   nix-fetch-tests = vmTest "nix-fetch-tests" {
     script = ./eval_fetch.py;
-    files = [ ./eval_tarball.py ];
+    files = [
+      ./eval_tarball.py
+      ./tls.py
+    ];
     nativeBuildInputs = [
       pkgs.nix
       pkgs.openssl
@@ -126,6 +130,7 @@ rec {
       ./native_cache.py
       ./native_cache_network.py
       ./native_cache_http.py
+      ./tls.py
       ./artifacts.py
     ];
     nativeBuildInputs = [ pkgs.nix ];

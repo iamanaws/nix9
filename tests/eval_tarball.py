@@ -6,6 +6,8 @@ import re
 import subprocess
 import tarfile
 
+from tls import reject_certificates
+
 
 def tree_hash(path):
     return subprocess.check_output([
@@ -84,6 +86,9 @@ def check_eval_tarball(guest, root, base, secure):
     guest.command("nix-store --realise --add-root /usr/local/nix/state/gcroots/eval-tree $tarballTree")
     guest.command("evalTarball -A answer", "42")
     guest.command("$tarballTree/bin/hello", "archive-PASS")
+    reject_certificates(guest, root / "cert.pem",
+        f"tarballUrl='{secure}/project.tar.gz?tls=@CASE@'; "
+        "evalTarball --argstr name tls-tree-@CASE@ -A path")
     for url, name in ((base + "/project.tar", "plain-tree"), (base + "/project.tar.xz", "xz-tree"),
                       (base + "/flat.tar", "flat-tree"), (base + "/implicit.tar", "implicit-tree"),
                       (secure + "/project.tar.gz", "https-tree")):

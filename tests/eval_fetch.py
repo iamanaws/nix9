@@ -16,6 +16,7 @@ import threading
 
 from eval_tarball import check_eval_tarball, check_large_tarball
 from guest import boot
+from tls import trust_certificate, reject_certificates
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -57,6 +58,7 @@ def check_eval_fetch(guest, root, *, large=False):
             base = f"http://10.0.2.2:{plain.server_port}"
             guest.command(f"hget -o /tmp/eval-fetch.nix {base}/eval-fetch.nix")
             guest.command("previousEvalCache=$XDG_CACHE_HOME; XDG_CACHE_HOME=/tmp/nix9-eval-fetch-cache")
+            trust_certificate(guest, root / "cert.pem")
             guest.command("webfs -m /mnt/web -T 5000")
             guest.command("fn evalFetch { nix-instantiate --eval --strict --json --argstr url $fetchUrl /tmp/eval-fetch.nix $* }")
             guest.command(f"fetchHash='sha256-{digest}'")
@@ -78,6 +80,12 @@ def check_eval_fetch(guest, root, *, large=False):
             guest.command("pinnedFetch --argstr name redirect.nix -A answer", "42")
             if "/redirect" not in plain.requests:
                 raise RuntimeError("redirect was not fetched")
+            guest.command(f"fetchUrl=https://10.0.2.2:{secure.server_port}/eval-source.nix")
+            reject_certificates(guest, root / "cert.pem",
+                f"fetchUrl='https://10.0.2.2:{secure.server_port}/eval-source.nix?tls=@CASE@'; "
+                "pinnedFetch --argstr name tls-file-@CASE@.nix -A path")
+            if any("tls=" in path for path in secure.requests):
+                raise RuntimeError("rejected TLS file fetch sent an HTTP request")
             guest.command(f"fetchUrl=https://10.0.2.2:{secure.server_port}/eval-source.nix")
             guest.command("pinnedFetch --argstr name https.nix -A answer", "42")
             for endpoint, name, options, reason in (

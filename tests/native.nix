@@ -23,6 +23,8 @@
     files = [
       ./webfs.nix
       ./eval_fetch.py
+      ./tls.py
+      ./webfs_tls.py
       ./eval_tarball.py
       ./native_cache.py
       ./native_cache_http.py

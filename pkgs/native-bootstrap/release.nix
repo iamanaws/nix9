@@ -29,6 +29,7 @@ pkgs.stdenv.mkDerivation {
         "nix-build"
         "nix-shell"
         "nix-profile"
+        "webfs"
       ]
     )}
     tar cf /fd/1 . | @{ cd $out; tar xf /fd/0 }

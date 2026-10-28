@@ -3,6 +3,7 @@
   python3,
   llvmPackages,
   nixUtil,
+  webfs,
 }:
 runCommand "nix-${nixUtil.version}-9front"
   {
@@ -19,5 +20,6 @@ runCommand "nix-${nixUtil.version}-9front"
       chmod +x "$out/bin/$command"
     done
     cp ${./shell.rc} "$out/bin/nix-shell"
+    cp ${webfs}/bin/webfs "$out/bin/webfs"
     chmod +x "$out/bin/nix-shell"
   ''

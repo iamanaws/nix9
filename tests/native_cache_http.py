@@ -7,6 +7,8 @@ import re
 import ssl
 import threading
 
+from tls import trust_certificate, reject_certificates
+
 
 class CacheHandler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
@@ -17,6 +19,7 @@ class CacheHandler(http.server.SimpleHTTPRequestHandler):
         return str(path)
 
     def do_GET(self):
+        self.server.requests.append(self.path)
         path = self.path.split("?", 1)[0]
         if path.startswith("/server-error/"):
             self.send_error(503)
@@ -45,6 +48,8 @@ def check_http_cache(guest, root, *, program="lua", arguments="-e 'print(6 * 7)'
         context.load_cert_chain(root / "cert.pem", root / "key.pem")
         tls.socket = context.wrap_socket(tls.socket, server_side=True)
         threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (server, tls)]
+        server.requests = []
+        tls.requests = []
         for thread in threads:
             thread.start()
         try:
@@ -52,6 +57,7 @@ def check_http_cache(guest, root, *, program="lua", arguments="-e 'print(6 * 7)'
             key = (root / "cache.pub").read_text().strip()
             guest.command("previousCache=$cache")
             guest.command(f"key='{key}'")
+            trust_certificate(guest, root / "cert.pem")
             guest.command("webfs -m /mnt/web -T 60000")
             guest.command("fn cached { nix-store --option substituters $cache --option trusted-public-keys $key $* }")
             for variant, reason in (("bad-signature", "not signed"), ("bad-content", "hash mismatch"),
@@ -81,6 +87,10 @@ def check_http_cache(guest, root, *, program="lua", arguments="-e 'print(6 * 7)'
             guest.command("nix-store --verify-path $package $library")
             guest.command("rm /usr/local/nix/state/gcroots/http-cache; nix-store --gc")
             guest.command(f"cache='https://10.0.2.2:{tls.server_port}/cache?store=/usr/local/nix/store'")
+            reject_certificates(guest, root / "cert.pem", "cached --realise $package")
+            if tls.requests:
+                raise RuntimeError("rejected TLS cache request reached the HTTP server")
+            guest.command("test ! -e $package && test ! -e $library")
             guest.command("cached --realise $package --add-root /usr/local/nix/state/gcroots/http-cache")
             guest.command("nix-store --verify-path $package $library")
         finally:

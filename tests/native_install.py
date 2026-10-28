@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as directory:
                 fortune = check_fortune(guest, qemu, image, root, archive, prefix, packages)
                 crypto = check_crypto(guest, packages, server.server_port)
                 fetching = check_fetch(guest, packages, server.server_port)
-                sources = check_sources(guest, packages, server.server_port, tls_port)
+                sources = check_sources(guest, packages, server.server_port, tls_port, root / "cert.pem")
                 evaluator_fetching = check_eval_fetch(guest, root)
                 environments = check_environments(guest, packages, server.server_port)
                 closure = export_closure(guest, sources["package"], server.server_port)

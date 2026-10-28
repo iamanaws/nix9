@@ -260,6 +260,52 @@ Use `nix-native-tests` for native packages and shells, `nix-core-tests` for libr
 and commands, or `nix-store-tests` for transfers and caches. Store tests reuse the
 native suite's exported closure. `nix-util-tests` runs all three.
 
+### Trust HTTPS servers
+
+The Nix package and complete releases include a rebuilt `webfs` with explicit
+host-bound certificate trust. Before fetching HTTPS sources or using an HTTPS
+cache, configure `/sys/lib/tls/webfs`. Obtain the server's leaf certificate through
+a trusted channel and compute its SHA-256 fingerprint over the DER certificate.
+For a PEM certificate on Linux, run from `nix develop`:
+
+```sh
+openssl x509 -in server.pem -outform DER | openssl dgst -sha256
+```
+
+On 9front, substitute that 64-digit hex fingerprint below:
+
+```rc
+mkdir -p /sys/lib/tls/webfs/hosts
+if(! test -e /sys/lib/tls/webfs/revoked) echo -n > /sys/lib/tls/webfs/revoked
+echo 'x509 sha256=FINGERPRINT' >> /sys/lib/tls/webfs/hosts/example.org
+webfs -m /mnt/web -T 60000
+```
+
+Retain existing revocations when adding hosts. Host filenames use lowercase
+ASCII/IDNA names or IP literals, without a port or trailing dot. Pins apply to
+all ports for that host.
+Each non-comment line is `x509 sha256=` followed by 64 hex digits. Several pins
+can be listed for certificate rotation. Revoke a certificate by adding the same
+record to `revoked`; revocation takes precedence for every host. Keep these files
+writable only by the person managing trust.
+
+The pin binds the exact leaf certificate to the host named by the file. This
+policy does not use CA chains, certificate subject names or validity dates.
+Trust files use the native thumbprint record format with SHA-256 certificate
+hashes; SHA-1, SPKI pins and `#include` records are not accepted. Each file is
+limited to 64 KiB. Missing, unreadable or malformed policy files reject HTTPS.
+An empty host file also rejects that host. HTTP downloads need no TLS policy.
+
+Webfs reads the policy on connection establishment and before pooled connections
+are reused. A redirect to another HTTPS host requires that host's own pin;
+HTTPS-to-HTTP redirects are rejected. `webfs -t /absolute/policy` selects a
+different directory for a mounted service. Native `fetchurl` and `fetchgit`
+builders use the default directory. Remount with the bundled `webfs` after
+upgrading an older installation that already has `/mnt/web` mounted.
+Nix checks the `tls-pins sha256-cert-v1` control message before HTTP or HTTPS
+downloads and rejects a legacy webfs mount. HTTP requests require the same
+transport because they can redirect to HTTPS.
+
 For a trusted transfer between machines using the same store path, export the
 package and its dependencies, then import the file on the destination:
 
@@ -277,8 +323,9 @@ dependencies and verifies their signatures and content hashes. The cache path ca
 read-only 9P mount. HTTP(S) caches use the same settings with a URL such as
 `https://cache.example?store=/usr/local/nix/store`. First mount webfs with
 `webfs -m /mnt/web -T 60000`. Network caches are read-only; webfs controls the
-transport and does not validate server certificates. The bootstrap archive configures
-its bundled file cache.
+transport and uses the [host trust policy](#trust-https-servers) above. Cache
+signatures and content hashes are checked in addition to the TLS pin. The
+bootstrap archive configures its bundled file cache.
 With other store clients stopped, `nix-store --verify --check-contents` checks the
 store and removes registrations for missing, unreferenced paths.
 Under the same restriction, `nix-store --repair-path PATH` restores a path

@@ -60,6 +60,13 @@ static FileTransferResult transfer(const FileTransferRequest &request, Sink *sin
         if ((size_t) written != text.size())
             throw FileTransferError(FileTransfer::Misc, std::nullopt, "short write to webfs control file");
     };
+    // An existing /mnt/web may still be the image's unauthenticated service.
+    // Require the policy for HTTP too, since an HTTP URL can redirect to HTTPS.
+    try {
+        command("tls-pins sha256-cert-v1");
+    } catch (const FileTransferError &) {
+        throw Error("mounted webfs lacks the required TLS pin policy; remount bundled webfs on /mnt/web");
+    }
     command("url " + request.uri.to_string());
     if (request.method == HttpMethod::Head) command("request HEAD");
     AutoCloseFD body(open((connection + "/body").c_str(), O_RDONLY | O_CLOEXEC));

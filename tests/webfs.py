@@ -15,6 +15,7 @@ from eval_fetch import check_eval_fetch
 from guest import boot
 from native_cache import cache_fixture
 from native_cache_http import check_http_cache
+from webfs_tls import check_tls, check_legacy_transport
 
 
 def store_path(guest, command):
@@ -48,6 +49,7 @@ with tempfile.TemporaryDirectory() as directory:
         fixtures.mkdir()
         for name in ("cert.pem", "key.pem"):
             shutil.copyfile(root / name, fixtures / name)
+    (root / "legacy.nix").write_text("42\n")
     with ArtifactServer(root, root / "outputs.tar") as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -56,8 +58,10 @@ with tempfile.TemporaryDirectory() as directory:
             with boot(qemu, image) as guest:
                 guest.child.timeout = 900
                 install_nix(guest, base, prefix)
+                legacy = check_legacy_transport(guest, base)
                 guest.command(f"hget -o /tmp/cross-webfs {base}/cross-webfs")
-                guest.command("chmod +x /tmp/cross-webfs; bind /tmp/cross-webfs /bin/webfs")
+                guest.command(f"chmod +x /tmp/cross-webfs; bind /tmp/cross-webfs /bin/webfs; bind /tmp/cross-webfs {prefix}/bin/webfs")
+                cross_tls = check_tls(guest, root / "cross")
                 cross_result = check_eval_fetch(guest, root / "cross")
                 guest.command("rm -rf /tmp/nix9-archive-temp /tmp/nix9-eval-fetch-cache /tmp/nix9-eval-fetch-empty-cache")
                 guest.command(f"cd / && hget {base}/packages.tar | tar x")
@@ -72,7 +76,8 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command(f"hget -r 'Content-Length: '^$size -P {base}/outputs.tar < /tmp/outputs.tar")
                 if not server.received.is_set():
                     raise RuntimeError("guest did not upload its webfs build and cache fixture")
-                guest.command("bind /tmp/native-webfs /bin/webfs")
+                guest.command(f"bind /tmp/native-webfs /bin/webfs; bind /tmp/native-webfs {prefix}/bin/webfs; cmp /tmp/native-webfs {prefix}/bin/webfs")
+                native_tls = check_tls(guest, root / "native", packages=packages)
                 native_result = check_eval_fetch(guest, root / "native")
             with tarfile.open(root / "outputs.tar") as archive_file:
                 archive_file.extractall(root, filter="data")
@@ -81,7 +86,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.child.timeout = 300
                 install_nix(guest, base, prefix)
                 guest.command(f"hget -o /tmp/native-webfs {base}/native-webfs")
-                guest.command("chmod +x /tmp/native-webfs; bind /tmp/native-webfs /bin/webfs")
+                guest.command(f"chmod +x /tmp/native-webfs; bind /tmp/native-webfs /bin/webfs; bind /tmp/native-webfs {prefix}/bin/webfs")
                 guest.command(f"package={package}; library={library}")
                 http = check_http_cache(guest, root, program="answer", arguments="")
         finally:
@@ -90,4 +95,6 @@ with tempfile.TemporaryDirectory() as directory:
 Path(output).mkdir()
 Path(output, "results.json").write_text(json.dumps({
     "cross": cross_result, "native": native_result, "cache": http,
+    "cross-tls": cross_tls, "native-tls": native_tls,
+    "legacy-transport": legacy,
 }, indent=2) + "\n")

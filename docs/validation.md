@@ -22,6 +22,14 @@ Tests check exit status and expected results, set timeouts, and discard VM
 snapshot changes. Transfers use host loopback. The two-VM cache test forwards
 one loopback-only port for read-only 9P and checks reuse after the server stops.
 HTTP(S) cache tests check signatures, damaged downloads, redirects and repair.
+`webfs-tests` builds the transport on Linux and inside 9front. Both builds check
+host-bound certificate pins, unknown and wrong hosts, live revocation and pin
+removal on pooled connections, redirect trust, HTTPS downgrade rejection and
+malformed or missing policy files. Nix file/archive fetches, native `fetchurl`
+and HTTPS cache substitution reject untrusted and revoked certificates.
+Proxy tests authenticate HTTPS proxies and destination servers independently,
+including revocation on reused tunnels.
+Legacy image webfs mounts are rejected before Nix sends HTTP or HTTPS requests.
 The `native-bootstrap-tests` target checks the signed cache in a clean VM, then builds
 a C project and tests environment updates and rollback after GC.
 `native-release-tests` checks complete release selection, offline reboots and rollback.

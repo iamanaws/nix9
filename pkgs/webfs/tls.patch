@@ -1,0 +1,261 @@
+--- a/dat.h
++++ b/dat.h
+@@ -67,6 +67,7 @@
+ int	debug;
+ Url	*proxy;
+ int	timeout;
++char	*tlstrustdir;
+ char	*whitespace;
+ 
+ enum {
+--- a/fns.h
++++ b/fns.h
+@@ -39,6 +39,8 @@
+ void	buflushreq(Buq *q, Req *r);
+ 
+ /* http */
++char *tlshostname(char *name);
++int tlstrust(char *host, uchar *hash);
+ int authenticate(Url *u, Url *ru, char *method, char *s);
+ void flushauth(Url *u, char *t);
+ void http(char *m, Url *u, Key *shdr, Buq *qbody, Buq *qpost, Buq *qerror);
+--- a/fs.c
++++ b/fs.c
+@@ -632,6 +632,12 @@
+ 	if(debug)
+ 		fprint(2, "clientctl: %q %q\n", ctl, arg);
+ 
++	if(!strcmp(ctl, "tls-pins")){
++		if(strcmp(arg, "sha256-cert-v1"))
++			return "unsupported TLS pin policy";
++		return nil;
++	}
++
+ 	if(!strcmp(ctl, "url")){
+ 		if((u = saneurl(url(arg, cl->baseurl))) == nil)
+ 			return "bad url";
+@@ -788,7 +794,7 @@
+ void
+ usage(void)
+ {
+-	fprint(2, "usage: %s [-Dd] [-A useragent] [-T timeout] [-m mtpt] [-s service]\n", argv0);
++	fprint(2, "usage: %s [-Dd] [-A useragent] [-T timeout] [-m mtpt] [-s service] [-t trustdir]\n", argv0);
+ 	exits("usage");
+ }
+ 
+@@ -809,6 +815,7 @@
+ 	user = getuser();
+ 	time0 = time(0);
+ 	timeout = 10000;
++	tlstrustdir = "/sys/lib/tls/webfs";
+ 
+ 	ARGBEGIN {
+ 	case 'D':
+@@ -824,6 +831,11 @@
+ 		break;
+ 	case 'm':
+ 		mtpt = EARGF(usage());
++		break;
++	case 't':
++		tlstrustdir = EARGF(usage());
++		if(tlstrustdir[0] != '/')
++			usage();
+ 		break;
+ 	case 's':
+ 		service = EARGF(usage());
+--- a/http.c
++++ b/http.c
+@@ -27,8 +27,11 @@
+ 	int	cancel;
+ 	int	tunnel;
+ 	int	len;
+-	char	addr[128];
++	char	*addr;
+ 	char	buf[IOUNIT+2];
++	int	ntls;
++	char	*tlshost[2];
++	uchar	tlshash[2][SHA2_256dlen];
+ };
+ 
+ struct Hpool
+@@ -73,18 +76,47 @@
+ }
+ 
+ static int
+-tlswrap(int fd, char *servername)
++tlswrap(int fd, char *servername, Hconn *h)
+ {
+ 	TLSconn conn;
++	char error[ERRMAX], *host;
++	uchar hash[SHA2_256dlen];
++	int tlsfd;
+ 
+ 	memset(&conn, 0, sizeof(conn));
++	host = tlshostname(servername);
++	if(host == nil)
++		goto Bad;
++	if(h->ntls >= nelem(h->tlshost)){
++		werrstr("too many TLS peers");
++		goto Bad;
++	}
+ 	if(debug)
+ 		conn.trace = tlstrace;
+-	if(servername != nil)
+-		conn.serverName = smprint("%N", servername);
+-	if((fd = tlsClient(fd, &conn)) < 0){
++	conn.serverName = estrdup(host);
++	if((tlsfd = tlsClient(fd, &conn)) < 0){
+ 		if(debug) fprint(2, "tlsClient: %r\n");
+-	}
++		goto Bad;
++	}
++	fd = tlsfd;
++	if(conn.cert == nil || conn.certlen <= 0){
++		werrstr("TLS server %s supplied no certificate", host);
++		goto Bad;
++	}
++	sha2_256(conn.cert, conn.certlen, hash, nil);
++	if(tlstrust(host, hash) < 0)
++		goto Bad;
++	h->tlshost[h->ntls] = host;
++	memmove(h->tlshash[h->ntls++], hash, sizeof(hash));
++	host = nil;
++	goto Out;
++Bad:
++	rerrstr(error, sizeof(error));
++	close(fd);
++	fd = -1;
++	werrstr("%s", error);
++Out:
++	free(host);
+ 	free(conn.cert);
+ 	free(conn.sessionID);
+ 	free(conn.serverName);
+@@ -94,22 +126,36 @@
+ static Hconn*
+ hdial(Url *u, int cached)
+ {
+-	char addr[128];
++	char addr[512], *origin;
+ 	Hconn *h, *p;
+-	int fd, ctl;
+-
++	int fd, ctl, i;
++	char error[ERRMAX];
++
++	origin = smprint("%s!%s!%s", u->scheme, u->host, u->port ? u->port : u->scheme);
++	if(origin == nil)
++		return nil;
+ 	snprint(addr, sizeof(addr), "tcp!%s!%s", u->host, u->port ? u->port : u->scheme);
+ 
+ 	qlock(&hpool);
+ 	if(cached){
+ 		for(p = nil, h = hpool.head; h; p = h, h = h->next){
+-			if(strcmp(h->addr, addr) == 0){
++			if(strcmp(h->addr, origin) == 0){
+ 				if(p)
+ 					p->next = h->next;
+ 				else
+ 					hpool.head = h->next;
+ 				h->next = nil;
+ 				qunlock(&hpool);
++				free(origin);
++				for(i = 0; i < h->ntls; i++){
++					if(tlstrust(h->tlshost[i], h->tlshash[i]) < 0){
++						rerrstr(error, sizeof(error));
++						h->keep = 0;
++						hclose(h);
++						werrstr("%s", error);
++						return nil;
++					}
++				}
+ 				return h;
+ 			}
+ 		}
+@@ -124,22 +170,36 @@
+ 		snprint(addr, sizeof(addr), "tcp!%s!%s",
+ 			proxy->host, proxy->port ? proxy->port : proxy->scheme);
+ 
+-	if((fd = dial(addr, 0, 0, &ctl)) < 0)
++	if((fd = dial(addr, 0, 0, &ctl)) < 0){
++		rerrstr(error, sizeof(error));
++		qlock(&hpool);
++		hpool.active--;
++		qunlock(&hpool);
++		free(origin);
++		werrstr("%s", error);
+ 		return nil;
+-
++	}
++
++	h = emalloc(sizeof(*h));
+ 	if(proxy){
+ 		if(strcmp(proxy->scheme, "https") == 0)
+-			fd = tlswrap(fd, proxy->host);
++			fd = tlswrap(fd, proxy->host, h);
+ 	} else {
+ 		if(strcmp(u->scheme, "https") == 0)
+-			fd = tlswrap(fd, u->host);
++			fd = tlswrap(fd, u->host, h);
+ 	}
+ 	if(fd < 0){
++		rerrstr(error, sizeof(error));
+ 		close(ctl);
++		free(h);
++		free(origin);
++		qlock(&hpool);
++		hpool.active--;
++		qunlock(&hpool);
++		werrstr("%s", error);
+ 		return nil;
+ 	}
+ 
+-	h = emalloc(sizeof(*h));
+ 	h->next = nil;
+ 	h->time = 0;
+ 	h->cancel = 0;
+@@ -153,7 +213,7 @@
+ 		h->tunnel = strcmp(u->scheme, "https") == 0;
+ 		snprint(addr, sizeof(addr), "tcp!%s!%s", u->host, u->port ? u->port : u->scheme);
+ 	}
+-	nstrcpy(h->addr, addr, sizeof(h->addr));
++	h->addr = origin;
+ 
+ 	return h;
+ }
+@@ -257,6 +317,9 @@
+ 		close(h->ctl);
+ 	if(h->fd >= 0)
+ 		close(h->fd);
++	for(i = 0; i < h->ntls; i++)
++		free(h->tlshost[i]);
++	free(h->addr);
+ 	free(h);
+ }
+ 
+@@ -911,6 +974,11 @@
+ 				goto Error;
+ 			if((nu = saneurl(url(x, u))) == nil)
+ 				goto Error;
++			if(strcmp(u->scheme, "https") == 0 && strcmp(nu->scheme, "https") != 0){
++				freeurl(nu);
++				werrstr("HTTPS redirect downgrade refused");
++				goto Autherror;
++			}
+ 			freeurl(u);
+ 			u = nu;
+ 		if(0){
+@@ -992,7 +1060,7 @@
+ 		 * then the proxy server has established the connection.
+ 		 */
+ 		if(h->tunnel && !retry && (i/100) == 2){
+-			if((h->fd = tlswrap(h->fd, host)) < 0)
++			if((h->fd = tlswrap(h->fd, host, h)) < 0)
+ 				break;
+ 
+ 			/* proceed to the original request */
+--- a/mkfile
++++ b/mkfile
+@@ -6 +6 @@
+-OFILES=sub.$O url.$O buq.$O http.$O fs.$O
++OFILES=sub.$O url.$O buq.$O tls.$O http.$O fs.$O

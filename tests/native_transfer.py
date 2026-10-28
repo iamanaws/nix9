@@ -20,10 +20,11 @@ def store_paths(output):
 
 
 def check_transfer(qemu, image, root, archive, prefix, sources, expected):
-    # Install only the static store CLI, without the package set or sources.
+    # Install the store CLI and its authenticated HTTPS transport.
     with tarfile.open(archive) as package:
-        binary = package.extractfile(prefix.lstrip("/") + "/bin/nix-store")
-        (root / "nix-store").write_bytes(binary.read())
+        for name in ("nix-store", "webfs"):
+            binary = package.extractfile(prefix.lstrip("/") + "/bin/" + name)
+            (root / name).write_bytes(binary.read())
     data = (root / "closure.export").read_bytes()
     (root / "truncated.export").write_bytes(data[:64])
     cache_fixture(root)
@@ -40,9 +41,9 @@ def check_transfer(qemu, image, root, archive, prefix, sources, expected):
             with boot(qemu, disk, snapshot=False) as guest:
                 guest.child.timeout = 300
                 base = f"http://10.0.2.2:{server.server_port}"
-                for name in ("nix-store", "store-probe", "closure.export", "truncated.export", "cache.tar"):
+                for name in ("nix-store", "webfs", "store-probe", "closure.export", "truncated.export", "cache.tar"):
                     guest.command(f"hget -o /tmp/{name} {base}/{name}")
-                guest.command("chmod +x /tmp/nix-store /tmp/store-probe; path=(/tmp $path)")
+                guest.command("chmod +x /tmp/nix-store /tmp/webfs /tmp/store-probe; path=(/tmp $path)")
                 guest.command("NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'")
                 guest.command("test ! -e /usr/local/nix/store")
                 result = guest.command("nix-store --import < /tmp/truncated.export; echo IMPORT-STATUS:$status")

@@ -23,6 +23,7 @@ def selected(guest, release, version, previous=None):
     guest.command("echo $NIX_CONF_DIR", release)
     guest.command("nix-instantiate --eval --expr '(import <nix9>).releaseTest or \"one\"'", f'"{version}"')
     guest.command("whatis nix-instantiate", release + "/bin/nix-instantiate")
+    guest.command("whatis webfs", release + "/bin/webfs")
     if previous and previous + "/bin" in guest.command("echo $path"):
         raise RuntimeError("previous release remains in the command path")
 

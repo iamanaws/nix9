@@ -13,6 +13,7 @@ each local patch unnecessary. Destinations without a linked PR are proposals.
 | [Platform support](../pkgs/nix/patches/9front.patch), [evaluator guards](../pkgs/nix/patches/eval-fetch.patch) and [Meson](../pkgs/nix/patches/meson.patch) | Native locks, notes, store integration, build support and unsupported-feature guards. Portable header fixes merged in [#16582](https://github.com/NixOS/nix/pull/16582). | The pinned Nix includes the header fixes. Other changes need equivalent upstream platform support. |
 | [Store](../pkgs/nix/store-platform.cc), [build](../pkgs/nix/build-platform.cc) and [webfs](../pkgs/nix/filetransfer-platform.cc) backends | Native roots, builder processes and cache downloads. Candidates for Nix platform support. | Upstream supports these operations. |
 | [goken9cc](../pkgs/goken9cc) | Plan 9 C compiler and archive fixes. Candidates for goken9cc. | A pinned compiler passes the ABI and archive tests without them. |
+| [webfs](../pkgs/webfs) | Host-bound certificate pins, live revocation, connection origin separation and HTTPS downgrade rejection. Candidate for 9front. | The pinned webfs enforces an equivalent trust policy and passes the native and cross transport tests. |
 
 The cc9 build uses a custom target ABI rather than a Nixpkgs cross stdenv.
 NixBSD provides a reference for future system integration. The regression tests

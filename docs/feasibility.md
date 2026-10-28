@@ -11,10 +11,12 @@ with a 9front process backend. They support input-addressed outputs and flat or
 recursive fixed outputs, without sandboxing or a diverted store. Partial rebuilds
 preserve valid outputs. Nix discards fixed outputs whose hashes do not match. The evaluator uses upstream's
 no-GC mode for short-lived runs. Native `fetchurl` uses 9front's `webfs` and verifies
-the content hash. Its HTTPS transport does not validate server certificates.
-Content integrity relies on the pinned hash. Signed `file://` and read-only HTTP(S)
-caches support native substitution and repair. Network caches use mounted webfs
-with the same TLS limitation. `builtins.fetchurl` and `builtins.fetchTarball`
+the content hash. The bundled webfs authenticates HTTPS with host-specific SHA-256
+certificate pins and checks revocations before reusing connections. HTTPS redirects
+cannot downgrade to HTTP. Trust is configured explicitly; CA chains and certificate
+dates are not checked. Signed `file://` and read-only HTTP(S)
+caches support native substitution and repair through the same transport.
+`builtins.fetchurl` and `builtins.fetchTarball`
 download evaluator inputs. Archives unpack to temporary files and support regular
 files and directories; links and duplicate files are rejected.
 Flakes and `builtins.fetchGit` remain unported.

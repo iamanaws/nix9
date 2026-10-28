@@ -60,6 +60,7 @@
           packages = [
             pkgs.go
             pkgs.qemu
+            pkgs.openssl
             project.python
             pkgs.nixfmt-tree
           ];

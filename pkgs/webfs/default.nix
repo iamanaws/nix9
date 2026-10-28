@@ -10,6 +10,10 @@
 stdenv.mkDerivation {
   name = "webfs";
   inherit src;
+  patches = [ ./tls.patch ];
+  postPatch = ''
+    cp ${./tls.c} tls.c
+  '';
   buildInputs = [
     lib9p
     libauth

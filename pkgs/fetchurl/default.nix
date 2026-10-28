@@ -13,6 +13,7 @@ mkDerivation {
     $tools/bin/webfs -m /mnt/web -T 60000
     <>/mnt/web/clone {
       connection = /mnt/web/^`{$tools/bin/sed 1q}
+      $tools/bin/echo -n tls-pins sha256-cert-v1 >[1=0]
       $tools/bin/echo -n url $url >[1=0]
       $tools/bin/cat $connection/body >$out
     }
