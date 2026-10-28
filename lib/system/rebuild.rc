@@ -113,4 +113,6 @@ nix-profile $root set $target
 changing=0
 echo 'Selected system:' $target
 echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
+if(test -f $target/network || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/network })
+  echo 'Network changes take effect after reboot.'
 exit ''

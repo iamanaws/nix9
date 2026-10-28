@@ -39,6 +39,17 @@ configuration and failed-update rejection, preservation of terminal and login
 hooks, edited-hook rejection, generation reuse, offline terminal boots and
 logins, rollback and GC retention of the booted generation. It does not cover
 CPU-server startup or abrupt power loss while installing hooks or selecting a profile.
+`native-network-tests` boots four times with the harness's interface setup
+disabled. It checks DHCP defaults, an explicit DNS override despite an offered
+DHCP resolver, static IPv4, both loopbacks, preservation of `/lib/ndb/local`,
+native `/net/ndb` records and DNS resolution through a local authoritative test
+server. HTTP downloads use a QEMU guest forwarding address outside the static
+guest's subnet, exercising its default gateway without public network access.
+Switching and rollback leave the running network intact; reboot restores the
+selected configuration. Invalid networking configurations must fail without
+changing the selected generation. These tests cover one Ethernet interface,
+not external IPv6 or DHCP renewal across lease expiration. Run it with
+`nix build .#native-network-tests`.
 `native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
 and checks offline rebuilding and rollback after GC.
 `native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.

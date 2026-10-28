@@ -52,10 +52,14 @@ class SerialLog:
 
 
 @contextlib.contextmanager
-def boot(qemu, disk, *, snapshot=True, forward_port=None, memory="2G", prompt=r"(?m)^term% "):
+def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
+         memory="2G", prompt=r"(?m)^term% ", configure_network=True):
     network = "user"
     if forward_port is not None:
         network += f",hostfwd=tcp:127.0.0.1:{forward_port}-:17010"
+    if guest_forward is not None:
+        address, port, host_port = guest_forward
+        network += f",guestfwd=tcp:{address}:{port}-tcp:127.0.0.1:{host_port}"
     child = pexpect.spawn(
         qemu,
         [
@@ -76,7 +80,8 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, memory="2G", prompt=r"
         child.sendline("")
         child.expect(prompt)
         guest = Guest(child, prompt)
-        guest.command("ip/ipconfig ether /net/ether0")
+        if configure_network:
+            guest.command("ip/ipconfig ether /net/ether0")
         yield guest
         if not guest.crashed:
             child.sendline("fshalt")

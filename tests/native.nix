@@ -19,6 +19,13 @@
   vmTest,
 }:
 {
+  native-network-tests = vmTest "native-network-tests" {
+    script = ./native_network.py;
+    files = [ ./networks.nix ];
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-system-tests = vmTest "native-system-tests" {
     script = ./native_system.py;
     files = [ ./systems.nix ];

@@ -272,6 +272,7 @@ let
 in
 pkgs.mkSystem {
   hostName = "nix9";
+  networking.enable = true;
   packages = [ pkgs.fortune ];
   files."motd" = "Welcome to nix9.\n";
   # webfs.certificatePins."example.org" = [ "64 hexadecimal SHA-256 digits" ];
@@ -322,7 +323,7 @@ The first switch installs wrappers for `/rc/bin/termrc.local` and
 suffix and run before the managed hook. Later switches reject edited or removed
 wrappers. Terminal boot sets the hostname and retains the booted generation at
 `system-boot`; terminal and login activation expose the managed environment.
-This first version targets terminal systems. CPU-server startup, networking,
+This version targets terminal systems. CPU-server startup,
 service management, kernel builds and disk configuration are separate work.
 
 `rollback` selects the previous retained generation and applies its hostname;
@@ -338,6 +339,52 @@ running. Abrupt power loss during the first hook installation or profile writes
 is not covered by the update checks.
 System configuration and Nix release selection have separate profiles:
 continue using the complete-release workflow above to update Nix itself.
+
+### System networking
+
+`networking.enable = true` configures `/net/ether0` with DHCP at terminal boot,
+including native lease renewal, the offered gateway and DNS servers. Networking
+is unmanaged by default. `networking.interface` selects another Ethernet device,
+such as `ether1`. One primary interface is supported.
+
+For static IPv4, replace the DHCP configuration with:
+
+```nix
+networking = {
+  enable = true;
+  useDHCP = false;
+  address = "192.168.1.42";
+  prefixLength = 24;
+  defaultGateway = "192.168.1.1";
+  nameservers = [ "192.168.1.1" ];
+};
+```
+
+Static configuration requires an address and an integer prefix length from 1 to
+32; the gateway is optional for a local network. DHCP cannot be combined with
+an address or prefix. IPv4 addresses use decimal octets without leading zeros.
+Ethernet addresses and gateways exclude loopback, unspecified and multicast
+ranges. DNS servers may use IPv4 loopback. External IPv6 configuration is not
+provided yet.
+
+Enabled networking also configures `127.0.0.1` and `::1`, then starts native
+`ndb/cs` and `ndb/dns -r`. `ipconfig` writes the primary address, mask, gateway
+and DHCP information to `/net/ndb`; `/lib/ndb/local` is preserved. Explicit
+`nameservers` override DHCP DNS through the resolver's `DNSSERVER` environment
+setting, including after lease renewal. DHCP metadata in `/net/ndb` still records
+the offered servers. An empty list uses the native NDB/DHCP settings. The managed
+resolver clears inherited `DNSSERVER` and `DOTSERVER` settings before applying
+the configuration.
+
+Network changes take effect after reboot, including rollback. `switch` and
+sourcing `/usr/local/pkg/nix9/system` leave the running interfaces and resolver
+alone. Boot applies the network before activating the session namespace, so
+other terminal processes inherit the connection and DNS services. Remove
+conflicting manual interface setup from startup scripts before enabling this;
+starting `cs` or `dns` before the managed boot hook causes a visible networking
+error. Startup errors are printed on the console and terminal boot continues.
+Disabling managed networking returns the next boot to native 9front startup;
+it does not promise an offline machine.
 
 ### Native Go
 
