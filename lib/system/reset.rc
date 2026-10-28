@@ -1,0 +1,14 @@
+# A native newns keeps the environment after replacing its mounts.
+fn webfs
+nix9System=()
+nix9EnvironmentActive=()
+nix9EnvironmentPaths=()
+nix9EnvironmentFileTargets=()
+nix9EnvironmentFileRoot=()
+nix9BasePath=()
+nix9BasePATH=()
+nix9WebfsSystem=()
+nix9WebfsRuntime=()
+nix9WebfsId=()
+nix9WebfsStop=()
+nix9SystemCheck=()

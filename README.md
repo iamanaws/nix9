@@ -50,7 +50,7 @@ and a C development example.
 | [Native Nix](docs/native.md) | Builds, environments, updates, releases and store maintenance. |
 | [Package development](docs/development.md) | Toolchains, recipes, development shells and native Go. |
 | [System configuration](docs/configuration.md) | Machine settings, switching, rollback and boot hooks. |
-| [Services](docs/services.md) | Ethernet, clock synchronization, logging, webfs and CPU TCP scripts. |
+| [Services](docs/services.md) | Ethernet, clock synchronization, logging, webfs and remote CPU access. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
 | [Limitations](docs/feasibility.md) | Port constraints and missing features. |

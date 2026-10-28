@@ -108,6 +108,19 @@ def unavailable(guest, port, number):
         pass
 
 
+def listening(guest, number):
+    # QEMU accepts host forwards before the asynchronous native listener has
+    # announced its guest port. Wait for kernel state, not a host-side accept.
+    deadline = time.monotonic() + 15
+    while True:
+        table = guest.command("netstat -n")
+        if re.search(r"(?m)^tcp\s+[0-9]+\s+\S+\s+Listen\s+" + str(number) + r"\s", table):
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"native listener did not announce port {number}: {table}")
+        time.sleep(0.2)
+
+
 def native(guest, selected, manual_port):
     guest.command(f"cat {SYSTEM}-boot", selected)
     guest.command(". /usr/local/pkg/nix9/system")
@@ -115,6 +128,7 @@ def native(guest, selected, manual_port):
     guest.command(f"cmp {SERVICE}/tcp17011 /tmp/manual-service")
     guest.command(f"cmp {SERVICE}/tcp17011.namespace /tmp/manual-namespace")
     guest.command(f"test ! -e {SERVICE}/tcp17010 && test ! -e {SERVICE}/tcp17012")
+    listening(guest, 17011)
     with connect(manual_port) as connection:
         if response(connection) != ["MANUAL-SERVICE", "none", "MANUAL-NAMESPACE", "LISTEN-END"]:
             raise RuntimeError("manual service or its namespace changed")
@@ -272,6 +286,7 @@ with ExitStack() as stack:
     with boot(qemu, disk, **options) as guest:
         guest.command(f"cat {SYSTEM}-boot", one)
         guest.command(". /usr/local/pkg/nix9/system")
+        listening(guest, 17010)
         with connect(main_port) as connection:
             if response(connection) != ["LATE-MANUAL", "LISTEN-END"]:
                 raise RuntimeError("startup overwrote a manual service added after selection")

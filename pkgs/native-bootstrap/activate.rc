@@ -1,3 +1,18 @@
+# Discard inherited activation state only when newns has removed the system's
+# file bind. An ordinary refresh must still check ownership of managed webfs.
+if(~ $#nix9System 1 && ! @{
+	rfork e
+	fn identity {
+		/$cputype/bin/ls -qld $1 | /$cputype/bin/awk '{print $1 ":" $5 ":" $6}'
+	}
+	previous=`{identity $nix9System/files}
+	mounted=`{identity /cfg/nix9/files}
+	~ $#previous 1 && ~ $#mounted 1 && ~ $previous $mounted
+}) {
+	. $nix9Next/packages/system/reset.rc
+	path=(/bin .)
+	PATH=/bin
+}
 fn nix9KeepPath {
 	for(directory in $*) {
 		if(~ $#nix9 0) echo $directory

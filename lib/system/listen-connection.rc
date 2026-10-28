@@ -1,19 +1,8 @@
 # newns rebuilt /bin and /mnt, but retained the boot environment. Discard its
 # activation markers before creating this connection's private generation view.
+. $nix9ListenConnectionSystem/services/reset.rc
 path=(/$cputype/bin /rc/bin)
-fn webfs
-nix9System=()
-nix9EnvironmentActive=()
-nix9EnvironmentPaths=()
-nix9EnvironmentFileTargets=()
-nix9EnvironmentFileRoot=()
-nix9BasePath=()
-nix9BasePATH=()
-nix9WebfsSystem=()
-nix9WebfsRuntime=()
-nix9WebfsId=()
-nix9WebfsStop=()
-nix9SystemCheck=()
+PATH=/$cputype/bin^:/rc/bin
 if(! ~ $#nix9ListenRuntime 1) exit 'missing TCP service runtime'
 . $nix9ListenRuntime/activate
 nix9NextSystem=$nix9ListenConnectionSystem

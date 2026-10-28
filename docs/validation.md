@@ -35,6 +35,7 @@ with the Nix sandbox enabled.
 | `native-reproducibility-tests` | Toolchain NAR comparison across two clean VMs without substitution. |
 | `native-system-tests` | Configuration validation, activation preflight, hook preservation and edit rejection, generation reuse, terminal boot, login, rollback and boot roots. |
 | `native-cpu-tests` | Native CPU init, startup namespace, DHCP/static IPv4, clock correction, logging, login, hook checks and older generations. |
+| `native-rcpu-tests` | Two-VM dp9ik/authsrv tickets and TLS, client source export, native C build, rejected credentials, persistent sessions, switch, rollback and reboot. |
 | `native-listen-tests` | Real TCP connections as `none`, booted-generation namespaces, manual services and namespaces, directory fallback, conflicts, persistent connections, EOF with webfs, removed ports, disable and rollback. |
 | `native-network-tests` | DHCP, DNS override, static IPv4, loopbacks, native NDB, gateway routing, reboot and rollback. Harness networking is disabled. |
 | `native-services-tests` | Webfs startup, idempotence, HTTP/HTTPS, pin changes, session isolation, disable and boot without manual setup. |
@@ -48,8 +49,7 @@ with the Nix sandbox enabled.
 Compiler tests use image libraries as native baselines; cross and development
 builds use rebuilt libraries where configured.
 
-CPU fixtures use key-free NVRAM and do not test authentication or remote CPU
-login. Go checks omit the full upstream suite and cgo. See
+Go checks omit the full upstream suite and cgo. See
 [verification limits](feasibility.md#verification-limits) for other gaps.
 Test implementations live in [tests](../tests).
 

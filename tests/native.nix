@@ -19,6 +19,17 @@
   vmTest,
 }:
 {
+  native-rcpu-tests = vmTest "native-rcpu-tests" {
+    script = ./native_rcpu.py;
+    files = [
+      ./rcpu.nix
+      ./rcpu-project
+    ];
+    env.NIX9_RCPU_TEST_STATE = "rcpu-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-listen-tests = vmTest "native-listen-tests" {
     script = ./native_listen.py;
     files = [ ./listen.nix ];

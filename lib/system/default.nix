@@ -132,6 +132,7 @@ else
       ${if network == "" then "" else write "network" network}
       ${write "profile" (builtins.readFile ./profile.rc)}
       ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
+      ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
       ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
       ${if timesync == "" then "" else write "services/timesync.rc" timesync}
       ${

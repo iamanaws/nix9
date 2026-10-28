@@ -1,0 +1,56 @@
+let
+  pkgs = import <nix9>;
+  fixture = import ./rcpu-fixture.nix;
+  command =
+    version:
+    pkgs.mkDerivation {
+      name = "rcpu-command-${version}";
+      buildCommand = ''
+        mkdir -p $out/bin
+        echo '#!/bin/rc
+        echo ${version}' > $out/bin/rcpu-choice
+        echo '#!/bin/rc -e
+        echo RCPU-BEGIN
+        echo $user
+        echo `{cat /dev/sysname}
+        echo $service
+        rcpu-choice
+        cat /cfg/nix9/files/version
+        echo $nix9System
+        echo $nix9WebfsSystem
+        cat /sys/lib/tls/webfs/hosts/rcpu.invalid
+        hget http://10.0.2.2:${toString fixture.port}/payload
+        echo RCPU-END' > $out/bin/rcpu-snapshot
+        echo '#!/bin/rc -e
+        while() {
+          request=`{read}
+          if(~ $#request 0 || ~ $request quit) exit
+          if(~ $request snapshot) rcpu-snapshot
+        }' > $out/bin/rcpu-session
+        chmod 755 $out/bin/*
+      '';
+    };
+  system =
+    version: pin:
+    pkgs.mkSystem {
+      hostName = "nix9-rcpu";
+      packages = [ (command version) ];
+      files.version = "${version}\n";
+      webfs.certificatePins."rcpu.invalid" = [ pin ];
+      networking.enable = true;
+      logging.enable = true;
+      logging.files.auth.mode = "0660";
+      services = {
+        timesync.enable = true;
+        webfs.enable = true;
+        listen = {
+          enable = true;
+          tcp."17010" = "echo RCPU-LISTENER-COEXISTENCE\n";
+        };
+      };
+    };
+in
+{
+  one = system "one" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  two = system "two" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+}

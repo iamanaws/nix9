@@ -139,6 +139,27 @@ Disabling webfs or selecting a generation predating services removes the
 session's managed overlay and reveals inherited manual mounts. Servers in other
 namespaces keep running.
 
+## Remote CPU login
+
+Use 9front's native service and authentication configuration on an
+[existing CPU server](configuration.md#boot-integration). Keep `tcp17019` in
+the active service directory and provision credentials through NVRAM, factotum
+and the authentication server. Keep credentials outside the Nix store.
+See `auth(8)` and `factotum(4)` for provisioning.
+
+Native `rcpu` authenticates through factotum and encrypts the connection with TLS.
+From a 9front client with its key loaded:
+
+```rc
+rcpu -u USER -h HOST
+rcpu -u USER -h HOST -c 'nix-build $nix9/hello'
+```
+
+The login hook activates Nix and the selected system before your profile.
+Use the Nix store owner's account to build packages.
+See [generation activation](configuration.md#generations) for switching,
+rollback and existing sessions.
+
 ## CPU TCP services
 
 On CPU servers, `services.listen` adds rc scripts to native `aux/listen`:
@@ -171,4 +192,4 @@ Existing and new connections keep using the booted generation until reboot.
 The next CPU boot applies scripts and removes omitted ports. To disable, set
 `enable = false` and remove `tcp` declarations. Older generations use the native
 service set; terminal boots do not start these listeners.
-Authenticated remote CPU login and standalone daemon management are not provided.
+Standalone daemon management is not provided.
