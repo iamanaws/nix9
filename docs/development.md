@@ -389,6 +389,50 @@ error. Startup errors are printed on the console and terminal boot continues.
 Disabling managed networking returns the next boot to native 9front startup;
 it does not promise an offline machine.
 
+### Clock synchronization
+
+`services.timesync.enable = true` configures native `aux/timesync` at terminal
+boot. The default managed source is the hardware RTC, interpreted as UTC:
+
+```nix
+services.timesync = {
+  enable = true;
+  source = "rtc";
+  rtcLocalTime = false;
+};
+```
+
+Set `rtcLocalTime = true` for an RTC that stores local time. This uses 9front's
+existing timezone setting. To synchronize against an explicit NTP server instead:
+
+```nix
+services.timesync = {
+  enable = true;
+  source = "ntp";
+  server = "time.example.org";
+};
+```
+
+`server` accepts a DNS hostname or unicast IPv4 address. `port` defaults to 123
+and accepts an integer from 1 to 65535. NTP requires an explicit server;
+`rtcLocalTime` is only meaningful with the RTC source, and the RTC source rejects
+an NTP server or nondefault port. Managed networking is optional if another boot
+script provides the connection and resolver.
+Native NTP synchronization also updates a writable hardware RTC in UTC.
+
+The boot hook sets `TIMESYNCARGS`; native `/rc/bin/termrc` starts the client after
+network setup and skips it if a timesync process already exists. Remove manual
+timesync invocations and conflicting `TIMESYNCARGS` assignments from other startup
+scripts so the selected settings are used.
+The client does not enable an NTP listener. Clock changes take effect after
+reboot, including rollback. Switching generations, login and session refresh do
+not start or replace this machine-wide service.
+
+Clock synchronization is unmanaged by default. Disabling it returns the next boot
+to native 9front startup, which normally synchronizes against a local-time RTC;
+it does not stop synchronization. Generations predating this option also retain
+their native startup behavior.
+
 ### Managed webfs
 
 `services.webfs.enable = true` starts the bootstrap's bundled `webfs` after

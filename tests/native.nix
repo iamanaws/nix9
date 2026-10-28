@@ -19,6 +19,14 @@
   vmTest,
 }:
 {
+  native-timesync-tests = vmTest "native-timesync-tests" {
+    script = ./native_timesync.py;
+    files = [ ./timesync.nix ];
+    env.NIX9_TIMESYNC_TEST_STATE = "timesync-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-services-tests = vmTest "native-services-tests" {
     script = ./native_services.py;
     files = [

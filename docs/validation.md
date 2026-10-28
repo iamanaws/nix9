@@ -57,6 +57,13 @@ services. Two subsequent boots fetch without manual interface or service setup.
 The VM uses a headless terminal profile in place of rio; its bare webfs invocation
 also checks compatibility with glenda's startup behavior. All HTTP and TLS servers
 run on host loopback. Run it with `nix build .#native-services-tests`.
+`native-timesync-tests` boots RTC UTC, NTP, RTC local-time and unmanaged
+configurations. A host-loopback UDP NTP fixture supplies a clock two minutes ahead;
+the guest must contact it and correct its clock. The suite checks exactly one
+timesync process, no service replacement during switching or login, rollback on
+reboot, restoration of native startup when management is disabled, and rejection
+of invalid settings. It does not use a public time server. Run it with
+`nix build .#native-timesync-tests`.
 `native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
 and checks offline rebuilding and rollback after GC.
 `native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.

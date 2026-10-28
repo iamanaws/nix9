@@ -4,6 +4,7 @@
     sysname=`{cat $nix9SelectedSystem/hostName}
     echo -n $sysname > /dev/sysname && {
       if(test -f $nix9SelectedSystem/network) . $nix9SelectedSystem/network
+      if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
       . $nix9SelectedSystem/profile
     }
   }
