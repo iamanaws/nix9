@@ -1,120 +1,70 @@
-# Test coverage
+# Tests
 
-The suites run on Linux with KVM and 9front release 11952. `flake.lock` pins
-the inputs. Compiler patches are in
-[pkgs/goken9cc](../pkgs/goken9cc).
+Tests run on x86_64 Linux with KVM and the pinned 9front release 11952.
+Both your user and Nix builders need `/dev/kvm`. Cross-builds alone do not need it.
+Run commands from the checkout:
 
-- Compiler tests compare native, cross-compiled, and mixed objects. They check
-  arguments, callbacks, structures, floating point, and varargs.
-- Guest tests exercise installation, module lookup, file I/O, errors, and processes.
-  Native compiler baselines use the image's libraries. Cross and development
-  builds use rebuilt libraries where configured.
-- Library tests use known vectors and independent Python results for checksums,
-  compression, and arithmetic. Generator checks compare output with the guest.
-- Build checks cover executable format and archive handling. Native Nix tests
-  cover toolchain bootstrapping, derivation paths, dependency builds, fixed hashes,
-  multiple outputs, partial rebuilds and rebuild checks, cancellation cleanup,
-  profile generations, permanent roots and garbage collection.
-  Guest development tests build native and POSIX C, including Lua, with the
-  image's headers and libraries hidden.
+```sh
+nix flake show
+nix build .#native-listen-tests -o result-tests -L
+```
 
-Tests check exit status and expected results, set timeouts, and discard VM
-snapshot changes. Transfers use host loopback. The two-VM cache test forwards
-one loopback-only port for read-only 9P and checks reuse after the server stops.
-HTTP(S) cache tests check signatures, damaged downloads, redirects and repair.
-`webfs-tests` builds the transport on Linux and inside 9front. Both builds check
-host-bound certificate pins, unknown and wrong hosts, live revocation and pin
-removal on pooled connections, redirect trust, HTTPS downgrade rejection and
-malformed or missing policy files. Nix file/archive fetches, native `fetchurl`
-and HTTPS cache substitution reject untrusted and revoked certificates.
-Proxy tests authenticate HTTPS proxies and destination servers independently,
-including revocation on reused tunnels.
-Legacy image webfs mounts are rejected before Nix sends HTTP or HTTPS requests.
-The `native-bootstrap-tests` target checks the signed cache in a clean VM, then builds
-a C project and tests environment updates and rollback after GC.
-`native-release-tests` checks complete release selection, offline reboots and rollback.
-`native-system-tests` builds machine configurations with packages, hostname,
-generated files and webfs pins. It checks activation before selection, invalid
-configuration and failed-update rejection, preservation of terminal and login
-hooks, edited-hook rejection, generation reuse, offline terminal boots and
-logins, rollback and GC retention of the booted generation. It does not cover
-abrupt power loss while installing hooks or selecting a profile.
-`native-cpu-tests` boots the native CPU init five times with harness networking
-disabled. A key-free NVRAM fixture supplies a test hostowner without interactive
-prompts. Native `cpustart` captures the boot namespace to check packages, hostname,
-files, webfs and HTTP access. The suite checks DHCP and static IPv4, RTC and local
-NTP clock correction, logging, fresh login activation, one clock client across
-switches, rollback after reboot, and a retained generation without a CPU template.
-Original local hooks and native machine startup scripts must be preserved; edited
-or removed CPU hooks and missing backups are rejected. Disabling clock management
-restores native CPU NTP startup against the local fixture. Authentication and
-remote CPU login are outside this suite. Run it with `nix build .#native-cpu-tests`.
-`native-listen-tests` boots seven CPU configurations and connects through
-loopback-only QEMU TCP forwards. Managed scripts must run as `none`, receive
-native connection arguments, and use the booted generation's packages, files
-and webfs namespace. Manual services and their custom namespaces must continue
-working through the single native service-directory listener, including fallback
-to `/cfg/default/service`. The suite checks
-invalid declarations, manual file and namespace conflicts, native startup after
-a conflict added following selection, repeated activation,
-long-lived and fresh connections across selection and rollback, connection
-closure with managed webfs enabled, removed ports,
-disable, empty declarations and a retained generation without CPU hooks.
-It does not test authenticated remote CPU login. Run it with
-`nix build .#native-listen-tests`.
-`native-network-tests` boots four times with the harness's interface setup
-disabled. It checks DHCP defaults, an explicit DNS override despite an offered
-DHCP resolver, static IPv4, both loopbacks, preservation of `/lib/ndb/local`,
-native `/net/ndb` records and DNS resolution through a local authoritative test
-server. HTTP downloads use a QEMU guest forwarding address outside the static
-guest's subnet, exercising its default gateway without public network access.
-Switching and rollback leave the running network intact; reboot restores the
-selected configuration. Invalid networking configurations must fail without
-changing the selected generation. These tests cover one Ethernet interface,
-not external IPv6 or DHCP renewal across lease expiration. Run it with
-`nix build .#native-network-tests`.
-`native-services-tests` checks managed webfs activation, repeated activation and
-bare startup, HTTP/HTTPS and native Nix fetches, pin changes and rollback, login
-namespace isolation, disabling the overlay and selecting a generation predating
-services. Two subsequent boots fetch without manual interface or service setup.
-The VM uses a headless terminal profile in place of rio; its bare webfs invocation
-also checks compatibility with glenda's startup behavior. All HTTP and TLS servers
-run on host loopback. Run it with `nix build .#native-services-tests`.
-`native-timesync-tests` boots RTC UTC, NTP, RTC local-time and unmanaged
-configurations. A host-loopback UDP NTP fixture supplies a clock two minutes ahead;
-the guest must contact it and correct its clock. The suite checks exactly one
-timesync process, no service replacement during switching or login, rollback on
-reboot, restoration of native startup when management is disabled, and rejection
-of invalid settings. It does not use a public time server. Run it with
-`nix build .#native-timesync-tests`. NTP logging must record the correction in an
-append-only `/sys/log/timesync`, and its contents must survive rollback and reboot.
-`native-logging-tests` checks nontruncating preparation, append-only flags and
-declared permissions, preservation of existing and unmanaged files, preflight
-rejection of directories and special files without log mutations, and rejection
-of invalid names and modes. Successful selection and boot events must appear in
-order; failed selection and session refresh must not add events. Three subsequent
-boots check mode restoration, missing-file recreation, rollback without loss of
-history, and disabling management while retaining the files. Run it with
-`nix build .#native-logging-tests`.
-`native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
-and checks offline rebuilding and rollback after GC.
-`native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.
-`native-go-tests` uses the optional Go bootstrap in a 4 GiB VM. It checks the seed
-compiler inside a Nix build, rejects a wrong local archive hash, rebuilds Go 1.26.7
-natively, then collects the seed.
-Package tests exercise Unicode, files and subprocesses. Selected upstream
-standard-library tests, a rebuild comparison, development shells, signed cache
-substitution and compilation after an offline reboot use the rebuilt compiler.
-These checks do not cover the full upstream Go suite or cgo.
-Evaluator fetch tests cover file and archive hashes, relative imports, executable
-bits, malformed archives, path confinement, pure evaluation and offline reuse.
-The builds and tests work with the Nix sandbox enabled.
+Replace the target with a suite below, or `PACKAGE-tests` when available.
+Suites save JSON results under their output; most use `results.json`.
+Add `--rebuild` to rerun a cached suite. `nix flake check` checks Go executable
+format; it does not run the guest suites. Use `nix fmt` to format Nix files.
 
-The [native development benchmark](development.md#measure-native-development)
-uses a persistent disk on the output filesystem and checks project builds,
-source edits, ignored files, restoration of previous sources,
-environment upgrades, rollback and GC across offline reboots. It records timing
-samples separately from the reproducible test outputs.
+VM tests check exit status and expected results, enforce timeouts, and discard
+snapshot changes. Transfers and test servers use host loopback. Tests also run
+with the Nix sandbox enabled.
 
-See [development](development.md) for commands and saved results, and
-[toolchain limitations](feasibility.md) for scope.
+## Coverage
+
+| Target | Checks |
+| --- | --- |
+| `c-abi-tests`, `ape-tests` | Native, cross and mixed objects; arguments, callbacks, structures, floating point, varargs and POSIX behavior. |
+| `PACKAGE-tests` | Package behavior. Libraries use known vectors and independent Python results for hashes, compression and arithmetic. |
+| `package-tests`, `guest-development-tests` | Archive installation and native/APE C builds, including Lua, with image headers and libraries hidden. |
+| `nix-core-tests` | Nix libraries, commands, NARs, process handling and store primitives. |
+| `nix-native-tests` | Toolchain bootstrap, dependency builds, fixed hashes, multiple outputs, partial rebuilds, rebuild comparisons, cancellation, profiles, roots and GC. |
+| `nix-fetch-tests` | Evaluator file/archive hashes, relative imports, executable bits, malformed archives, path confinement, pure evaluation and offline reuse. |
+| `nix-store-tests` | Signed caches, transfers, repair and recovery. Includes two-VM read-only 9P reuse after the server stops, and HTTP(S) failure cases. |
+| `nix-util-tests` | Aggregates the four preceding Nix suites. |
+| `native-bootstrap-tests` | Signed cache installation in a clean VM, C development, environment updates and rollback after GC. |
+| `native-release-tests`, `native-update-tests` | Release and recipe updates, failed updates, offline rebuilding, reboot, rollback and GC retention. |
+| `native-reproducibility-tests` | Toolchain NAR comparison across two clean VMs without substitution. |
+| `native-system-tests` | Configuration validation, activation preflight, hook preservation and edit rejection, generation reuse, terminal boot, login, rollback and boot roots. |
+| `native-cpu-tests` | Native CPU init, startup namespace, DHCP/static IPv4, clock correction, logging, login, hook checks and older generations. |
+| `native-listen-tests` | Real TCP connections as `none`, booted-generation namespaces, manual services and namespaces, directory fallback, conflicts, persistent connections, EOF with webfs, removed ports, disable and rollback. |
+| `native-network-tests` | DHCP, DNS override, static IPv4, loopbacks, native NDB, gateway routing, reboot and rollback. Harness networking is disabled. |
+| `native-services-tests` | Webfs startup, idempotence, HTTP/HTTPS, pin changes, session isolation, disable and boot without manual setup. |
+| `native-timesync-tests` | RTC UTC/local time, NTP correction through a local fixture, one client, append-only correction logs, rollback and native startup restoration. |
+| `native-logging-tests` | File validation, nontruncating preparation, modes, event order, failed selection, reboot, rollback and retained history. |
+| `webfs-tests` | Cross and native transports, host-bound TLS pins, live revocation, pooled connections, redirects, downgrade rejection, proxy authentication and legacy-mount rejection. |
+| `native-go-tests` | Seed compilation, native Go rebuild, selected upstream tests, vendored packages, shells, signed substitution, seed GC and offline compilation. |
+| `native-shell-tests`, `native-patch-tests`, `native-ramfs-tests` | Shell inputs, patch phases and private ramfs sessions. |
+| `native-git-tests`, `native-clone-tests` | Pinned Git fetches and building from a native clone. |
+
+Compiler tests use image libraries as native baselines; cross and development
+builds use rebuilt libraries where configured.
+
+CPU fixtures use key-free NVRAM and do not test authentication or remote CPU
+login. Go checks omit the full upstream suite and cgo. See
+[verification limits](feasibility.md#verification-limits) for other gaps.
+Test implementations live in [tests](../tests).
+
+## Native development benchmark
+
+```sh
+nix run .#benchmark-native -- nix9-performance
+```
+
+Use a new directory on persistent storage for each run. The benchmark measures
+bootstrap transfer and extraction, evaluation, source import, first/cached builds
+and shells. It checks source edits, ignored files, restored-source reuse,
+environment updates, offline reboots, rollback and GC.
+
+A temporary VM disk lives on that filesystem and is removed on exit.
+`timings.json` retains completed measurements; `results.json` appears only after
+all checks pass. Stop other VM tests when comparing runs. Timing runs use an app
+rather than nondeterministic Nix build outputs.

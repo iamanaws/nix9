@@ -1,21 +1,22 @@
 # nix9
 
-nix9 brings Nix to Plan 9, with 9front as the tested system.
-Native `nix-build` builds packages, `nix-instantiate` evaluates expressions,
-and `nix-store` verifies outputs and manages the store. Packages can also cross-compile on Linux.
+Nix for Plan 9, tested on 9front. Build packages natively with `nix-build`,
+evaluate expressions with `nix-instantiate`, or cross-compile on Linux.
+Package environments and machine configurations support retained generations
+and rollback.
 
-The project explores a basic Nix interface built on Plan 9 mechanisms.
-
-This is experimental. Builds do not have a full sandbox, and the modern `nix`
-CLI and flakes are not available in the guest.
-See [test coverage](docs/validation.md) and [limitations](docs/feasibility.md).
+The port is experimental. Native builds have no full sandbox, and the modern
+`nix` CLI and flakes are unavailable in the guest.
 
 ## Quick start
 
-On x86_64 Linux with KVM and Nix flakes enabled, run from the checkout.
-Your user and Nix builders need access to `/dev/kvm`.
-Accept the flake's cache settings when prompted to use `nix9.cachix.org`.
-In one terminal, prepare the VM and serve the bootstrap archive:
+Use x86_64 Linux with Nix flakes enabled. Your user and Nix builders need access
+to `/dev/kvm`. Run host commands from the checkout.
+
+The flake includes `nix9.cachix.org` as an optional binary cache to save build time.
+A trusted cache can supply modified outputs, so only use it if you trust me.
+
+On the host, prepare the VM and serve the bootstrap:
 
 ```sh
 nix build .#vm-image -o result-vm
@@ -24,54 +25,33 @@ nix run .#setup-vm
 nix develop -c python -m http.server 8000 --bind 127.0.0.1
 ```
 
-Leave the server running. In another terminal, from the same checkout:
-
-```sh
-nix run .#run-vm
-```
-
-Press Enter at the boot arguments and user prompts. Wait for the `term%` shell.
-A missing-display message from `rio` is expected. Run inside the VM:
+Leave the server running. In another terminal, run `nix run .#run-vm`.
+Press Enter at the boot arguments and user prompts, then wait for `term%`.
+A missing-display message from `rio` is expected. In the guest:
 
 ```rc
 ip/ipconfig ether /net/ether0
 cd / && hget http://10.0.2.2:8000/result-native-bootstrap | tar x
 . /usr/local/pkg/nix9/activate
-roots=/usr/local/nix/state/gcroots
-nix-build $nix9/environment.nix --out-link $roots/environment
-environment=`{cat $roots/environment}
-. $environment/activate
-echo -n abc | sha1sum
+nix-build $nix9/packages -A fortune
+result=`{cat /usr/local/nix/state/gcroots/result}
+$result/bin/fortune
 ```
 
-The archive includes Nix, a pinned package set and a signed native cache.
-If Cachix has no copy, this step builds the native packages in a VM.
-Try a C project with the cached toolchain:
-
-```rc
-mkdir /tmp/hello
-cp $nix9/hello/* /tmp/hello
-cd /tmp/hello
-nix-shell default.nix --run 'mk && ./6.out'
-```
-
-The result is `hello from nix9`. See [native development](docs/development.md#native-nix)
-for package builds, environment updates and rollback.
-The optional [Go bootstrap](docs/development.md#native-go) adds a Go toolchain
-that rebuilds inside 9front and builds command packages with vendored dependencies.
-For machine configuration, see [system generations](docs/development.md#system-configuration):
-select packages, hostname, networking, generated files and certificate pins,
-enable managed webfs, clock synchronization and native logging, then switch or roll back.
-The selection applies at terminal or CPU-server boot and in new login shells.
-CPU servers can also declare native TCP service scripts with generation-specific
-packages and configuration.
-The disk persists. Later, run only `run-vm` and source `/usr/local/pkg/nix9/activate` again.
-Keep `result-vm` to retain the backing image. Run `fshalt` before stopping QEMU
-with Ctrl-C. The host HTTP server can stop after installation.
+Run `fshalt` before stopping QEMU with Ctrl-C. Keep `result-vm` to retain the
+disk's backing image. See [VM details](docs/vm.md) for later boots, other disks
+and a C development example.
 
 ## Documentation
 
-- [Run the VM](docs/vm.md): persistent disks and package installation.
-- [Develop packages](docs/development.md): cross-compilation, native builds and helpers.
-- [Test coverage](docs/validation.md).
-- [Status and limitations](docs/feasibility.md).
+| Guide | Contents |
+| --- | --- |
+| [VM details](docs/vm.md) | Native development, persistent disks and package archives. |
+| [Native Nix](docs/native.md) | Builds, environments, updates, releases and store maintenance. |
+| [Package development](docs/development.md) | Toolchains, recipes, development shells and native Go. |
+| [System configuration](docs/configuration.md) | Machine settings, switching, rollback and boot hooks. |
+| [Services](docs/services.md) | Ethernet, clock synchronization, logging, webfs and CPU TCP scripts. |
+| [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
+| [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
+| [Limitations](docs/feasibility.md) | Port constraints and missing features. |
+| [Upstream patches](docs/upstream.md) | Patch ownership and removal criteria. |
