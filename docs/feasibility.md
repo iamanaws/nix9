@@ -25,6 +25,10 @@ See the [toolchains](development.md#toolchains) used for cross-builds.
 The optional [Go bootstrap](development.md#native-go) rebuilds the Go toolchain
 inside 9front and supports native command packages with vendored dependencies.
 Nix itself and its C++ dependencies still cross-compile on Linux.
+The [system configuration layer](development.md#system-configuration) selects
+packages, hostname, generated files and webfs pins through retained generations.
+Terminal boot and login hooks apply the selection; CPU-server and service
+configuration remain future work.
 
 ## Audit
 

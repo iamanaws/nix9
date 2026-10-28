@@ -19,6 +19,8 @@ let
     "pkgs/fetchgit" = ../fetchgit;
     "profile" = ../../lib/profile.rc;
     "bin/nix-profile" = ../../lib/nix-profile.rc;
+    "bin/nix9-rebuild" = ../../lib/system/rebuild.rc;
+    "system" = ../../lib/system;
   }
   // (lib.optionalAttrs (goBootstrap != null) {
     "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";
@@ -48,5 +50,5 @@ runCommand "native-packages" { } ''
     "mk-shell.nix"
     "build-env.nix"
   ]}
-  chmod +x "$out/bin/nix-profile"
+  chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild"
 ''

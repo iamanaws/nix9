@@ -1,0 +1,7 @@
+. /usr/local/pkg/nix9/activate && {
+  nix9SelectedSystem=`{cat /usr/local/nix/state/gcroots/system}
+  nix-store --realise $nix9SelectedSystem --add-root /usr/local/nix/state/gcroots/system-boot > /dev/null && {
+    sysname=`{cat $nix9SelectedSystem/hostName}
+    echo -n $sysname > /dev/sysname && . $nix9SelectedSystem/profile
+  }
+}

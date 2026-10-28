@@ -29,6 +29,7 @@ pkgs.stdenv.mkDerivation {
         "nix-build"
         "nix-shell"
         "nix-profile"
+        "nix9-rebuild"
         "webfs"
       ]
     )}

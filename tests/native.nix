@@ -19,6 +19,13 @@
   vmTest,
 }:
 {
+  native-system-tests = vmTest "native-system-tests" {
+    script = ./native_system.py;
+    files = [ ./systems.nix ];
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-go-tests = vmTest "native-go-tests" {
     script = ./native_go.py;
     files = [

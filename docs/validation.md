@@ -33,6 +33,12 @@ Legacy image webfs mounts are rejected before Nix sends HTTP or HTTPS requests.
 The `native-bootstrap-tests` target checks the signed cache in a clean VM, then builds
 a C project and tests environment updates and rollback after GC.
 `native-release-tests` checks complete release selection, offline reboots and rollback.
+`native-system-tests` builds machine configurations with packages, hostname,
+generated files and webfs pins. It checks activation before selection, invalid
+configuration and failed-update rejection, preservation of terminal and login
+hooks, edited-hook rejection, generation reuse, offline terminal boots and
+logins, rollback and GC retention of the booted generation. It does not cover
+CPU-server startup or abrupt power loss while installing hooks or selecting a profile.
 `native-update-tests` fetches pinned recipes, builds an update, rejects failed updates
 and checks offline rebuilding and rollback after GC.
 `native-reproducibility-tests` compares toolchain NARs from two clean VMs without substitutions.

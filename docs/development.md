@@ -260,6 +260,85 @@ Use `nix-native-tests` for native packages and shells, `nix-core-tests` for libr
 and commands, or `nix-store-tests` for transfers and caches. Store tests reuse the
 native suite's exported closure. `nix-util-tests` runs all three.
 
+### System configuration
+
+The native package set provides `mkSystem` for a small machine configuration.
+Start with [the example](../examples/system/configuration.nix), saved as
+`configuration.nix` in the guest:
+
+```nix
+let
+  pkgs = import <nix9>;
+in
+pkgs.mkSystem {
+  hostName = "nix9";
+  packages = [ pkgs.fortune ];
+  files."motd" = "Welcome to nix9.\n";
+  # webfs.certificatePins."example.org" = [ "64 hexadecimal SHA-256 digits" ];
+}
+```
+
+Activate the current bootstrap or a complete release containing `nix9-rebuild`,
+then run:
+
+```rc
+nix9-rebuild build configuration.nix
+nix9-rebuild switch configuration.nix
+. /usr/local/pkg/nix9/system
+fortune
+cat /cfg/nix9/files/motd
+nix9-rebuild list
+nix9-rebuild rollback
+. /usr/local/pkg/nix9/system
+```
+
+`build` retains its output at `/usr/local/nix/state/gcroots/system-build` without
+selecting it. `switch` builds and checks activation in a private namespace before
+selecting a generation at `/usr/local/nix/state/gcroots/system`. It sets
+`/dev/sysname` immediately. Source `/usr/local/pkg/nix9/system` to refresh the
+current shell's packages, configuration files and pins. Other existing sessions
+keep their namespaces until refreshed. New login shells activate the selection.
+Omitting the configuration argument uses `./configuration.nix`.
+
+`hostName` is a lowercase DNS label, at most 63 characters. `packages` uses the
+same collision checks and closure retention as `buildEnv`. `files` maps relative
+paths to text, exposed under `/cfg/nix9/files` in the session namespace. Native
+machine startup files such as `/cfg/nix9/termrc` remain visible. Paths cannot
+escape that directory or overlap a parent file. Removing a file from the next
+configuration removes it from the managed view. Store references in file contents
+retain their dependencies through GC.
+
+`webfs.certificatePins` maps lowercase DNS hosts or IPv4 addresses to nonempty
+lists of 64-digit SHA-256 hex fingerprints. These become native
+`x509 sha256=...` records, bound before `/sys/lib/tls/webfs/hosts`. They override
+the same host's existing file in that namespace. Removing a declared host
+reveals any underlying manual policy. Other host files and the existing
+`revoked` file remain in place. Activation creates an empty revocation file if
+one is missing. Keep revocations configured as described below.
+Restart an already-running webfs in the refreshed namespace to use its new pins.
+
+The first switch installs wrappers for `/rc/bin/termrc.local` and
+`/rc/lib/rcmain.local`. Existing scripts are retained with a `.nix9-original`
+suffix and run before the managed hook. Later switches reject edited or removed
+wrappers. Terminal boot sets the hostname and retains the booted generation at
+`system-boot`; terminal and login activation expose the managed environment.
+This first version targets terminal systems. CPU-server startup, networking,
+service management, kernel builds and disk configuration are separate work.
+
+`rollback` selects the previous retained generation and applies its hostname;
+refresh the session afterward. Use `nix9-rebuild delete NUMBER` to release an
+inactive generation. The selected and booted generations cannot be deleted.
+After rebooting into the selected generation, an older booted generation can be
+deleted and collected. Refresh sessions before deleting generations they use;
+automatic runtime root discovery is not available.
+
+System changes use the kernel service lock `#s/nix9-system`. An interrupted
+command may leave this marker. Remove it only after confirming no rebuild is
+running. Abrupt power loss during the first hook installation or profile writes
+is not covered by the update checks.
+System configuration and Nix release selection have separate profiles:
+continue using the complete-release workflow above to update Nix itself.
+
 ### Native Go
 
 The optional Go bootstrap includes pinned Go 1.26.7 sources and a cross-built

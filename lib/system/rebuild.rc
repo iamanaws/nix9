@@ -1,0 +1,116 @@
+#!/bin/rc -e
+
+fn fail {
+  echo nix9-rebuild: $* >[1=2]
+  exit 'nix9-rebuild failed'
+}
+if(! ~ $#* 1 2)
+  fail 'usage: nix9-rebuild {build [CONFIGURATION] | switch [CONFIGURATION] | rollback | list | delete NUMBER}'
+action=$1
+switch($action) {
+case build switch
+  configuration=./configuration.nix
+  if(~ $#* 2) configuration=$2
+case rollback list
+  if(! ~ $#* 1) fail 'unexpected argument for' $action
+case delete
+  if(! ~ $#* 2) fail 'expected a generation number'
+case *
+  fail 'unknown action:' $action
+}
+if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
+path=($nix9/bin /$cputype/bin /rc/bin)
+root=/usr/local/nix/state/gcroots/system
+candidate=/usr/local/nix/state/gcroots/system-candidate
+lock='#s/nix9-system'
+@{ status='' } > $lock || fail 'system changes are locked; remove this file if interrupted:' $lock
+changing=0
+previous=()
+previousName=()
+fn sigexit {
+  result=$status
+  if(~ $changing 1) {
+    if(~ $#previous 1) nix-store --realise $previous --add-root $root > /dev/null
+    if not if(test -e $root) rm $root
+    echo -n $previousName > /dev/sysname
+  }
+  if(~ $action switch && test -f $candidate) rm $candidate
+  rm $lock
+  status=$result
+}
+switch($action) {
+case list
+  nix-profile $root list
+  exit ''
+case delete
+  if(test -r /usr/local/nix/state/gcroots/system-boot && test -r $root^.generations/$2) {
+    if(~ `{cat /usr/local/nix/state/gcroots/system-boot} `{cat $root^.generations/$2})
+      fail 'cannot delete the booted generation; reboot into the selected system first'
+  }
+  nix-profile $root delete $2
+  exit ''
+case build
+  nix-build $configuration --out-link /usr/local/nix/state/gcroots/system-build
+  exit ''
+case switch
+  nix-build $configuration --out-link $candidate
+  target=`{cat $candidate}
+case rollback
+  target=`{nix-profile $root list | awk '
+    { paths[$1]=$NF; if($2 == "*") current=$1 }
+    END {
+      for(id in paths) if(id < current && id > previous) previous=id;
+      if(previous) print paths[previous]
+    }'}
+  if(! ~ $#target 1) fail 'no previous generation'
+}
+if(! ~ $#target 1) fail 'invalid system output'
+if(! test -f $target/system) fail 'expected a built nix9 system'
+if(! ~ `{cat $target/system} nix9-system-1) fail 'unsupported system format'
+for(file in activate boot profile hostName environment hooks/termrc.local hooks/rcmain.local)
+  if(! test -f $target/$file) fail 'incomplete system:' $file
+nix-store --verify-path $target
+# Activation runs in a private namespace before any boot selection changes.
+@{ fn sigexit; . $target/activate } || fail 'activation check failed'
+
+# Adopt local startup scripts once, and refuse to overwrite later manual edits.
+for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
+  if(test -e $hook && ! test -f $hook) fail 'startup hook is not a file:' $hook
+  if(test -e $hook^.nix9-original) {
+    if(! test -f $hook^.nix9-original) fail 'startup backup is not a file:' $hook
+    if(! test -f $hook) fail 'startup hook was removed:' $hook
+    if(! cmp -s $hook $target/hooks/`{basename $hook}) fail 'startup hook was edited:' $hook
+  }
+  if not if(test -f $hook && cmp -s $hook $target/hooks/`{basename $hook})
+    fail 'startup backup is missing:' $hook
+}
+if(test -e /usr/local/pkg/nix9/system) {
+  if(! cmp -s /usr/local/pkg/nix9/system $target/profile)
+    fail 'system profile was edited: /usr/local/pkg/nix9/system'
+}
+for(hook in /rc/bin/termrc.local /rc/lib/rcmain.local) {
+  if(! test -e $hook^.nix9-original) {
+    if(test -f $hook) mv $hook $hook^.nix9-original
+    if not {
+      echo '# No previous startup hook.' > $hook^.nix9-original
+      chmod 644 $hook^.nix9-original
+    }
+  }
+  if(! test -e $hook) {
+    cp $target/hooks/`{basename $hook} $hook
+    chmod u+w $hook
+  }
+}
+if(! test -e /usr/local/pkg/nix9/system) {
+  cp $target/profile /usr/local/pkg/nix9/system
+  chmod u+w /usr/local/pkg/nix9/system
+}
+if(test -r $root) previous=`{cat $root}
+previousName=`{cat /dev/sysname}
+changing=1
+echo -n `{cat $target/hostName} > /dev/sysname
+nix-profile $root set $target
+changing=0
+echo 'Selected system:' $target
+echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
+exit ''

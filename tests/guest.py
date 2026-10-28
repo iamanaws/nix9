@@ -15,8 +15,9 @@ import pexpect
 
 
 class Guest:
-    def __init__(self, child):
+    def __init__(self, child, prompt=r"(?m)^term% "):
         self.child = child
+        self.prompt = prompt
         self.crashed = False
 
     def crash(self):
@@ -30,7 +31,7 @@ class Guest:
         self.child.expect(r"(?m)^NIX9-STATUS:([^\n]*)\n")
         output = self.child.before
         status = self.child.match.group(1).rstrip("\r")
-        self.child.expect(r"(?m)^term% ")
+        self.child.expect(self.prompt)
         if status:
             raise RuntimeError(f"guest command failed ({status}): {command}")
         if expected is not None and not re.search(
@@ -51,7 +52,7 @@ class SerialLog:
 
 
 @contextlib.contextmanager
-def boot(qemu, disk, *, snapshot=True, forward_port=None, memory="2G"):
+def boot(qemu, disk, *, snapshot=True, forward_port=None, memory="2G", prompt=r"(?m)^term% "):
     network = "user"
     if forward_port is not None:
         network += f",hostfwd=tcp:127.0.0.1:{forward_port}-:17010"
@@ -73,8 +74,8 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, memory="2G"):
         child.sendline("")
         child.expect(r"user\[[^\]]*\]:")
         child.sendline("")
-        child.expect(r"(?m)^term% ")
-        guest = Guest(child)
+        child.expect(prompt)
+        guest = Guest(child, prompt)
         guest.command("ip/ipconfig ether /net/ether0")
         yield guest
         if not guest.crashed:
