@@ -30,7 +30,9 @@ packages, hostname, Ethernet networking, generated files and webfs pins through
 retained generations. Managed webfs, native clock synchronization and log-file
 preparation with generation event records are optional.
 Terminal and CPU-server boot hooks apply the selection, as do new login shells.
-General service management, authentication and listener configuration remain future work.
+CPU servers can declare TCP service scripts through the native listener, with
+changes applied after reboot. General daemon management and authentication
+configuration remain future work.
 
 ## Audit
 

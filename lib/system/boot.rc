@@ -9,7 +9,11 @@
             echo 'nix9: cannot record boot event' >[1=2]
         if(test -f $nix9SelectedSystem/network) . $nix9SelectedSystem/network
         if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
-        . $nix9SelectedSystem/profile
+        . $nix9SelectedSystem/profile && {
+          if(~ $service cpu && test -f $nix9System/services/listen-boot.rc)
+            . $nix9System/services/listen-boot.rc
+          status=''
+        }
       }
     }
   }

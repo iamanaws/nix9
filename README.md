@@ -63,6 +63,8 @@ For machine configuration, see [system generations](docs/development.md#system-c
 select packages, hostname, networking, generated files and certificate pins,
 enable managed webfs, clock synchronization and native logging, then switch or roll back.
 The selection applies at terminal or CPU-server boot and in new login shells.
+CPU servers can also declare native TCP service scripts with generation-specific
+packages and configuration.
 The disk persists. Later, run only `run-vm` and source `/usr/local/pkg/nix9/activate` again.
 Keep `result-vm` to retain the backing image. Run `fshalt` before stopping QEMU
 with Ctrl-C. The host HTTP server can stop after installation.

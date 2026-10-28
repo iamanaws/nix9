@@ -49,6 +49,19 @@ Original local hooks and native machine startup scripts must be preserved; edite
 or removed CPU hooks and missing backups are rejected. Disabling clock management
 restores native CPU NTP startup against the local fixture. Authentication and
 remote CPU login are outside this suite. Run it with `nix build .#native-cpu-tests`.
+`native-listen-tests` boots seven CPU configurations and connects through
+loopback-only QEMU TCP forwards. Managed scripts must run as `none`, receive
+native connection arguments, and use the booted generation's packages, files
+and webfs namespace. Manual services and their custom namespaces must continue
+working through the single native service-directory listener, including fallback
+to `/cfg/default/service`. The suite checks
+invalid declarations, manual file and namespace conflicts, native startup after
+a conflict added following selection, repeated activation,
+long-lived and fresh connections across selection and rollback, connection
+closure with managed webfs enabled, removed ports,
+disable, empty declarations and a retained generation without CPU hooks.
+It does not test authenticated remote CPU login. Run it with
+`nix build .#native-listen-tests`.
 `native-network-tests` boots four times with the harness's interface setup
 disabled. It checks DHCP defaults, an explicit DNS override despite an offered
 DHCP resolver, static IPv4, both loopbacks, preservation of `/lib/ndb/local`,

@@ -326,14 +326,15 @@ The first switch installs wrappers for `/rc/bin/termrc.local`,
 with a `.nix9-original` suffix and run before the managed hook. Later switches reject edited or removed
 wrappers or missing backups. Terminal and CPU-server boot set the hostname and
 retain the booted generation at `system-boot`; boot and login activation expose
-the managed environment. General service management, authentication and listener
-configuration, kernel builds and disk configuration are separate work.
+the managed environment. CPU servers can declare TCP services as described below.
+General daemon management, authentication configuration, kernel builds and disk
+configuration are separate work.
 
 On a machine already configured for native CPU startup (`service=cpu` and CPU
 init), the CPU hook applies the same packages, files, pins, networking, logging
 and webfs configuration. It preserves the original local hook and native
-`/cfg/$sysname/cpurc` and `cpustart` scripts. Native listener and authentication
-startup continue using the machine's existing configuration. Nix9 does not change
+`/cfg/$sysname/cpurc` and `cpustart` scripts. Native authentication startup and
+unmanaged listener services continue using the machine's existing configuration. Nix9 does not change
 `plan9.ini` or convert a terminal into a CPU server.
 
 CPU init's console shell is not a login shell and can have a separate namespace
@@ -356,6 +357,53 @@ running. Abrupt power loss during the first hook installation or profile writes
 is not covered by the update checks.
 System configuration and Nix release selection have separate profiles:
 continue using the complete-release workflow above to update Nix itself.
+
+### CPU TCP services
+
+`services.listen` adds rc scripts to the native CPU server's `aux/listen` service
+set. It is disabled by default and takes effect only on machines already using
+CPU startup:
+
+```nix
+services.listen = {
+  enable = true;
+  tcp."17010" = ''
+    cat /cfg/nix9/files/motd
+  '';
+};
+```
+
+`tcp` maps canonical decimal port numbers from 1 to 65535 to nonempty rc scripts.
+Declaring scripts requires `enable = true`. Native `aux/listen` accepts TCP
+connections on the machine's interfaces and runs these scripts as user `none`.
+Each connection gets a private namespace activated with the booted generation's
+`packages`, generated files and certificate pins. When managed webfs is enabled,
+the connection also gets webfs with that generation's policy. The script receives
+the native arguments: service name, protocol and connection directory. Standard
+input and output are the connection; standard error goes to the server console.
+
+The implementation keeps the native `/rc/bin/cpurc` and reuses its listener
+invocation. It overlays the generated service directory after the listener
+creates its normal namespace. Existing services in `/cfg/$sysname/service`,
+`/cfg/default/service` or `/rc/bin/service` remain available, using native
+directory precedence. Their files and per-service namespace files are preserved;
+the trusted authentication service directory retains its native behavior.
+
+Selection checks the applicable native directory and rejects a declared
+`tcpPORT` if a manual file or `tcpPORT.namespace` already owns that name.
+Startup checks again using the directory passed by native CPU startup. If that
+check fails, it reports the conflict and starts the original native service set.
+Other port collisions, including an already-running listener or service aliases,
+are reported by native `aux/listen` in `/sys/log/listen`.
+
+Switching, rollback, login and session refresh leave the running listener and
+existing connections alone. New connections continue to use the booted
+generation until reboot. Reboot applies script changes and removes omitted
+ports. Disable management with `services.listen.enable = false` and no `tcp`
+declarations; the next CPU boot uses the original native service set. Selecting
+a retained generation that predates this option has the same behavior. Terminal
+boots do not start these listeners. This interface does not configure authenticated
+remote CPU login or manage standalone daemons.
 
 ### System networking
 

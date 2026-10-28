@@ -72,6 +72,8 @@ for(file in activate boot profile hostName environment hooks/termrc.local hooks/
 nix-store --verify-path $target
 # Activation runs in a private namespace before any boot selection changes.
 @{ fn sigexit; nix9SystemCheck=1; . $target/activate } || fail 'activation check failed'
+if(test -f $target/services/listen-check)
+  /$cputype/bin/rc $target/services/listen-check || fail 'TCP service configuration check failed'
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=1; . $target/logging } || fail 'log configuration check failed'
 }
@@ -137,4 +139,6 @@ if(test -f $target/network || { test -r /usr/local/nix/state/gcroots/system-boot
   echo 'Network changes take effect after reboot.'
 if(test -f $target/services/timesync.rc || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/services/timesync.rc })
   echo 'Clock synchronization changes take effect after reboot.'
+if(test -f $target/services/listen-boot.rc || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/services/listen-boot.rc })
+  echo 'TCP service changes take effect after CPU-server reboot.'
 exit ''

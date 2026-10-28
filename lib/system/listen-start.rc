@@ -1,0 +1,17 @@
+#!/bin/rc
+# Intercept only the native cpurc invocation. Other uses keep their arguments.
+directory=()
+if(~ $#* 4 && ~ $1 -q && ~ $2 -d && ~ $4 tcp) directory=$3
+if(~ $#* 6 && ~ $1 -q && ~ $2 -t && ~ $4 -d && ~ $6 tcp) directory=$5
+if(~ $#directory 1 && ! ~ $directory /cfg/`{/$cputype/bin/cat $nix9ListenStartSystem/hostName}^/service /cfg/default/service /rc/bin/service)
+  directory=()
+if(~ $#directory 1) {
+  if(/$cputype/bin/rc $nix9ListenStartSystem/services/listen-check $directory) {
+    nix9ListenDirectory=$directory
+    # newns expands this environment variable after loading /lib/namespace.
+    # The native listener still starts the manual services and trusted auth set.
+    exec /$cputype/bin/aux/listen -n $nix9ListenStartSystem/services/listen.namespace $*
+  }
+  echo 'nix9: managed TCP services skipped; starting the native services' >[1=2]
+}
+exec /$cputype/bin/aux/listen $*

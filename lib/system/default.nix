@@ -63,6 +63,7 @@ let
       {
         webfs ? { },
         timesync ? { },
+        listen ? { },
       }:
       {
         managedWebfs =
@@ -75,10 +76,11 @@ let
             webfs;
         timesync = import ./timesync.nix { configuration = timesync; };
         timesyncLogging = timesync.logging or false;
+        listen = import ./listen.nix { configuration = listen; };
       }
     )
       services;
-  inherit (serviceConfiguration) managedWebfs timesync;
+  inherit (serviceConfiguration) managedWebfs timesync listen;
   logConfiguration = import ./logging.nix {
     configuration = logging;
     inherit mkDerivation;
@@ -108,7 +110,7 @@ else if !validPins then
 else if !builtins.isBool managedWebfs then
   throw "mkSystem: services.webfs.enable must be a boolean"
 else
-  builtins.deepSeq [ network timesync logConfiguration ] (mkDerivation {
+  builtins.deepSeq [ network timesync listen logConfiguration ] (mkDerivation {
     name = "nix9-system-${hostName}";
     buildCommand = ''
       mkdir -p $out/files $out/webfs/hosts $out/hooks $out/services
@@ -132,6 +134,37 @@ else
       ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
       ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
       ${if timesync == "" then "" else write "services/timesync.rc" timesync}
+      ${
+        if listen == null then
+          ""
+        else
+          ''
+            mkdir -p $out/services/listen $out/services/listen-scripts $out/services/listen-bin/aux
+            ${builtins.concatStringsSep "\n" (
+              map (port: ''
+                ${write ("services/listen-scripts/tcp" + port) listen.${port}}
+                echo '#!/bin/rc -e' > $out/services/listen/tcp${port}
+                echo 'nix9ListenConnectionSystem='$out >> $out/services/listen/tcp${port}
+                echo -n ${quote (builtins.readFile ./listen-connection.rc)} >> $out/services/listen/tcp${port}
+                chmod 755 $out/services/listen/tcp${port}
+              '') (builtins.attrNames listen)
+            )}
+            echo 'rfork e' > $out/services/listen-check
+            echo 'nix9ListenCheckSystem='$out >> $out/services/listen-check
+            echo -n ${quote (builtins.readFile ./listen-check.rc)} >> $out/services/listen-check
+            echo 'rfork e' > $out/services/listen-start
+            echo 'nix9ListenStartSystem='$out >> $out/services/listen-start
+            echo -n ${quote (builtins.readFile ./listen-start.rc)} >> $out/services/listen-start
+            echo '#!/bin/rc' > $out/services/listen-bin/aux/listen
+            echo 'exec /$cputype/bin/rc '$out'/services/listen-start $*' >> $out/services/listen-bin/aux/listen
+            chmod 755 $out/services/listen-bin/aux/listen
+            echo 'mount -C #s$srvspec/boot /root $rootspec' > $out/services/listen.namespace
+            echo '. $rootdir/lib/namespace' >> $out/services/listen.namespace
+            echo 'bind -b '$out'/services/listen $nix9ListenDirectory' >> $out/services/listen.namespace
+            echo 'nix9ListenRuntime=$nix9' > $out/services/listen-boot.rc
+            echo 'path=('$out'/services/listen-bin $path)' >> $out/services/listen-boot.rc
+          ''
+      }
       ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
       ${if logConfiguration == null then "" else write "log-event" logConfiguration.event}
       ${write "hooks/termrc.local" (hook "/rc/bin/termrc.local" "boot")}

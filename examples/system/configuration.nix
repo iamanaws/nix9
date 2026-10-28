@@ -5,6 +5,7 @@ pkgs.mkSystem {
   hostName = "nix9";
   networking.enable = true;
   services.webfs.enable = true;
+  # CPU servers: services.listen = { enable = true; tcp."17010" = "cat /cfg/nix9/files/motd"; };
   # services.timesync.enable = true; # Hardware RTC in UTC; see docs for NTP.
   # logging.enable = true; # Preserve native logs and record generation events.
   packages = [ pkgs.fortune ];

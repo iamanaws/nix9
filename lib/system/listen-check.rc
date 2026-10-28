@@ -1,0 +1,29 @@
+#!/bin/rc -e
+path=(/$cputype/bin /rc/bin)
+fn fail {
+  echo 'nix9: TCP service configuration failed:' $* >[1=2]
+  exit 'TCP service configuration failed'
+}
+test -x /$cputype/bin/aux/listen || fail 'native aux/listen is unavailable'
+test -r /lib/namespace || fail 'native namespace file is unavailable'
+switch($#*) {
+case 0
+  directory=/cfg/`{cat $nix9ListenCheckSystem/hostName}^/service
+  if(! test -d $directory) {
+    if(test -d /cfg/default/service) directory=/cfg/default/service
+    if not directory=/rc/bin/service
+  }
+case 1
+  directory=$1
+case *
+  fail 'expected at most one service directory'
+}
+test -d $directory || fail 'native service directory is unavailable:' $directory
+for(file in $nix9ListenCheckSystem/services/listen/tcp*) {
+  if(test -f $file) {
+    name=`{basename $file}
+    if(test -e $directory/$name || test -e $directory/$name^.namespace)
+      fail 'a manual service or namespace already owns' $name 'in' $directory
+  }
+}
+exit ''

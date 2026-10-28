@@ -19,6 +19,14 @@
   vmTest,
 }:
 {
+  native-listen-tests = vmTest "native-listen-tests" {
+    script = ./native_listen.py;
+    files = [ ./listen.nix ];
+    env.NIX9_LISTEN_TEST_STATE = "listen-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-cpu-tests = vmTest "native-cpu-tests" {
     script = ./native_cpu.py;
     files = [
