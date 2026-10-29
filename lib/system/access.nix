@@ -2,37 +2,46 @@
   lib,
   auth,
   cpu,
+  exports,
   authPackage,
   cpuPackage,
+  exportfsPackage,
 }:
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
   inherit (import ./modules/types.nix { inherit lib; }) userName;
   error = message: throw "mkSystem: ${message}";
+  exportList = builtins.attrValues exports;
+  needsFactotum = cpu.enable || exports != { };
+  keys = lib.unique (
+    builtins.filter (key: key != null) (
+      (lib.optional cpu.enable cpu.keyFile) ++ map (item: item.keyFile) exportList
+    )
+  );
 in
 if cpu.enable && cpu.allowedUsers == [ ] then
   error "services.cpu.allowedUsers must name at least one user"
 else if !cpu.enable && (cpu.allowedUsers != [ ] || cpu.keyFile != null || cpu.keyPattern != "") then
   error "CPU settings require services.cpu.enable"
-else if
-  builtins.match ".*[\r\n].*" cpu.keyPattern != null || builtins.match ".*!.*" cpu.keyPattern != null
-then
-  error "services.cpu.keyPattern must contain only public attributes on one line"
 else if !builtins.all userName.check (builtins.attrNames auth.speaksFor) then
   error "services.auth.speaksFor contains an invalid identity"
 else if !auth.enable && (auth.keyDatabase != "/adm/keys" || auth.speaksFor != { }) then
   error "authentication settings require services.auth.enable"
-else if !auth.enable && !cpu.enable then
+else if !auth.enable && !needsFactotum then
   null
 else
   {
     inherit auth cpu;
-    packages = (lib.optional auth.enable authPackage) ++ (lib.optional cpu.enable cpuPackage);
+    packages =
+      (lib.optional auth.enable authPackage)
+      ++ (lib.optional needsFactotum cpuPackage)
+      ++ (lib.optional (exports != { }) exportfsPackage);
     settings = ''
       nix9AuthEnabled=${if auth.enable then "1" else "0"}
-      nix9CpuEnabled=${if cpu.enable then "1" else "0"}
+      nix9FactotumRequired=${if needsFactotum then "1" else "0"}
       nix9AuthDatabase=${quote auth.keyDatabase}
-      nix9CpuKeys=${if cpu.keyFile == null then "()" else quote cpu.keyFile}
+      nix9AccessKeys=(${lib.concatMapStringsSep " " quote keys})
+      nix9ExportRoots=(${lib.concatMapStringsSep " " (item: quote item.path) exportList})
       nix9AuthPackage=${authPackage}
     '';
     policy = lib.concatStringsSep "" (

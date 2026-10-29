@@ -6,6 +6,8 @@
   authPackage,
   cpuPackage,
   listenPackage,
+  exportfsPackage,
+  namespaceTools,
 }:
 {
   hostName,
@@ -16,6 +18,9 @@
   networking ? { },
   logging ? { },
   services ? { },
+  namespace ? {
+    mounts = { };
+  },
 }:
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
@@ -64,7 +69,8 @@ let
     paths =
       packages
       ++ (if ndb == null then [ ] else [ ndb.package ])
-      ++ (if access == null then [ ] else access.packages);
+      ++ (if access == null then [ ] else access.packages)
+      ++ sharing.packages;
   };
   network = import ./network.nix {
     inherit hostName;
@@ -79,6 +85,7 @@ let
         ndb ? { },
         auth,
         cpu,
+        exports,
       }:
       {
         managedWebfs =
@@ -103,7 +110,9 @@ let
             cpu
             authPackage
             cpuPackage
+            exportfsPackage
             ;
+          exports = sharing.exports;
         };
       }
     )
@@ -116,6 +125,16 @@ let
     access
     ;
   listenScripts = if listen == null then { } else listen;
+  sharing = import ./sharing.nix {
+    inherit
+      lib
+      cpuPackage
+      exportfsPackage
+      namespaceTools
+      ;
+    exports = services.exports;
+    mounts = namespace.mounts;
+  };
   logConfiguration = import ./logging.nix {
     configuration = logging;
     inherit mkDerivation;
@@ -140,6 +159,10 @@ else if access != null && access.cpu.enable && listenScripts ? "17019" then
   throw "mkSystem: services.cpu owns TCP port 17019"
 else if access != null && access.auth.enable && listenScripts ? "567" then
   throw "mkSystem: services.auth owns TCP port 567"
+else if
+  builtins.any (port: builtins.hasAttr port listenScripts) (builtins.attrNames sharing.scripts)
+then
+  throw "mkSystem: services.exports and services.listen must not share a TCP port"
 else
   builtins.deepSeq [ network timesync listen logConfiguration ndb access ] (mkDerivation {
     name = "nix9-system-${hostName}";
@@ -165,6 +188,13 @@ else
       ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
       ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
       ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}
+      ${write "namespace/config" sharing.configuration}
+      ${write "services/namespace-mounts" (builtins.readFile ./namespace-mounts.rc)}
+      echo 'nix9NamespaceNext='$out > $out/services/namespace.rc
+      echo -n ${quote (builtins.readFile ./namespace.rc)} >> $out/services/namespace.rc
+      echo 'rfork e' > $out/services/namespace-check
+      echo 'nix9SystemCheck=1' >> $out/services/namespace-check
+      echo '. '$out'/services/namespace.rc' >> $out/services/namespace-check
       ${
         if ndb == null then
           ""
@@ -210,6 +240,12 @@ else
                 echo -n ${quote (builtins.readFile ./listen-connection.rc)} >> $out/services/listen/tcp${port}
                 chmod 755 $out/services/listen/tcp${port}
               '') (builtins.attrNames listenScripts)
+            )}
+            ${lib.concatStringsSep "\n" (
+              lib.mapAttrsToList (port: script: ''
+                ${write ("services/listen/tcp" + port) script}
+                chmod 755 $out/services/listen/tcp${port}
+              '') sharing.scripts
             )}
             ${
               if access != null && access.cpu.enable then

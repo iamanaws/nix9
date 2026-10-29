@@ -20,6 +20,8 @@ let
     authPackage = packages.auth;
     cpuPackage = packages.rcpu;
     listenPackage = packages.listen;
+    exportfsPackage = packages.exportfs;
+    namespaceTools = packages.namespaceTools;
   };
 in
 if failures != [ ] then

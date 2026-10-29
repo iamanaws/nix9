@@ -1,8 +1,9 @@
 # System roadmap
 
-Updated 2026-10-28. The first three milestones and the CPU/authentication portion
-of milestone 4 are implemented. See [configuration](configuration.md),
-[discovery](discovery.md), [access](access.md) and [tests](validation.md).
+Updated 2026-10-28. The first three milestones are complete. Milestone 4 provides
+CPU access, authentication, directory exports and session mounts. See
+[configuration](configuration.md), [discovery](discovery.md), [access](access.md),
+[sharing](sharing.md) and [tests](validation.md).
 
 ## Goal and design
 
@@ -41,17 +42,18 @@ file/auth server, a CPU server and a terminal. Start with existing bootable syst
 
 ### 4. Add native roles and namespace resources
 
-CPU access and authentication modules now use packaged native services, with
-explicit access policy and runtime keys. Next, add file exports around an existing
-filesystem and terminal sessions, packaging the remaining tools they need.
+CPU access, authentication and existing-directory exports use packaged native
+services, explicit access policy and runtime keys. Session mounts support required
+or optional providers and connection timeouts. A failed refresh preserves the old
+mounts. Boot and service namespaces remain independent of user-session shares.
 
-Describe named resources, their providers, imports, bind order and required or
-optional availability. Separate boot, service and session namespaces. Add explicit
-filesystem account management.
+Three-machine tests use authentication tickets, terminal edits and a remote C
+build over shared project files. They cover access rejection, missing providers,
+repeated startup, reboot and rollback, with separate local Nix stores.
 
-Acceptance: the three VMs use actual authentication tickets, shared project files
-and a remote C build. Check access rejection, missing providers, repeated startup,
-reboot and rollback.
+Remaining work includes filesystem account management and namespace composition
+beyond session mounts: named resources, provider imports, bind order and explicit
+resource dependencies.
 
 ### 5. Build and deploy an installation
 

@@ -55,7 +55,7 @@ class SerialLog:
 @contextlib.contextmanager
 def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
          memory="2G", prompt=r"(?m)^term% ", configure_network=True, cpu=False,
-         forward_ports=()):
+         forward_ports=(), guest_forwards=()):
     network = "user"
     if forward_port is not None:
         network += f",hostfwd=tcp:127.0.0.1:{forward_port}-:17010"
@@ -64,6 +64,9 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
     if guest_forward is not None:
         address, port, host_port = guest_forward
         network += f",guestfwd=tcp:{address}:{port}-tcp:127.0.0.1:{host_port}"
+    for address, port, host_port in guest_forwards:
+        # Start a fresh relay for each connection, including after peer reboots.
+        network += f",guestfwd=tcp:{address}:{port}-cmd:nc 127.0.0.1 {host_port}"
     child = pexpect.spawn(
         qemu,
         [

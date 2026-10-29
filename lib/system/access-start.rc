@@ -7,8 +7,19 @@ nix9AccessLock='#s/nix9-access-'^$nix9MachineId
 if(test -e $nix9AccessLock) exit ''
 @{ status='' } > $nix9AccessLock || exit 'access startup is locked'
 fn sigexit { result=$status; rm $nix9AccessLock; status=$result }
-if(~ $nix9CpuEnabled 1 && ~ $#nix9CpuKeys 1)
-  cat $nix9CpuKeys > /mnt/factotum/ctl || exit 'cannot load CPU keys'
+for(key in $nix9AccessKeys) {
+  @{
+    rfork e
+    ifs='
+'
+    while(command=`{read}) {
+      if(~ $#command 1) {
+        echo $command > /mnt/factotum/ctl || exit 'cannot load service key'
+      }
+    }
+    exit ''
+  } < $key || exit 'cannot load service keys'
+}
 if(~ $nix9AuthEnabled 1) {
   $nix9AuthPackage/bin/auth/keyfs -m /mnt/keys $nix9AuthDatabase </dev/null || exit 'cannot mount authentication database'
   bind $nix9ListenStartSystem/services/auth-policy /lib/ndb/auth || exit 'cannot bind authentication policy'

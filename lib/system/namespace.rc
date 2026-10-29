@@ -1,0 +1,18 @@
+# Apply mounts in a worker sharing this session's namespace.
+nix9NamespaceValues=`{/$cputype/bin/rc $nix9NamespaceNext/services/namespace-mounts}
+if(! ~ $#nix9NamespaceValues 0 && ~ $nix9NamespaceValues(1) nix9-namespace-ready) {
+  if(! ~ $nix9SystemCheck 1) {
+    nix9NamespaceSystem=$nix9NamespaceNext
+    nix9NamespaceMounts=$nix9NamespaceValues(2-)
+  }
+  nix9NamespaceValues=()
+  nix9NamespaceNext=()
+  status=''
+}
+if not {
+  nix9NamespaceValues=()
+  nix9NamespaceNext=()
+  # A login must not execute its command without its required shares.
+  if(flag l) exit 'nix9: required session namespace is unavailable'
+  status='namespace activation failed'
+}

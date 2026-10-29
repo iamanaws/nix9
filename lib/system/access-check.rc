@@ -13,8 +13,9 @@ if(~ $nix9AuthEnabled 1) {
   privateFile $nix9AuthDatabase '^-[-l]r[w-]-[r-][w-]---- '
   test -f /lib/ndb/auth || fail 'native authentication policy mount point is missing'
 }
-if(~ $nix9CpuEnabled 1) {
+if(~ $nix9FactotumRequired 1) {
   test -r /mnt/factotum/ctl && test -w /mnt/factotum/ctl || fail 'boot factotum is unavailable'
-  if(~ $#nix9CpuKeys 1) privateFile $nix9CpuKeys '^-[-l]r[w-]------- '
+  for(key in $nix9AccessKeys) privateFile $key '^-[-l]r[w-]------- '
 }
+for(root in $nix9ExportRoots) test -d $root || fail 'export directory is unavailable:' $root
 exit ''

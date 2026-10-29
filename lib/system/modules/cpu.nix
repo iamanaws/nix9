@@ -1,6 +1,6 @@
 { lib, ... }:
 let
-  inherit (import ./types.nix { inherit lib; }) userName runtimeFile;
+  inherit (import ./types.nix { inherit lib; }) userName runtimeFile publicKeyPattern;
 in
 {
   options.cpu = {
@@ -16,7 +16,7 @@ in
       description = "Private runtime file of factotum key commands, loaded at CPU boot. Null uses provisioned keys.";
     };
     keyPattern = lib.mkOption {
-      type = lib.types.str;
+      type = publicKeyPattern;
       default = "";
       description = "Public factotum key-selection attributes for the CPU server, such as dom and user.";
     };

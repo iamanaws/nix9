@@ -19,6 +19,20 @@
   vmTest,
 }:
 {
+  native-sharing-tests = vmTest "native-sharing-tests" {
+    nativeBuildInputs = [ pkgs.netcat-openbsd ];
+    script = ./native_sharing.py;
+    files = [
+      ./sharing.nix
+      ./sharing-project
+      ./sharing-failed-refresh.rc
+      ./machine-newns.c
+    ];
+    env.NIX9_SHARING_TEST_STATE = "sharing-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-ndb-tests = vmTest "native-ndb-tests" {
     script = ./native_ndb.py;
     files = [ ./ndb.nix ];

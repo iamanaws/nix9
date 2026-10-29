@@ -11,6 +11,11 @@ let
 in
 {
   options = {
+    namespace = lib.mkOption {
+      type = lib.types.submodule { imports = [ ./modules/namespace.nix ]; };
+      default = { };
+      description = "User session namespace configuration.";
+    };
     hostName = mkOption {
       type = types.str;
       description = "Machine hostname.";
@@ -39,6 +44,7 @@ in
         imports = [
           ./modules/auth.nix
           ./modules/cpu.nix
+          ./modules/exports.nix
         ];
       };
       default = { };

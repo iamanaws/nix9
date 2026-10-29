@@ -2,7 +2,10 @@
 . /usr/local/pkg/nix9/activate && {
   if(~ $#nix9SystemRoot 1 && test -r $nix9SystemRoot) {
     nix9SelectedSystem=`{cat $nix9SystemRoot}
-    . $nix9SelectedSystem/activate && { nix9SelectedSystem=(); status='' }
+    . $nix9SelectedSystem/activate && {
+      . $nix9SelectedSystem/services/namespace.rc
+    }
+    nix9SelectedSystem=()
   }
   if not status=''
 }

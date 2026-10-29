@@ -106,6 +106,8 @@ if(test -f $target/services/listen-check)
   /$cputype/bin/rc $target/services/listen-check || fail 'TCP service configuration check failed'
 if(test -f $target/services/access-check)
   /$cputype/bin/rc $target/services/access-check || fail 'access configuration check failed'
+if(test -f $target/services/namespace-check)
+  /$cputype/bin/rc $target/services/namespace-check || fail 'namespace configuration check failed'
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=1; . $target/logging } || fail 'log configuration check failed'
 }

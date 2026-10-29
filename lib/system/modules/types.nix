@@ -1,5 +1,8 @@
 { lib }:
 {
+  publicKeyPattern = lib.types.addCheck lib.types.str (
+    value: builtins.match ".*[\r\n!].*" value == null
+  );
   userName = lib.types.addCheck lib.types.str (
     value: builtins.stringLength value < 28 && builtins.match "[a-zA-Z0-9][a-zA-Z0-9_.-]*" value != null
   );

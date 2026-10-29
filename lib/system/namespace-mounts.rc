@@ -1,0 +1,103 @@
+# A separate rc process supplies a fresh PID and runs its own exit trap.
+rfork e
+path=(/$cputype/bin /rc/bin)
+. $nix9NamespaceNext/namespace/config
+staged=()
+anchors=()
+oldTargets=()
+committing=0
+fn identity { ls -qld $1 >[2]/dev/null | awk '{print $1 ":" $5 ":" $6}' }
+fn fail {
+  echo 'nix9: namespace activation failed:' $* >[1=2]
+  exit 'namespace activation failed'
+}
+fn removeViews {
+  removal=''
+  while(! ~ $#* 0) {
+    unmount $3 $2 >[2]/dev/null || removal='cannot remove mount'
+    shift 4
+  }
+  status=$removal
+}
+fn restoreViews {
+  while(! ~ $#* 0) {
+    bind -c $3 $2 || echo 'nix9: cannot restore mount:' $2 >[1=2]
+    shift 4
+  }
+}
+fn installViews {
+  while(! ~ $#* 0) {
+    bind -c $3 $2 || fail 'cannot install mount:' $2
+    shift 4
+  }
+}
+fn removeAnchors {
+  while(! ~ $#* 0) {
+    unmount $3 >[2]/dev/null
+    shift 4
+  }
+}
+fn sigexit {
+  result=$status
+  if(! ~ $result '') {
+    if(~ $committing 1) {
+      removeViews $staged
+      restoreViews $nix9NamespaceMounts
+    }
+    for(anchor in $anchors) unmount $anchor >[2]/dev/null
+  }
+  status=$result
+}
+fn checkViews {
+  while(! ~ $#* 0) {
+    ~ `{identity $3} $4 && ~ `{identity $2} $4 || fail 'managed mount was changed:' $2
+    oldTargets=($oldTargets $2)
+    shift 4
+  }
+}
+checkViews $nix9NamespaceMounts
+fn mountShare {
+  name=$1
+  target=$2
+  test -d $target || fail 'mount point is unavailable:' $target
+  if(! ~ $target $oldTargets) {
+    ns -r | awk -v 'target='^$target '
+      $1 == "bind" || $1 == "mount" {
+        destination=$3; if($2 ~ /^-/) destination=$4;
+        if(destination == target) found=1
+      }
+      END { exit found }
+    ' || fail 'a manual mount already owns:' $target
+  }
+  if(! ~ $nix9SystemCheck 1) {
+    anchor=/mnt/nix9-mount-^$pid^-$name
+    test -d $anchor || fail 'private mount point is unavailable:' $anchor
+    anchors=($anchors $anchor)
+    if($nix9NamespaceTools/bin/alarm $5 $nix9NamespaceClient -a -k $4 $3 $nix9NamespaceTools/bin/mount -nc /fd/0 $anchor) {
+      mounted=`{identity $anchor}
+      ~ $#mounted 1 || fail 'cannot identify mounted share:' $name
+      staged=($staged $name $target $anchor $mounted)
+    }
+    if not {
+      unmount $anchor >[2]/dev/null
+      if(~ $6 1) fail 'required share is unavailable:' $name $3
+      echo 'nix9: optional share is unavailable:' $name $3 >[1=2]
+    }
+  }
+  status=''
+}
+if(~ $nix9NamespaceSystem $nix9NamespaceNext && ~ $#nix9NamespaceMounts $nix9NamespaceCount && ! ~ $nix9SystemCheck 1) {
+  echo nix9-namespace-ready $nix9NamespaceMounts
+  exit ''
+}
+configureMounts
+if(~ $nix9SystemCheck 1) {
+  echo nix9-namespace-ready
+  exit ''
+}
+committing=1
+removeViews $nix9NamespaceMounts || fail 'cannot remove old session mounts'
+installViews $staged
+removeAnchors $nix9NamespaceMounts
+echo nix9-namespace-ready $staged
+exit ''

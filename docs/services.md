@@ -147,6 +147,12 @@ namespaces keep running.
 `services.auth` configures the native ticket service and delegation policy.
 See [CPU access and authentication](access.md) for configuration and runtime keys.
 
+## Shared files
+
+`services.exports` serves existing directories over authenticated TLS and 9P.
+`namespace.mounts` places shares in user sessions. See [shared files](sharing.md)
+for configuration, access policy and failure behavior.
+
 ## CPU TCP services
 
 On CPU servers, `services.listen` adds rc scripts to native `aux/listen`:
