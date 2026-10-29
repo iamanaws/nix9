@@ -122,12 +122,14 @@ if(test -f $target/machine-id) {
 }
 for(file in activate boot hostName environment services/ndb.rc services/webfs.rc services/reset.rc)
   if(! test -f $target/$file) fail 'incomplete system:' $file
+if(test -f $target/directories)
+  /$cputype/bin/rc $target/directories check || fail 'directory configuration check failed'
 # Activation runs in a private namespace before any boot selection changes.
 @{ fn sigexit; nix9SystemCheck=1; . $target/activate } || fail 'activation check failed'
 if(test -f $target/services/listen-check)
   /$cputype/bin/rc $target/services/listen-check || fail 'TCP service configuration check failed'
 if(test -f $target/services/access-check)
-  /$cputype/bin/rc $target/services/access-check || fail 'access configuration check failed'
+  /$cputype/bin/rc $target/services/access-check --planned-directories || fail 'access configuration check failed'
 if(test -f $target/services/namespace-check)
   /$cputype/bin/rc $target/services/namespace-check || fail 'namespace configuration check failed'
 if(test -f $target/logging) {
@@ -159,6 +161,10 @@ if(~ $action check) {
   echo 'System check passed:' $target
   exit ''
 }
+if(test -f $target/directories)
+  /$cputype/bin/rc $target/directories prepare || fail 'directory preparation failed'
+if(test -f $target/services/access-check)
+  /$cputype/bin/rc $target/services/access-check || fail 'access configuration check failed'
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=(); . $target/logging } || fail 'log preparation failed'
 }

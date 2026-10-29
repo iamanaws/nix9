@@ -78,6 +78,7 @@ Selection and rollback apply settings at different times:
 | Ethernet and clock synchronization | Next boot. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
+| Persistent directories and their metadata | Selection, rollback and boot. Login and refresh leave them alone. |
 
 Refresh the current shell with `. /usr/local/pkg/nix9/system` after selection
 or rollback. Other sessions keep their namespaces until refreshed.
@@ -138,6 +139,39 @@ to use changed pins; [managed webfs](services.md#webfs) handles this on refresh.
 [Services](services.md) documents networking, timesync, logging, webfs, TCP
 scripts, authenticated access and [shared files](sharing.md). These settings are
 optional.
+
+## Persistent directories
+
+Declare directories outside the store:
+
+```nix
+directories."/usr/glenda/projects" = {
+  mode = "0750";
+  owner = "glenda";
+  group = "glenda";
+};
+```
+
+`mode` defaults to `0755`. `owner` and `group` default to `null`, preserving
+existing ownership. New directories use their creator and inherit their parent's
+group. Missing parents use `0755` unless declared separately.
+
+Selection and boot prepare directories before managed services use them.
+Rollback reapplies the preceding declaration. Contents and child permissions
+stay intact; removing a declaration leaves its directory and data in place.
+
+`check` inspects paths and conflicts without creating directories or changing
+metadata. The file server decides whether creation and metadata changes are
+permitted when applied. Owners and groups must already exist there. Changing an
+owner normally requires native file-server provisioning permission.
+Preparation errors prevent selection or managed startup. Directories already
+created or changed remain in place if a later step fails.
+
+Paths must be canonical absolute strings without store references. Declarations
+cannot cover native namespace paths, the Nix runtime, generated system mounts or
+configured session mounts. Preparation also rejects paths inside a managed share
+retained by the current session. Existing files and directories with special
+mode flags are rejected.
 
 ## Boot integration
 

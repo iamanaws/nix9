@@ -5,13 +5,13 @@ in
 {
   options.exports = lib.mkOption {
     default = { };
-    description = "Existing directories served over authenticated TLS and 9P.";
+    description = "Directories served over authenticated TLS and 9P.";
     type = lib.types.attrsOf (
       lib.types.submodule {
         options = {
           path = lib.mkOption {
             type = runtimeFile;
-            description = "Existing directory to export. Accounts and permissions are managed natively.";
+            description = "Directory to export. Provision it beforehand or declare it through directories.";
           };
           port = lib.mkOption {
             type = lib.types.ints.between 1 65535;

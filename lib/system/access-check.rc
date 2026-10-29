@@ -17,5 +17,10 @@ if(~ $nix9FactotumRequired 1) {
   test -r /mnt/factotum/ctl && test -w /mnt/factotum/ctl || fail 'boot factotum is unavailable'
   for(key in $nix9AccessKeys) privateFile $key '^-[-l]r[w-]------- '
 }
-for(root in $nix9ExportRoots) test -d $root || fail 'export directory is unavailable:' $root
+for(root in $nix9ExportRoots) {
+  if(! test -d $root) {
+    if(! ~ $#* 1 || ! ~ $1 --planned-directories || ! ~ $root $nix9PlannedDirectories)
+      fail 'export directory is unavailable:' $root
+  }
+}
 exit ''

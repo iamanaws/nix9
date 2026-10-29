@@ -77,6 +77,9 @@ in
       mountPoint = "/usr/local";
     };
   };
+  invalidDirectory = make {
+    machines.terminal.configuration.directories."/usr/local/nix/state" = { };
+  };
   overriddenIdentity = make (
     { lib, ... }: {
       machines.files.configuration.machineId = lib.mkForce "different";

@@ -1,0 +1,6 @@
+#!/bin/rc -e
+rfork ne
+bind /usr/glenda/nix9-bind-source $3
+identity=`{ls -qld /usr/glenda/nix9-bind-source | awk '{print $1 ":" $5 ":" $6}'}
+nix9NamespaceMounts=(data $3 /usr/glenda/nix9-bind-source $identity)
+exec nix9-rebuild $2 $1

@@ -10,6 +10,7 @@ let
     };
 in
 {
+  imports = [ ./modules/directories.nix ];
   options = {
     namespace = lib.mkOption {
       type = lib.types.submodule { imports = [ ./modules/namespace.nix ]; };

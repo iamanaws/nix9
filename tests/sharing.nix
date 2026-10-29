@@ -69,6 +69,7 @@ in
     (make (
       { lib, ... }: {
         machines.files.configuration.services.exports.projects.readOnly = lib.mkForce true;
+        machines.files.configuration.directories."/usr/glenda/projects".mode = lib.mkForce "0710";
       }
     )).systems.files;
   disabled =
@@ -76,6 +77,7 @@ in
       { lib, ... }: {
         defaults.fs = lib.mkForce null;
         machines.files.configuration.services.exports = lib.mkForce { };
+        machines.files.configuration.directories = lib.mkForce { };
         machines.cpu.mounts = lib.mkForce { };
         machines.terminal.mounts = lib.mkForce { };
       }

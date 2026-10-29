@@ -19,6 +19,7 @@ let
         }:
         {
           installation-tests = import ./installation-host.nix { inherit pkgs nativePackageSet testSupport; };
+          directory-tests = import ./directory-host.nix { inherit pkgs nativePackageSet testSupport; };
         }
       )
       ./native.nix
@@ -43,4 +44,5 @@ in
         touch "$out"
       '';
   checks.installation = tests.installation-tests;
+  checks.directories = tests.directory-tests;
 }

@@ -12,6 +12,7 @@
       ip = "10.0.2.100";
       configuration = {
         networking.enable = true;
+        directories."/usr/glenda/projects".mode = "0750";
         services.auth = {
           enable = true;
           speaksFor.cpu = [ "glenda" ];

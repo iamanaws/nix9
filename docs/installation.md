@@ -3,8 +3,9 @@
 `pkgs.mkInstallation` describes machines together and produces their `mkSystem`
 closures, shared NDB records and a manifest. Start with the bundled
 [file/auth, CPU and terminal example](../examples/installation/configuration.nix).
-Native boot, accounts, keys and export directories remain provisioning
-prerequisites. See [authentication](access.md) and [sharing](sharing.md).
+Native boot, accounts and keys remain provisioning prerequisites. The example
+declares its shared project directory. See [authentication](access.md) and
+[sharing](sharing.md).
 
 ## Try the example
 

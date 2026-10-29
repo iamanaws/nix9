@@ -14,6 +14,7 @@
   machineId ? null,
   packages ? [ ],
   files ? { },
+  directories ? { },
   webfs ? { },
   networking ? { },
   logging ? { },
@@ -140,6 +141,10 @@ let
     inherit mkDerivation;
     inherit (serviceConfiguration) timesyncLogging;
   };
+  directoryConfiguration = import ./directories.nix {
+    inherit lib mkDerivation directories;
+    mounts = namespace.mounts;
+  };
   write = path: contents: ''
     mkdir -p $out/${builtins.dirOf path}
     echo -n ${quote contents} > $out/${path}
@@ -164,150 +169,168 @@ else if
 then
   throw "mkSystem: services.exports and services.listen must not share a TCP port"
 else
-  builtins.deepSeq [ network timesync listen logConfiguration ndb access ] (mkDerivation {
-    name = "nix9-system-${hostName}";
-    buildCommand = ''
-      mkdir -p $out/files $out/webfs/hosts $out/services
-      echo nix9-system-2 > $out/system
-      ${if machineId == null then "" else "echo ${quote machineId} > $out/machine-id"}
-      echo ${quote hostName} > $out/hostName
-      echo ${environment} > $out/environment
-      ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}
-      ${builtins.concatStringsSep "\n" (
-        map (
-          host:
-          write ("webfs/hosts/" + host) (
-            builtins.concatStringsSep "" (map (pin: "x509 sha256=${pin}\n") pins.${host})
-          )
-        ) hosts
-      )}
-      echo 'nix9NextSystem='$out > $out/activate
-      echo -n ${quote (builtins.readFile ./activate.rc)} >> $out/activate
-      ${write "boot" (builtins.readFile ./boot.rc)}
-      ${if network == "" then "" else write "network" network}
-      ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
-      ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
-      ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}
-      ${write "namespace/config" sharing.configuration}
-      ${write "services/namespace-mounts" (builtins.readFile ./namespace-mounts.rc)}
-      echo 'nix9NamespaceNext='$out > $out/services/namespace.rc
-      echo -n ${quote (builtins.readFile ./namespace.rc)} >> $out/services/namespace.rc
-      echo 'rfork e' > $out/services/namespace-check
-      echo 'nix9SystemCheck=1' >> $out/services/namespace-check
-      echo '. '$out'/services/namespace.rc' >> $out/services/namespace-check
-      ${
-        if ndb == null then
-          ""
-        else
-          ''
-            ${write "ndb/local" ndb.database}
-            ${write "ndb/include" (builtins.concatStringsSep "\n" ndb.include + "\n")}
-            mkdir -p $out/ndb/bin/ndb
-            echo '#!/bin/rc' > $out/ndb/bin/ndb/cs
-            echo 'exec ${ndb.package}/bin/ndb/cs -f /lib/ndb/local $*' >> $out/ndb/bin/ndb/cs
-            echo '#!/bin/rc' > $out/ndb/bin/ndb/dns
-            ${
-              if ndb.dns.enable then
-                ''
-                  echo 'nix9DnsArgs=()' >> $out/ndb/bin/ndb/dns
-                  echo 'for(argument in $*) if(! ~ $argument -r) nix9DnsArgs=($nix9DnsArgs $argument)' >> $out/ndb/bin/ndb/dns
-                  echo 'exec ${ndb.package}/bin/ndb/dns -f /lib/ndb/local ${
-                    if ndb.dns.resolver then "-r " else ""
-                  }$nix9DnsArgs' >> $out/ndb/bin/ndb/dns
-                ''
-              else
-                ''
-                  echo ${quote "exit ''"} >> $out/ndb/bin/ndb/dns
-                ''
-            }
-            chmod 755 $out/ndb/bin/ndb/*
-            echo 'path=('$out'/ndb/bin $path)' > $out/ndb/boot.rc
-          ''
-      }
-      ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
-      ${if timesync == "" then "" else write "services/timesync.rc" timesync}
-      ${
-        if listen == null && access == null then
-          ""
-        else
-          ''
-            mkdir -p $out/services/listen $out/services/listen-scripts $out/services/listen-bin/aux
-            ${builtins.concatStringsSep "\n" (
-              map (port: ''
-                ${write ("services/listen-scripts/tcp" + port) listen.${port}}
-                echo '#!/bin/rc -e' > $out/services/listen/tcp${port}
-                echo 'nix9ListenConnectionSystem='$out >> $out/services/listen/tcp${port}
-                echo -n ${quote (builtins.readFile ./listen-connection.rc)} >> $out/services/listen/tcp${port}
-                chmod 755 $out/services/listen/tcp${port}
-              '') (builtins.attrNames listenScripts)
-            )}
-            ${lib.concatStringsSep "\n" (
-              lib.mapAttrsToList (port: script: ''
-                ${write ("services/listen/tcp" + port) script}
-                chmod 755 $out/services/listen/tcp${port}
-              '') sharing.scripts
-            )}
-            ${
-              if access != null && access.cpu.enable then
-                ''
-                  ${write "services/listen/tcp17019" access.cpuScript}
-                  chmod 755 $out/services/listen/tcp17019
-                ''
-              else
-                ""
-            }
-            echo 'rfork e' > $out/services/listen-check
-            echo 'nix9ListenCheckSystem='$out >> $out/services/listen-check
-            echo 'nix9ListenBinary=${listenPackage}/bin/aux/listen' >> $out/services/listen-check
-            echo -n ${quote (builtins.readFile ./listen-check.rc)} >> $out/services/listen-check
-            echo 'rfork e' > $out/services/listen-start
-            echo 'nix9ListenStartSystem='$out >> $out/services/listen-start
-            echo 'nix9ListenBinary=${listenPackage}/bin/aux/listen' >> $out/services/listen-start
-            echo -n ${quote (builtins.readFile ./listen-start.rc)} >> $out/services/listen-start
-            echo '#!/bin/rc' > $out/services/listen-bin/aux/listen
-            echo 'exec /$cputype/bin/rc '$out'/services/listen-start $*' >> $out/services/listen-bin/aux/listen
-            chmod 755 $out/services/listen-bin/aux/listen
-            echo 'mount -C #s$srvspec/boot /root $rootspec' > $out/services/listen.namespace
-            echo '. $rootdir/lib/namespace' >> $out/services/listen.namespace
-            echo 'bind -b '$out'/services/listen $nix9ListenDirectory' >> $out/services/listen.namespace
-            echo 'nix9ListenRuntime=$nix9' > $out/services/listen-boot.rc
-            echo 'path=('$out'/services/listen-bin $path)' >> $out/services/listen-boot.rc
-          ''
-      }
-      ${
-        if access == null then
-          ""
-        else
-          ''
-            ${write "services/access-config" access.settings}
-            ${write "services/access-start" (builtins.readFile ./access-start.rc)}
-            echo 'rfork e' > $out/services/access-check
-            echo 'nix9AccessSystem='$out >> $out/services/access-check
-            echo -n ${quote (builtins.readFile ./access-check.rc)} >> $out/services/access-check
-            ${
-              if access.auth.enable then
-                ''
-                  ${write "services/auth-policy" ("# Nix9 authentication delegation.\n" + access.policy)}
-                  ${write "services/auth/tcp567" ''
-                    #!/bin/rc
-                    exec ${authPackage}/bin/auth/authsrv -N $3
-                  ''}
-                  chmod 755 $out/services/auth/tcp567
-                  mkdir -p $out/services/listen-bin/auth
-                  # cpurc's default keyfs invocation is replaced by the managed listener.
-                  ${write "services/listen-bin/auth/keyfs" ''
-                    #!/bin/rc
-                    if(~ $#* 4 && ~ $1 -wp && ~ $2 -m && ~ $3 /mnt/keys && ~ $4 /adm/keys) exit '''
-                    exec ${authPackage}/bin/auth/keyfs $*
-                  ''}
-                  chmod 755 $out/services/listen-bin/auth/keyfs
-                ''
-              else
-                ""
-            }
-          ''
-      }
-      ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
-      ${if logConfiguration == null then "" else write "log-event" logConfiguration.event}
-    '';
-  })
+  builtins.deepSeq
+    [
+      network
+      timesync
+      listen
+      logConfiguration
+      ndb
+      access
+      directoryConfiguration
+    ]
+    (mkDerivation {
+      name = "nix9-system-${hostName}";
+      buildCommand = ''
+        mkdir -p $out/files $out/webfs/hosts $out/services
+        echo nix9-system-2 > $out/system
+        ${if machineId == null then "" else "echo ${quote machineId} > $out/machine-id"}
+        echo ${quote hostName} > $out/hostName
+        echo ${environment} > $out/environment
+        ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}
+        ${builtins.concatStringsSep "\n" (
+          map (
+            host:
+            write ("webfs/hosts/" + host) (
+              builtins.concatStringsSep "" (map (pin: "x509 sha256=${pin}\n") pins.${host})
+            )
+          ) hosts
+        )}
+        echo 'nix9NextSystem='$out > $out/activate
+        echo -n ${quote (builtins.readFile ./activate.rc)} >> $out/activate
+        ${write "boot" (builtins.readFile ./boot.rc)}
+        ${if directoryConfiguration == null then "" else write "directories" directoryConfiguration.script}
+        ${if network == "" then "" else write "network" network}
+        ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
+        ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
+        ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}
+        ${write "namespace/config" sharing.configuration}
+        ${write "services/namespace-mounts" (builtins.readFile ./namespace-mounts.rc)}
+        echo 'nix9NamespaceNext='$out > $out/services/namespace.rc
+        echo -n ${quote (builtins.readFile ./namespace.rc)} >> $out/services/namespace.rc
+        echo 'rfork e' > $out/services/namespace-check
+        echo 'nix9SystemCheck=1' >> $out/services/namespace-check
+        echo '. '$out'/services/namespace.rc' >> $out/services/namespace-check
+        ${
+          if ndb == null then
+            ""
+          else
+            ''
+              ${write "ndb/local" ndb.database}
+              ${write "ndb/include" (builtins.concatStringsSep "\n" ndb.include + "\n")}
+              mkdir -p $out/ndb/bin/ndb
+              echo '#!/bin/rc' > $out/ndb/bin/ndb/cs
+              echo 'exec ${ndb.package}/bin/ndb/cs -f /lib/ndb/local $*' >> $out/ndb/bin/ndb/cs
+              echo '#!/bin/rc' > $out/ndb/bin/ndb/dns
+              ${
+                if ndb.dns.enable then
+                  ''
+                    echo 'nix9DnsArgs=()' >> $out/ndb/bin/ndb/dns
+                    echo 'for(argument in $*) if(! ~ $argument -r) nix9DnsArgs=($nix9DnsArgs $argument)' >> $out/ndb/bin/ndb/dns
+                    echo 'exec ${ndb.package}/bin/ndb/dns -f /lib/ndb/local ${
+                      if ndb.dns.resolver then "-r " else ""
+                    }$nix9DnsArgs' >> $out/ndb/bin/ndb/dns
+                  ''
+                else
+                  ''
+                    echo ${quote "exit ''"} >> $out/ndb/bin/ndb/dns
+                  ''
+              }
+              chmod 755 $out/ndb/bin/ndb/*
+              echo 'path=('$out'/ndb/bin $path)' > $out/ndb/boot.rc
+            ''
+        }
+        ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
+        ${if timesync == "" then "" else write "services/timesync.rc" timesync}
+        ${
+          if listen == null && access == null then
+            ""
+          else
+            ''
+              mkdir -p $out/services/listen $out/services/listen-scripts $out/services/listen-bin/aux
+              ${builtins.concatStringsSep "\n" (
+                map (port: ''
+                  ${write ("services/listen-scripts/tcp" + port) listen.${port}}
+                  echo '#!/bin/rc -e' > $out/services/listen/tcp${port}
+                  echo 'nix9ListenConnectionSystem='$out >> $out/services/listen/tcp${port}
+                  echo -n ${quote (builtins.readFile ./listen-connection.rc)} >> $out/services/listen/tcp${port}
+                  chmod 755 $out/services/listen/tcp${port}
+                '') (builtins.attrNames listenScripts)
+              )}
+              ${lib.concatStringsSep "\n" (
+                lib.mapAttrsToList (port: script: ''
+                  ${write ("services/listen/tcp" + port) script}
+                  chmod 755 $out/services/listen/tcp${port}
+                '') sharing.scripts
+              )}
+              ${
+                if access != null && access.cpu.enable then
+                  ''
+                    ${write "services/listen/tcp17019" access.cpuScript}
+                    chmod 755 $out/services/listen/tcp17019
+                  ''
+                else
+                  ""
+              }
+              echo 'rfork e' > $out/services/listen-check
+              echo 'nix9ListenCheckSystem='$out >> $out/services/listen-check
+              echo 'nix9ListenBinary=${listenPackage}/bin/aux/listen' >> $out/services/listen-check
+              echo -n ${quote (builtins.readFile ./listen-check.rc)} >> $out/services/listen-check
+              echo 'rfork e' > $out/services/listen-start
+              echo 'nix9ListenStartSystem='$out >> $out/services/listen-start
+              echo 'nix9ListenBinary=${listenPackage}/bin/aux/listen' >> $out/services/listen-start
+              echo -n ${quote (builtins.readFile ./listen-start.rc)} >> $out/services/listen-start
+              echo '#!/bin/rc' > $out/services/listen-bin/aux/listen
+              echo 'exec /$cputype/bin/rc '$out'/services/listen-start $*' >> $out/services/listen-bin/aux/listen
+              chmod 755 $out/services/listen-bin/aux/listen
+              echo 'mount -C #s$srvspec/boot /root $rootspec' > $out/services/listen.namespace
+              echo '. $rootdir/lib/namespace' >> $out/services/listen.namespace
+              echo 'bind -b '$out'/services/listen $nix9ListenDirectory' >> $out/services/listen.namespace
+              echo 'nix9ListenRuntime=$nix9' > $out/services/listen-boot.rc
+              echo 'path=('$out'/services/listen-bin $path)' >> $out/services/listen-boot.rc
+            ''
+        }
+        ${
+          if access == null then
+            ""
+          else
+            ''
+              ${write "services/access-config" access.settings}
+              ${write "services/access-start" (builtins.readFile ./access-start.rc)}
+              echo 'rfork e' > $out/services/access-check
+              echo 'nix9AccessSystem='$out >> $out/services/access-check
+              echo ${
+                quote (
+                  "nix9PlannedDirectories=("
+                  + lib.concatMapStringsSep " " quote (builtins.attrNames directories)
+                  + ")"
+                )
+              } >> $out/services/access-check
+              echo -n ${quote (builtins.readFile ./access-check.rc)} >> $out/services/access-check
+              ${
+                if access.auth.enable then
+                  ''
+                    ${write "services/auth-policy" ("# Nix9 authentication delegation.\n" + access.policy)}
+                    ${write "services/auth/tcp567" ''
+                      #!/bin/rc
+                      exec ${authPackage}/bin/auth/authsrv -N $3
+                    ''}
+                    chmod 755 $out/services/auth/tcp567
+                    mkdir -p $out/services/listen-bin/auth
+                    # cpurc's default keyfs invocation is replaced by the managed listener.
+                    ${write "services/listen-bin/auth/keyfs" ''
+                      #!/bin/rc
+                      if(~ $#* 4 && ~ $1 -wp && ~ $2 -m && ~ $3 /mnt/keys && ~ $4 /adm/keys) exit '''
+                      exec ${authPackage}/bin/auth/keyfs $*
+                    ''}
+                    chmod 755 $out/services/listen-bin/auth/keyfs
+                  ''
+                else
+                  ""
+              }
+            ''
+        }
+        ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
+        ${if logConfiguration == null then "" else write "log-event" logConfiguration.event}
+      '';
+    })

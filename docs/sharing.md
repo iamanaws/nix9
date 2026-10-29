@@ -10,6 +10,7 @@ for authentication-server configuration and runtime keys.
 On the file server, inside `mkSystem`:
 
 ```nix
+directories."/usr/glenda/projects".mode = "0750";
 services.exports.projects = {
   path = "/usr/glenda/projects";
   allowedUsers = [ "glenda" ];
@@ -19,14 +20,15 @@ services.exports.projects = {
 };
 ```
 
-The directory must already exist. Each export has its own TCP `port`, defaulting
-to 17020. Ports must be distinct and cannot overlap `services.listen`, CPU access
-or authentication. Export and mount names are lowercase labels.
+Use a [directory declaration](configuration.md#persistent-directories) to prepare
+the export path, or provision it beforehand. Each export has its own TCP `port`,
+defaulting to 17020. Ports must be distinct and cannot overlap `services.listen`,
+CPU access or authentication. Export and mount names are lowercase labels.
 
 The server authenticates each connection, checks `allowedUsers`, then runs
 packaged `exportfs` as that user. Native filesystem permissions still apply.
 `readOnly` defaults to `true` and rejects writes even when those permissions allow
-them. The module does not create directories or change their contents or owners.
+them. Export configuration preserves the directory's contents and metadata.
 
 `keyFile` is an optional, owner-only runtime file of factotum key commands. With
 `null`, the export uses provisioned keys. `keyPattern` contains public selection

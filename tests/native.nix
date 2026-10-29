@@ -19,6 +19,17 @@
   vmTest,
 }:
 {
+  native-directory-tests = vmTest "native-directory-tests" {
+    script = ./native_directories.py;
+    files = [
+      ./directories.nix
+      ./directory-checks.nix
+      ./directory-mounted.rc
+    ];
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-prebuilt-tests = vmTest "native-prebuilt-tests" {
     script = ./native_prebuilt.py;
     files = [

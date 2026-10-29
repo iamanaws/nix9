@@ -8,7 +8,8 @@
         . $nix9SelectedSystem/services/ndb.rc
         . $nix9SelectedSystem/ndb/boot.rc
       }
-      if(! test -f $nix9SelectedSystem/logging || { nix9LogCheck=(); . $nix9SelectedSystem/logging }) {
+      if({ ! test -f $nix9SelectedSystem/directories || /$cputype/bin/rc $nix9SelectedSystem/directories prepare } &&
+         { ! test -f $nix9SelectedSystem/logging || { nix9LogCheck=(); . $nix9SelectedSystem/logging } }) {
         if(test -f $nix9SelectedSystem/log-event)
           if(! /$cputype/bin/rc $nix9SelectedSystem/log-event boot $nix9SelectedSystem)
             echo 'nix9: cannot record boot event' >[1=2]

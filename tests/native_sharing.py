@@ -184,10 +184,6 @@ with ExitStack() as stack:
                     guest.command(f"mkdir /mnt/keys/{identity}")
                     guest.command(f"cp /tmp/{identity}.aes /mnt/keys/{identity}/aeskey")
                 download(guest, base, "files.keys", "/adm/files.keys", private=True)
-                guest.command("mkdir -p /usr/glenda/projects")
-                for file in ("default.nix", "hello.c", "mkfile"):
-                    download(guest, base, "project/" + file, "/usr/glenda/projects/" + file)
-                guest.command("echo private > /usr/glenda/projects/locked; chmod 000 /usr/glenda/projects/locked")
             elif name == "cpu":
                 download(guest, base, "cpu.keys", "/adm/cpu.keys", private=True)
             else:
@@ -200,9 +196,18 @@ with ExitStack() as stack:
                 guest.command("cd /tmp && 6c machine-newns.c && 6l -o newns machine-newns.6")
             if name != "terminal":
                 guest.command(f"mkdir -p /cfg/{name}/service")
+            if name == "files":
+                guest.command("nix9-rebuild build /tmp/files.nix")
+                candidate = store_path(guest, "/usr/local/nix/state/gcroots/machines/files/system-build")
+                guest.command("nix9-rebuild check " + candidate)
+                guest.command("test ! -e /usr/glenda/projects")
             guest.command(f"nix9-rebuild switch /tmp/{name}.nix")
             systems[name] = selected(guest, name)
             if name == "files":
+                guest.command("ls -ld /usr/glenda/projects | awk '{print $1}'", "d-rwxr-x---")
+                for file in ("default.nix", "hello.c", "mkfile"):
+                    download(guest, base, "project/" + file, "/usr/glenda/projects/" + file)
+                guest.command("echo private > /usr/glenda/projects/locked; chmod 000 /usr/glenda/projects/locked")
                 for fixture in ("installation.nix", "installation-checks.nix"):
                     download(guest, base, fixture)
                 inventory_checks = guest_json(guest,
@@ -221,7 +226,9 @@ with ExitStack() as stack:
                 rejected(guest, "nix9-rebuild switch /tmp/readOnly.nix", "unsafe permissions")
                 guest.command("chmod 600 /adm/files.keys")
                 guest.command("mv /usr/glenda/projects /usr/glenda/saved-projects")
-                rejected(guest, "nix9-rebuild switch /tmp/readOnly.nix", "export directory is unavailable")
+                guest.command("echo conflict > /usr/glenda/projects")
+                rejected(guest, "nix9-rebuild switch /tmp/readOnly.nix", "not a regular directory")
+                guest.command("rm /usr/glenda/projects")
                 guest.command("mv /usr/glenda/saved-projects /usr/glenda/projects")
                 if selected(guest, name) != systems[name]:
                     raise RuntimeError("rejected export configuration changed the selection")
@@ -329,15 +336,18 @@ with ExitStack() as stack:
     print("PASS: mount reuse, private session views, retargeting, disable, rollback and missing providers", flush=True)
 
     provider.command("nix9-rebuild switch /tmp/readOnly.nix")
+    provider.command("ls -ld /usr/glenda/projects | awk '{print $1}'", "d-rwx--x---")
     remote(terminal, "echo boot-policy > /n/projects/boot-policy")
     # Close this provider context explicitly before starting its next boot.
     stop(provider)
     provider = stack.enter_context(start("files"))
     provider.child.timeout = 300
     listening(provider, (567, 17020, 17021, 17022))
+    provider.command("ls -ld /usr/glenda/projects | awk '{print $1}'", "d-rwx--x---")
     rejected(terminal, "rcpu -h cpu -c 'echo forbidden > /n/projects/after-boot'")
     provider.command("test ! -e /usr/glenda/projects/after-boot")
     provider.command("nix9-rebuild rollback")
+    provider.command("ls -ld /usr/glenda/projects | awk '{print $1}'", "d-rwxr-x---")
     rejected(terminal, "rcpu -h cpu -c 'echo forbidden > /n/projects/before-rollback-boot'")
     stop(provider)
     provider = stack.enter_context(start("files"))
@@ -347,6 +357,7 @@ with ExitStack() as stack:
     remote(terminal, "echo restored > /n/projects/restored")
     provider.command("cat /usr/glenda/projects/restored", "restored")
     provider.command("nix9-rebuild delete 2; nix9-rebuild switch /tmp/disabled.nix")
+    provider.command("ls -ld /usr/glenda/projects | awk '{print $1}'", "d-rwxr-x---")
     print("PASS: export policy changes and rollback take effect at provider boot; project data survives", flush=True)
 
     stop(provider)
@@ -389,5 +400,6 @@ with ExitStack() as stack:
                    "wrong-credentials", "allowed-users", "runtime-preflight", "private-session-mounts",
                    "reuse", "retarget", "disable", "rollback", "required-and-optional-providers",
                    "manual-conflicts", "changed-mounts", "boot-only-export-policy", "persistent-project-data",
+                   "declared-export-directory", "directory-check-without-creation", "directory-metadata-and-rollback",
                    "boot-without-file-provider", "reboot-recovery"],
     }, indent=2) + "\n")
