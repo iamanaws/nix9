@@ -15,8 +15,11 @@ let
     builtins.filter (check: !check.assertion) evaluated.assertions
   );
   build = import ./build.nix {
-    inherit mkDerivation buildEnv;
+    inherit mkDerivation buildEnv lib;
     ndbPackage = packages.ndb;
+    authPackage = packages.auth;
+    cpuPackage = packages.rcpu;
+    listenPackage = packages.listen;
   };
 in
 if failures != [ ] then

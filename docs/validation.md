@@ -38,7 +38,7 @@ with the Nix sandbox enabled.
 | `native-machine-tests` | Two machines sharing runtime files with local writable stores; explicit initialization, independent generations, `newns`, reboot, rollback and boot-root retention through GC. |
 | `native-ndb-tests` | Native NDB build, host and subnet queries on two machines, manual includes, invalid declarations, cs/DNS startup, disable and rollback across four boots. |
 | `native-cpu-tests` | Native CPU init, startup namespace, DHCP/static IPv4, clock correction, logging, login, hook checks and retained generations. |
-| `native-rcpu-tests` | Two-VM dp9ik/authsrv tickets and TLS, client source export, native C build, rejected credentials, persistent sessions, switch, rollback and reboot. |
+| `native-rcpu-tests` | Declarative CPU/auth services, dp9ik tickets and TLS, delegation and allowed-user policy, private runtime files, startup failure and recovery, client source export, native C build, persistent sessions, disable, rollback and reboot. |
 | `native-listen-tests` | Real TCP connections as `none`, booted-generation namespaces, manual services and namespaces, directory fallback, conflicts, persistent connections, EOF with webfs, removed ports, disable and rollback. |
 | `native-network-tests` | DHCP, DNS override, static IPv4, loopbacks, native NDB, gateway routing, reboot and rollback. Harness networking is disabled. |
 | `native-services-tests` | Webfs startup, idempotence, HTTP/HTTPS, pin changes, session isolation, disable and boot without manual setup. |

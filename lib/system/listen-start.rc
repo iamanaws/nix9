@@ -1,17 +1,31 @@
 #!/bin/rc
 # Intercept only the native cpurc invocation. Other uses keep their arguments.
 directory=()
+trust=()
 if(~ $#* 4 && ~ $1 -q && ~ $2 -d && ~ $4 tcp) directory=$3
-if(~ $#* 6 && ~ $1 -q && ~ $2 -t && ~ $4 -d && ~ $6 tcp) directory=$5
+if(~ $#* 6 && ~ $1 -q && ~ $2 -t && ~ $4 -d && ~ $6 tcp) {
+  directory=$5
+  trust=$3
+}
 if(~ $#directory 1 && ! ~ $directory /cfg/`{/$cputype/bin/cat $nix9ListenStartSystem/hostName}^/service /cfg/default/service /rc/bin/service)
   directory=()
 if(~ $#directory 1) {
   if(/$cputype/bin/rc $nix9ListenStartSystem/services/listen-check $directory) {
     nix9ListenDirectory=$directory
+    if(test -f $nix9ListenStartSystem/services/access-start) {
+      rfork ne
+      . $nix9ListenStartSystem/services/access-start
+      arguments=(-q -d $directory)
+      if(~ $#trust 1) arguments=(-q -t $trust -d $directory)
+      $nix9ListenBinary -n $nix9ListenStartSystem/services/listen.namespace $arguments tcp || exit 'listener startup failed'
+      fn sigexit
+      exit ''
+    }
     # newns expands this environment variable after loading /lib/namespace.
     # The native listener still starts the manual services and trusted auth set.
-    exec /$cputype/bin/aux/listen -n $nix9ListenStartSystem/services/listen.namespace $*
+    exec $nix9ListenBinary -n $nix9ListenStartSystem/services/listen.namespace $*
   }
+  if(test -f $nix9ListenStartSystem/services/access-start) exit 'access listener check failed'
   echo 'nix9: managed TCP services skipped; starting the native services' >[1=2]
 }
-exec /$cputype/bin/aux/listen $*
+exec $nix9ListenBinary $*

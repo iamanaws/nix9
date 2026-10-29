@@ -23,7 +23,15 @@ ROOTS = "/usr/local/nix/state/gcroots"
 SYSTEM = ROOTS + "/machines/test/system"
 SERVICE = "/cfg/nix9-rcpu/service"
 CPU_PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
-PINS = {"one": "a" * 64, "two": "b" * 64}
+PINS = {"one": "a" * 64, "two": "b" * 64, "denied": "b" * 64, "disabled": "b" * 64}
+INVALID = {
+    "invalidEnable": "boolean", "emptyUsers": "allowedUsers", "invalidUser": "allowedUsers",
+    "relativeKey": "keyFile", "storedKey": "keyFile", "literalKey": "keyFile",
+    "secretPattern": "keyPattern", "disabledCPU": "CPU settings require",
+    "cpuPort": "owns TCP port 17019", "authPort": "owns TCP port 567",
+    "storedDatabase": "keyDatabase", "invalidSpeaker": "invalid identity",
+    "invalidDelegate": "speaksFor", "disabledAuth": "authentication settings require",
+}
 
 
 def store_root(guest, path=SYSTEM):
@@ -97,13 +105,21 @@ def rejected_login(client, server):
     server.command("test ! -e /tmp/rcpu-rejected")
 
 
-def startup(server, selected):
-    server.command(f"cat {SYSTEM}-boot", selected)
-    server.command(". /usr/local/pkg/nix9/system")
-    server.command(f"cmp {SERVICE}/tcp17019 /tmp/original-rcpu-service")
-    server.command("cmp /rc/bin/cpurc /tmp/original-cpurc")
-    server.command("test -A /sys/log/auth")
-    for number in (567, 17019, 17010):
+def rejected_selection(server, command, reason, selected):
+    output = server.command(command + "; echo ACCESS-ERROR:$status")
+    if not re.search(r"(?m)^ACCESS-ERROR:.+", output) or reason not in output:
+        raise RuntimeError(f"access configuration was not rejected: {reason}: {output}")
+    if store_root(server) != selected:
+        raise RuntimeError("rejected access configuration changed the selection")
+
+
+def listener_processes(server):
+    return [line.split()[1] for line in server.command("ps -a").splitlines()
+            if re.search(r"\blisten \[tcp \* (?:" + re.escape(SERVICE) + r"|/usr/local/nix/store/[^ ]+/services/auth)\]\x00?$", line)]
+
+
+def listening(server, numbers):
+    for number in numbers:
         deadline = time.monotonic() + 15
         while True:
             table = server.command("netstat -n")
@@ -112,6 +128,15 @@ def startup(server, selected):
             if time.monotonic() >= deadline:
                 raise RuntimeError(f"CPU service did not announce port {number}: {table}")
             time.sleep(0.2)
+
+
+def startup(server, selected):
+    server.command(f"cat {SYSTEM}-boot", selected)
+    server.command(". /usr/local/pkg/nix9/system")
+    server.command(f"cmp {SERVICE}/tcp17011 /tmp/original-manual-service")
+    server.command("cmp /rc/bin/cpurc /tmp/original-cpurc")
+    server.command("test -A /sys/log/auth")
+    listening(server, (567, 17019, 17010, 17011))
 
 
 qemu, image, archive, output = sys.argv[1:]
@@ -128,6 +153,7 @@ with ExitStack() as stack:
                     "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
     shutil.copyfile(Path(__file__).with_name("rcpu.nix"), work / "rcpu.nix")
+    shutil.copyfile(Path(__file__).with_name("access.nix"), work / "access.nix")
     shutil.copytree(Path(__file__).with_name("rcpu-project"), work / "rcpu-project")
     (work / "payload").write_text("RCPU-HTTP-PAYLOAD\n")
 
@@ -135,10 +161,11 @@ with ExitStack() as stack:
     # Different server/client IDs force a real authsrv ticket exchange rather
     # than factotum's shared-host-key fallback.
     # Match NVRAM's format: !password is a selection marker; !hex is the AES key.
-    host_key, user_key = secrets.token_bytes(16), secrets.token_bytes(16)
+    host_key, user_key, terminal_key = (secrets.token_bytes(16) for _ in range(3))
     for name, user, role, key in (
         ("server.keys", "rcpuhost", "server", host_key),
         ("client.keys", "glenda", "client", user_key),
+        ("delegate.keys", "terminal", "speakfor", terminal_key),
         ("bad.keys", "glenda", "client", secrets.token_bytes(16)),
     ):
         secret_file(work, name,
@@ -146,14 +173,11 @@ with ExitStack() as stack:
                     f"!hex={key.hex()} !password=______\n".encode())
     secret_file(work, "server.aes", host_key)
     secret_file(work, "user.aes", user_key)
+    secret_file(work, "terminal.aes", terminal_key)
     fields = (bytes(7), bytes(7), bytes(14), b"glenda".ljust(28, b"\0"),
               b"nix9.test".ljust(48, b"\0"), secrets.token_bytes(16))
     secret_file(work, "nvram",
                 b"".join(value + bytes([(9 + sum(value)) % 256]) for value in fields))
-    (work / "cpu-hook").write_text(
-        "auth=nix9-rcpu\n"
-        "echo 'delkey proto=dp9ik' > /mnt/factotum/ctl\n"
-        "cat /adm/rcpu-host.keys > /mnt/factotum/ctl\n")
     (work / "rcpu-build.rc").write_text(
         "#!/bin/rc -e\n"
         f"nix-build /mnt/term/tmp/rcpu-project --out-link {ROOTS}/rcpu-build\n"
@@ -183,25 +207,40 @@ with ExitStack() as stack:
         server.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         server.command(". /usr/local/pkg/nix9/activate")
         server.command("nix9-rebuild init test")
-        for name in ("rcpu.nix", "rcpu-fixture.nix", "cpu-hook"):
+        for name in ("rcpu.nix", "rcpu-fixture.nix", "access.nix"):
             server.command(f"hget -o /tmp/{name} {base}/{name}")
-        for name in ("nvram", "server.keys", "server.aes", "user.aes"):
+        for name in ("nvram", "server.keys", "server.aes", "user.aes", "terminal.aes"):
             private_download(server, base, name)
         server.command("dd -if /tmp/nvram -of /dev/sdF0/nvram -bs 126 -count 1")
         server.command("rm -f /adm/keys; auth/keyfs -m /mnt/keys /adm/keys")
-        server.command("mkdir /mnt/keys/rcpuhost /mnt/keys/glenda")
+        server.command("mkdir /mnt/keys/rcpuhost /mnt/keys/glenda /mnt/keys/terminal")
         server.command("cp /tmp/server.aes /mnt/keys/rcpuhost/aeskey")
         server.command("cp /tmp/user.aes /mnt/keys/glenda/aeskey")
+        server.command("cp /tmp/terminal.aes /mnt/keys/terminal/aeskey")
         server.command("cp /tmp/server.keys /adm/rcpu-host.keys; chmod 600 /adm/rcpu-host.keys")
-        server.command("cp /tmp/cpu-hook /rc/bin/cpurc.local")
         server.command(f"mkdir -p {SERVICE}")
-        server.command(f"cp /rc/bin/service/tcp17019 {SERVICE}/tcp17019")
-        server.command(f"cp {SERVICE}/tcp17019 /tmp/original-rcpu-service")
+        server.command(f"echo '#!/bin/rc' > {SERVICE}/tcp17011")
+        server.command(f"echo 'echo MANUAL-CPU-SERVICE' >> {SERVICE}/tcp17011")
+        server.command(f"chmod 755 {SERVICE}/tcp17011")
+        server.command(f"cp {SERVICE}/tcp17011 /tmp/original-manual-service")
         server.command("cp /rc/bin/cpurc /tmp/original-cpurc")
-        for name in ("one", "two"):
+        for name in ("one", "two", "denied", "disabled"):
             server.command(f"echo '(import ./rcpu.nix).{name}' > /tmp/{name}.nix")
         server.command("nix9-rebuild switch /tmp/one.nix")
         one = store_root(server)
+        for name, reason in INVALID.items():
+            rejected_selection(server,
+                f"nix-instantiate --eval --strict --expr '(import /tmp/access.nix {{}}).{name}.drvPath'",
+                reason, one)
+        server.command("chmod 644 /adm/rcpu-host.keys")
+        rejected_selection(server, "nix9-rebuild switch /tmp/two.nix", "unsafe permissions", one)
+        server.command("chmod 600 /adm/rcpu-host.keys")
+        server.command("mv /adm/rcpu-host.keys /adm/rcpu-host.saved")
+        rejected_selection(server, "nix9-rebuild switch /tmp/two.nix", "runtime file is unavailable", one)
+        server.command("mv /adm/rcpu-host.saved /adm/rcpu-host.keys")
+        server.command(f"cp {SERVICE}/tcp17011 {SERVICE}/tcp17019")
+        rejected_selection(server, "nix9-rebuild switch /tmp/two.nix", "already owns tcp17019", one)
+        server.command(f"rm {SERVICE}/tcp17019")
         server.command("9fs 9fat")
         server.command("echo 'service=cpu' >> /n/9fat/plan9.ini")
         server.command("echo 'init=/amd64/init -c' >> /n/9fat/plan9.ini")
@@ -213,7 +252,7 @@ with ExitStack() as stack:
     client.command(f"echo 'authdom=nix9.test auth=tcp!10.0.2.2!{auth_port}' >> /lib/ndb/local")
     client.command("echo refresh > /net/cs")
     client.command("auth/factotum -n")
-    for name in ("client.keys", "bad.keys"):
+    for name in ("client.keys", "bad.keys", "delegate.keys"):
         private_download(client, base, name)
     load_key(client, "client.keys")
     client.command("mkdir -p /tmp/rcpu-project")
@@ -226,6 +265,12 @@ with ExitStack() as stack:
     with boot(qemu, disk, **options) as server:
         server.child.timeout = 900
         startup(server, one)
+        listeners = listener_processes(server)
+        if len(listeners) != 2:
+            raise RuntimeError(f"expected an ordinary and a trusted listener: {listeners}")
+        server.command(f"rc {one}/services/listen-start -q -d {SERVICE} tcp")
+        if listener_processes(server) != listeners:
+            raise RuntimeError("repeated startup created another listener")
         try:
             login(client, "one", one)
         except Exception:
@@ -242,6 +287,11 @@ with ExitStack() as stack:
             if received != b"RCPU-LISTENER-COEXISTENCE\n":
                 raise RuntimeError(f"managed listener changed native authentication: {received!r}")
         print("PASS: native dp9ik tickets, TLS, authenticated identity and generation namespace", flush=True)
+        load_key(client, "delegate.keys")
+        login(client, "one", one)
+        if "glenda@terminal" not in server.command("cat /sys/log/auth"):
+            raise RuntimeError("delegated login did not obtain a ticket for the terminal identity")
+        load_key(client, "client.keys")
 
         result = client.command("remote -c rc /mnt/term/tmp/rcpu-build.rc", "RCPU-BUILD-END")
         if "hello from authenticated rcpu" not in result or not re.search(
@@ -270,6 +320,9 @@ with ExitStack() as stack:
         server.command("nix9-rebuild switch /tmp/two.nix")
         two = store_root(server)
         login(client, "two", two)
+        load_key(client, "delegate.keys")
+        login(client, "two", two)
+        load_key(client, "client.keys")
         persistent_snapshot(client, 2, "one", one)
         server.command("nix9-rebuild rollback")
         if store_root(server) != one:
@@ -288,18 +341,85 @@ with ExitStack() as stack:
         server.child.timeout = 300
         startup(server, two)
         login(client, "two", two)
+        load_key(client, "delegate.keys")
+        rejected_login(client, server)
+        if "no speaks for" not in server.command("cat /sys/log/auth"):
+            raise RuntimeError("authentication server did not reject delegation")
+        load_key(client, "client.keys")
         server.command(f"{built}/bin/rcpu-hello", "hello from authenticated rcpu")
         print("PASS: CPU reboot restores native authentication and selected generation", flush=True)
+        server.command("nix9-rebuild switch /tmp/denied.nix")
+        denied = store_root(server)
+        login(client, "denied", denied)
+
+    with boot(qemu, disk, **options) as server:
+        startup(server, denied)
+        rejected_login(client, server)
+        server.command("nix9-rebuild rollback")
+        if store_root(server) != two:
+            raise RuntimeError("CPU policy rollback selected the wrong generation")
+        rejected_login(client, server)
+
+    with boot(qemu, disk, **options) as server:
+        startup(server, two)
+        login(client, "two", two)
+        server.command("nix9-rebuild delete 3")
+        server.command("nix9-rebuild switch /tmp/disabled.nix")
+        disabled = store_root(server)
+        login(client, "disabled", disabled)
+
+    with boot(qemu, disk, **options) as server:
+        server.command(". /usr/local/pkg/nix9/system")
+        listening(server, (17010, 17011))
+        table = server.command("netstat -n")
+        for number in (567, 17019):
+            if re.search(r"^tcp\s+\d+\s+\S+\s+Listen\s+" + str(number) + r"\s", table, re.M):
+                raise RuntimeError(f"disabled access service still listening on {number}")
+        server.command(f"cmp {SERVICE}/tcp17011 /tmp/original-manual-service")
+        server.command("nix9-rebuild rollback")
+        if store_root(server) != two:
+            raise RuntimeError("disabled access rollback selected the wrong generation")
+
+    with boot(qemu, disk, **options) as server:
+        startup(server, two)
+        login(client, "two", two)
+        print("PASS: CPU policy, disable and rollback apply at boot", flush=True)
+        server.command("echo 'echo BOOT-READY > /tmp/access-boot-ready' > /cfg/nix9-rcpu/cpustart")
+        server.command("mv /adm/rcpu-host.keys /adm/rcpu-host.saved")
+
+    with boot(qemu, disk, **options) as server:
+        server.command(". /usr/local/pkg/nix9/system")
+        deadline = time.monotonic() + 30
+        while "BOOT-READY" not in server.command(
+                "if(test -f /tmp/access-boot-ready) cat /tmp/access-boot-ready; if not status=''"):
+            if time.monotonic() >= deadline:
+                raise RuntimeError("native CPU startup did not complete after the access failure")
+            time.sleep(0.2)
+        table = server.command("netstat -n")
+        for number in (567, 17019):
+            if re.search(r"^tcp\s+\d+\s+\S+\s+Listen\s+" + str(number) + r"\s", table, re.M):
+                raise RuntimeError(f"missing runtime keys left access listening on {number}")
+        server.command("test ! -e '#s/nix9-access-test'")
+        server.command("mv /adm/rcpu-host.saved /adm/rcpu-host.keys")
+
+    with boot(qemu, disk, **options) as server:
+        startup(server, two)
+        login(client, "two", two)
+        print("PASS: missing runtime keys prevent access startup; restoring them recovers after reboot", flush=True)
 
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({
         "status": "passed", "firstSystem": one, "secondSystem": two,
-        "remoteBuild": built, "configuredCpuBoots": 2,
+        "remoteBuild": built, "configuredCpuBoots": 8,
+        "rejectedConfigurations": list(INVALID),
         "checks": ["native-rcpu", "dp9ik-authsrv-tickets", "tls", "authenticated-user",
                    "selected-generation", "generated-files", "certificate-pins", "managed-webfs",
                    "client-source-export", "native-c-build", "verified-output",
                    "wrong-credentials", "missing-credentials", "persistent-session",
                    "fresh-logins", "switch", "rollback", "cpu-reboot", "manual-service-preserved",
-                   "managed-listener-coexistence", "runtime-only-test-credentials"],
+                   "managed-listener-coexistence", "runtime-only-test-credentials",
+                   "private-runtime-files", "manual-conflict", "repeated-startup",
+                   "allowed-users", "delegation-policy", "boot-only-policy", "disable", "policy-rollback",
+                   "missing-keys-at-boot", "startup-recovery"],
     }, indent=2) + "\n")

@@ -31,8 +31,9 @@ let
       '';
     };
   system =
-    version: pin:
+    version: pin: extra:
     pkgs.mkSystem {
+      imports = [ extra ];
       hostName = "nix9-rcpu";
       packages = [ (command version) ];
       files.version = "${version}\n";
@@ -41,6 +42,16 @@ let
       logging.enable = true;
       logging.files.auth.mode = "0660";
       services = {
+        auth = {
+          enable = true;
+          speaksFor.terminal = if version == "one" then [ "glenda" ] else [ ];
+        };
+        cpu = {
+          enable = true;
+          allowedUsers = [ "glenda" ];
+          keyFile = "/adm/rcpu-host.keys";
+          keyPattern = "dom=nix9.test user=rcpuhost";
+        };
         timesync.enable = true;
         webfs.enable = true;
         listen = {
@@ -51,6 +62,25 @@ let
     };
 in
 {
-  one = system "one" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-  two = system "two" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  one = system "one" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" { };
+  two = system "two" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" { };
+  denied = system "denied" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" (
+    { lib, ... }: {
+      services.cpu.allowedUsers = lib.mkForce [ "nobody" ];
+    }
+  );
+  disabled = system "disabled" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" (
+    { lib, ... }: {
+      services.auth = {
+        enable = lib.mkForce false;
+        speaksFor = lib.mkForce { };
+      };
+      services.cpu = {
+        enable = lib.mkForce false;
+        allowedUsers = lib.mkForce [ ];
+        keyFile = lib.mkForce null;
+        keyPattern = lib.mkForce "";
+      };
+    }
+  );
 }

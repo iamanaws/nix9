@@ -57,7 +57,8 @@ Switching and rollback apply settings at different times:
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
-| Ethernet, clock synchronization and CPU TCP scripts | Next boot. Running services and connections retain the booted generation. |
+| Ethernet and clock synchronization | Next boot. |
+| CPU TCP scripts, CPU access and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
 
 Refresh the current shell with `. /usr/local/pkg/nix9/system` after switching
@@ -116,8 +117,8 @@ empty revocation file only if none exists. See [HTTPS trust](transport.md#https-
 for the policy format and revocation behavior. A manual webfs must be restarted
 to use changed pins; [managed webfs](services.md#webfs) handles this on refresh.
 
-[Services](services.md) documents networking, timesync, logging, webfs and TCP
-scripts. These settings are optional.
+[Services](services.md) documents networking, timesync, logging, webfs, TCP
+scripts and authenticated access. These settings are optional.
 
 ## Boot integration
 

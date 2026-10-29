@@ -33,7 +33,17 @@ in
     webfs = settings "Certificate pin configuration.";
     networking = settings "Native Ethernet configuration.";
     logging = settings "Native log configuration.";
-    services = settings "Native service configuration.";
+    services = mkOption {
+      type = types.submodule {
+        freeformType = types.attrsOf types.anything;
+        imports = [
+          ./modules/auth.nix
+          ./modules/cpu.nix
+        ];
+      };
+      default = { };
+      description = "Native service configuration.";
+    };
     assertions = mkOption {
       type = types.listOf (
         types.submodule {

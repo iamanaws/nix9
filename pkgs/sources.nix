@@ -89,6 +89,11 @@ in
   ndbSource = selectSource "9front-ndb-source" {
     paths = "sys/src/libip sys/src/libndb sys/src/libauthsrv sys/src/cmd/ndb";
   };
+  accessSource = selectSource "9front-access-source" {
+    paths =
+      "sys/src/cmd/auth sys/src/cmd/aux/listen.c sys/src/cmd/exportfs "
+      + "sys/src/cmd/tlsclient.c sys/src/cmd/tlssrv.c rc/bin/rcpu rc/bin/rconnect";
+  };
   webfsSource = selectSource "9front-webfs-source" {
     paths = "sys/src/cmd/webfs";
   };

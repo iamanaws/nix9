@@ -1,8 +1,8 @@
 # System roadmap
 
-Updated 2026-10-28. The first three milestones are implemented. See
-[configuration](configuration.md), [discovery](discovery.md) and [tests](validation.md)
-for their interfaces and coverage. The remaining milestones describe future work.
+Updated 2026-10-28. The first three milestones and the CPU/authentication portion
+of milestone 4 are implemented. See [configuration](configuration.md),
+[discovery](discovery.md), [access](access.md) and [tests](validation.md).
 
 ## Goal and design
 
@@ -41,14 +41,13 @@ file/auth server, a CPU server and a terminal. Start with existing bootable syst
 
 ### 4. Add native roles and namespace resources
 
-Package the remaining authentication, listener and export/import tools each role
-needs. Add modules for CPU access, authentication, file exports and terminal
-sessions. Start file service management around an existing filesystem without
-formatting disks.
+CPU access and authentication modules now use packaged native services, with
+explicit access policy and runtime keys. Next, add file exports around an existing
+filesystem and terminal sessions, packaging the remaining tools they need.
 
 Describe named resources, their providers, imports, bind order and required or
-optional availability. Separate boot, service and session namespaces. Manage file
-accounts and authentication policy explicitly, with runtime key provisioning.
+optional availability. Separate boot, service and session namespaces. Add explicit
+filesystem account management.
 
 Acceptance: the three VMs use actual authentication tickets, shared project files
 and a remote C build. Check access rejection, missing providers, repeated startup,

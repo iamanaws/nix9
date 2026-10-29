@@ -4,7 +4,7 @@ fn fail {
   echo 'nix9: TCP service configuration failed:' $* >[1=2]
   exit 'TCP service configuration failed'
 }
-test -x /$cputype/bin/aux/listen || fail 'native aux/listen is unavailable'
+test -x $nix9ListenBinary || fail 'packaged aux/listen is unavailable'
 test -r /lib/namespace || fail 'native namespace file is unavailable'
 switch($#*) {
 case 0

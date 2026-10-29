@@ -54,6 +54,7 @@
     script = ./native_rcpu.py;
     files = [
       ./rcpu.nix
+      ./access.nix
       ./rcpu-project
     ];
     env.NIX9_RCPU_TEST_STATE = "rcpu-state";

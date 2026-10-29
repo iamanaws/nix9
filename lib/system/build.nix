@@ -1,7 +1,11 @@
 {
   mkDerivation,
   buildEnv,
+  lib,
   ndbPackage,
+  authPackage,
+  cpuPackage,
+  listenPackage,
 }:
 {
   hostName,
@@ -57,7 +61,10 @@ let
   ) hosts;
   environment = buildEnv {
     name = "nix9-system-packages";
-    paths = packages ++ (if ndb == null then [ ] else [ ndb.package ]);
+    paths =
+      packages
+      ++ (if ndb == null then [ ] else [ ndb.package ])
+      ++ (if access == null then [ ] else access.packages);
   };
   network = import ./network.nix {
     inherit hostName;
@@ -70,6 +77,8 @@ let
         timesync ? { },
         listen ? { },
         ndb ? { },
+        auth,
+        cpu,
       }:
       {
         managedWebfs =
@@ -87,6 +96,15 @@ let
           configuration = ndb;
           package = ndbPackage;
         };
+        access = import ./access.nix {
+          inherit
+            lib
+            auth
+            cpu
+            authPackage
+            cpuPackage
+            ;
+        };
       }
     )
       services;
@@ -95,7 +113,9 @@ let
     timesync
     listen
     ndb
+    access
     ;
+  listenScripts = if listen == null then { } else listen;
   logConfiguration = import ./logging.nix {
     configuration = logging;
     inherit mkDerivation;
@@ -116,8 +136,12 @@ else if !validPins then
   throw "mkSystem: certificatePins must map lowercase DNS hosts to nonempty lists of SHA-256 hex fingerprints"
 else if !builtins.isBool managedWebfs then
   throw "mkSystem: services.webfs.enable must be a boolean"
+else if access != null && access.cpu.enable && listenScripts ? "17019" then
+  throw "mkSystem: services.cpu owns TCP port 17019"
+else if access != null && access.auth.enable && listenScripts ? "567" then
+  throw "mkSystem: services.auth owns TCP port 567"
 else
-  builtins.deepSeq [ network timesync listen logConfiguration ndb ] (mkDerivation {
+  builtins.deepSeq [ network timesync listen logConfiguration ndb access ] (mkDerivation {
     name = "nix9-system-${hostName}";
     buildCommand = ''
       mkdir -p $out/files $out/webfs/hosts $out/services
@@ -173,7 +197,7 @@ else
       ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
       ${if timesync == "" then "" else write "services/timesync.rc" timesync}
       ${
-        if listen == null then
+        if listen == null && access == null then
           ""
         else
           ''
@@ -185,13 +209,24 @@ else
                 echo 'nix9ListenConnectionSystem='$out >> $out/services/listen/tcp${port}
                 echo -n ${quote (builtins.readFile ./listen-connection.rc)} >> $out/services/listen/tcp${port}
                 chmod 755 $out/services/listen/tcp${port}
-              '') (builtins.attrNames listen)
+              '') (builtins.attrNames listenScripts)
             )}
+            ${
+              if access != null && access.cpu.enable then
+                ''
+                  ${write "services/listen/tcp17019" access.cpuScript}
+                  chmod 755 $out/services/listen/tcp17019
+                ''
+              else
+                ""
+            }
             echo 'rfork e' > $out/services/listen-check
             echo 'nix9ListenCheckSystem='$out >> $out/services/listen-check
+            echo 'nix9ListenBinary=${listenPackage}/bin/aux/listen' >> $out/services/listen-check
             echo -n ${quote (builtins.readFile ./listen-check.rc)} >> $out/services/listen-check
             echo 'rfork e' > $out/services/listen-start
             echo 'nix9ListenStartSystem='$out >> $out/services/listen-start
+            echo 'nix9ListenBinary=${listenPackage}/bin/aux/listen' >> $out/services/listen-start
             echo -n ${quote (builtins.readFile ./listen-start.rc)} >> $out/services/listen-start
             echo '#!/bin/rc' > $out/services/listen-bin/aux/listen
             echo 'exec /$cputype/bin/rc '$out'/services/listen-start $*' >> $out/services/listen-bin/aux/listen
@@ -201,6 +236,39 @@ else
             echo 'bind -b '$out'/services/listen $nix9ListenDirectory' >> $out/services/listen.namespace
             echo 'nix9ListenRuntime=$nix9' > $out/services/listen-boot.rc
             echo 'path=('$out'/services/listen-bin $path)' >> $out/services/listen-boot.rc
+          ''
+      }
+      ${
+        if access == null then
+          ""
+        else
+          ''
+            ${write "services/access-config" access.settings}
+            ${write "services/access-start" (builtins.readFile ./access-start.rc)}
+            echo 'rfork e' > $out/services/access-check
+            echo 'nix9AccessSystem='$out >> $out/services/access-check
+            echo -n ${quote (builtins.readFile ./access-check.rc)} >> $out/services/access-check
+            ${
+              if access.auth.enable then
+                ''
+                  ${write "services/auth-policy" ("# Nix9 authentication delegation.\n" + access.policy)}
+                  ${write "services/auth/tcp567" ''
+                    #!/bin/rc
+                    exec ${authPackage}/bin/auth/authsrv -N $3
+                  ''}
+                  chmod 755 $out/services/auth/tcp567
+                  mkdir -p $out/services/listen-bin/auth
+                  # cpurc's default keyfs invocation is replaced by the managed listener.
+                  ${write "services/listen-bin/auth/keyfs" ''
+                    #!/bin/rc
+                    if(~ $#* 4 && ~ $1 -wp && ~ $2 -m && ~ $3 /mnt/keys && ~ $4 /adm/keys) exit '''
+                    exec ${authPackage}/bin/auth/keyfs $*
+                  ''}
+                  chmod 755 $out/services/listen-bin/auth/keyfs
+                ''
+              else
+                ""
+            }
           ''
       }
       ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
