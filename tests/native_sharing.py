@@ -88,6 +88,13 @@ def store_path(guest, root):
     return re.findall(r"(?m)^/usr/local/nix/store/\S+$", output)[0]
 
 
+def guest_json(guest, command):
+    values = [json.loads(line) for line in guest.command(command).splitlines() if line.startswith("{")]
+    if len(values) != 1:
+        raise RuntimeError(f"expected one JSON result: {command}")
+    return values[0]
+
+
 qemu, image, archive, output = sys.argv[1:]
 state = os.environ.get("NIX9_SHARING_TEST_STATE")
 with ExitStack() as stack:
@@ -97,6 +104,8 @@ with ExitStack() as stack:
     work.chmod(0o700)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
     shutil.copyfile(Path(__file__).with_name("sharing.nix"), work / "sharing.nix")
+    for name in ("installation.nix", "installation-checks.nix"):
+        shutil.copyfile(Path(__file__).with_name(name), work / name)
     shutil.copyfile(Path(__file__).with_name("machine-newns.c"), work / "machine-newns.c")
     shutil.copyfile(Path(__file__).with_name("sharing-failed-refresh.rc"), work / "sharing-failed-refresh.rc")
     shutil.copytree(Path(__file__).with_name("sharing-project"), work / "project")
@@ -148,6 +157,8 @@ with ExitStack() as stack:
 
     disks = {}
     systems = {}
+    manifest = None
+    inventory_checks = None
     for name in ("files", "cpu", "terminal"):
         disk = work / f"{name}.qcow2"
         if disk.exists():
@@ -192,6 +203,18 @@ with ExitStack() as stack:
             guest.command(f"nix9-rebuild switch /tmp/{name}.nix")
             systems[name] = selected(guest, name)
             if name == "files":
+                for fixture in ("installation.nix", "installation-checks.nix"):
+                    download(guest, base, fixture)
+                inventory_checks = guest_json(guest,
+                    "nix-instantiate --eval --strict --json /tmp/installation-checks.nix")
+                guest.command("echo '(import ./sharing.nix {}).installation.build' > /tmp/installation-build.nix")
+                guest.command("nix-build /tmp/installation-build.nix --out-link /usr/local/nix/state/gcroots/installation")
+                bundle = store_path(guest, "/usr/local/nix/state/gcroots/installation")
+                manifest = guest_json(guest, "cat " + bundle + "/manifest.json")
+                guest.command("cat " + bundle + "/ndb", 'sys="files" ip="10.0.2.100"')
+                for machine in ("files", "cpu", "terminal"):
+                    guest.command("cat " + bundle + "/systems/" + machine,
+                                  manifest["machines"][machine]["system"])
                 for invalid, reason in INVALID.items():
                     rejected(guest, f"nix-instantiate --eval --strict --expr '(import /tmp/sharing.nix {{}}).{invalid}.drvPath'", reason)
                 guest.command("chmod 644 /adm/files.keys")
@@ -206,7 +229,9 @@ with ExitStack() as stack:
                 guest.command("9fs 9fat")
                 guest.command("echo 'service=cpu' >> /n/9fat/plan9.ini")
                 guest.command("echo 'init=/amd64/init -c' >> /n/9fat/plan9.ini")
-    print("PASS: three independent stores, typed configurations and runtime preflight", flush=True)
+    if {name: machine["system"] for name, machine in manifest["machines"].items()} != systems:
+        raise RuntimeError("installation manifest disagrees with independently selected systems")
+    print("PASS: installation example, manifest, whole-inventory validation and three independent stores", flush=True)
 
     @contextmanager
     def start(name):
@@ -358,6 +383,7 @@ with ExitStack() as stack:
     (destination / "results.json").write_text(json.dumps({
         "status": "passed", "machines": 3, "configuredBoots": {"files": 5, "cpu": 2, "terminal": 2},
         "systems": systems, "remoteBuild": built, "rejectedConfigurations": list(INVALID),
+        "installation": manifest, "inventoryValidation": inventory_checks,
         "checks": ["native-tls-9p", "separate-auth-and-cpu", "ndb-discovery", "delegated-tickets",
                    "terminal-edit-cpu-build", "independent-stores", "read-only-export", "native-permissions",
                    "wrong-credentials", "allowed-users", "runtime-preflight", "private-session-mounts",

@@ -63,7 +63,7 @@ native database and startup on the next boot.
 Host `dom` entries are DNS hints. Upstream DNS answers can take precedence;
 authoritative zones require manual NDB records and native DNS server setup.
 
-```rc
+```sh
 ndb/query sys cpu1 ip
 ndb/ipquery ip 10.0.0.20 auth fs cpu authdom
 ndb/csquery /net/cs tcp!cpu1!17019

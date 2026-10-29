@@ -30,7 +30,7 @@ the runtime file, never in Nix expressions or generated system files.
 
 From a client with its key loaded and the authentication server discoverable:
 
-```rc
+```sh
 rcpu -u glenda -h cpu1
 rcpu -u glenda -h cpu1 -c 'nix-build /mnt/term/path/to/project'
 ```

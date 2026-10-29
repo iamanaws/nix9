@@ -83,6 +83,7 @@ let
       buildEnv = pkgs.callPackage ./build-env.nix { };
       mkShell = pkgs.callPackage ./mk-shell.nix { };
       mkSystem = pkgs.callPackage ./system { packages = pkgs; };
+      mkInstallation = pkgs.callPackage ./installation { packages = pkgs; };
     }
     // (
       if builtins.pathExists ./go-bootstrap.tar.gz then

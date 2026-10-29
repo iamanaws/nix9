@@ -23,6 +23,8 @@ let
     "bin/nix-profile" = ../../lib/nix-profile.rc;
     "bin/nix9-rebuild" = ../../lib/system/rebuild.rc;
     "system" = ../../lib/system;
+    "installation" = ../../lib/installation;
+    "examples/installation" = ../../examples/installation;
   }
   // (lib.optionalAttrs (goBootstrap != null) {
     "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";
@@ -35,7 +37,7 @@ let
   });
 in
 runCommand "native-packages" { } ''
-  mkdir -p "$out/pkgs" "$out/bin" "$out/sources"
+  mkdir -p "$out/pkgs" "$out/bin" "$out/sources" "$out/examples"
   ${lib.concatStringsSep "\n" (lib.mapAttrsToList copy files)}
   ${lib.concatStringsSep "\n" (
     lib.mapAttrsToList (name: copy "sources/${name}") (builtins.removeAttrs sources [ "sysroot" ])

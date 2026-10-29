@@ -10,6 +10,17 @@ let
   tests = pkgs.lib.mergeAttrsList (
     map (file: callPackages file { }) [
       ./cross.nix
+      (
+        {
+          pkgs,
+          nativePackageSet,
+          testSupport,
+          ...
+        }:
+        {
+          installation-tests = import ./installation-host.nix { inherit pkgs nativePackageSet testSupport; };
+        }
+      )
       ./native.nix
       ./nix.nix
     ]
@@ -31,4 +42,5 @@ in
         go run ${./format.go} ${hello}/bin/hello
         touch "$out"
       '';
+  checks.installation = tests.installation-tests;
 }

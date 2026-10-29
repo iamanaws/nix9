@@ -24,6 +24,8 @@
     script = ./native_sharing.py;
     files = [
       ./sharing.nix
+      ./installation.nix
+      ./installation-checks.nix
       ./sharing-project
       ./sharing-failed-refresh.rc
       ./machine-newns.c

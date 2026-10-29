@@ -39,7 +39,8 @@ with the Nix sandbox enabled.
 | `native-ndb-tests` | Native NDB build, host and subnet queries on two machines, manual includes, invalid declarations, cs/DNS startup, disable and rollback across four boots. |
 | `native-cpu-tests` | Native CPU init, startup namespace, DHCP/static IPv4, clock correction, logging, login, hook checks and retained generations. |
 | `native-rcpu-tests` | Declarative CPU/auth services, dp9ik tickets and TLS, delegation and allowed-user policy, private runtime files, startup failure and recovery, client source export, native C build, persistent sessions, disable, rollback and reboot. |
-| `native-sharing-tests` | Three machines with separate stores, NDB discovery, authenticated TLS/9P exports, delegated CPU access, terminal edits and a remote C build, permissions, session mounts, unavailable providers, disable, reboot and rollback. |
+| `installation-tests` | Host evaluation of the bundled installation example, generated discovery and endpoints, stable identities, session dependencies and rejection of invalid inventories. Also runs in `nix flake check`. |
+| `native-sharing-tests` | The installation example on three machines with separate stores, native inventory validation and manifest builds, NDB discovery, TLS/9P exports, delegated CPU access, terminal edits and a remote C build, permissions, unavailable providers, reboot and rollback. |
 | `native-listen-tests` | Real TCP connections as `none`, booted-generation namespaces, manual services and namespaces, directory fallback, conflicts, persistent connections, EOF with webfs, removed ports, disable and rollback. |
 | `native-network-tests` | DHCP, DNS override, static IPv4, loopbacks, native NDB, gateway routing, reboot and rollback. Harness networking is disabled. |
 | `native-services-tests` | Webfs startup, idempotence, HTTP/HTTPS, pin changes, session isolation, disable and boot without manual setup. |

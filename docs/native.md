@@ -3,7 +3,7 @@
 [Install the bootstrap](../README.md#quick-start) first. Guest examples use rc.
 Activate Nix and build a package from the bundled set:
 
-```rc
+```sh
 . /usr/local/pkg/nix9/activate
 roots=/usr/local/nix/state/gcroots
 nix-build $nix9/packages -A fortune --out-link $roots/package
@@ -18,7 +18,7 @@ For a local project, run `nix-build` in its directory. See
 
 Copy [environment.nix](../examples/environment.nix) into the guest, then run:
 
-```rc
+```sh
 nix-build environment.nix --out-link $roots/environment
 environment=`{cat $roots/environment}
 touch /tmp/nix9.lua
@@ -36,7 +36,7 @@ session activation, not when sourcing `activate`. Session processes keep the
 environment rooted; their mounts disappear when the last process exits.
 The bundled [ramfs example](../examples/ramfs) demonstrates this:
 
-```rc
+```sh
 nix-build $nix9/ramfs --out-link $roots/ramfs
 environment=`{cat $roots/ramfs}
 $environment/session rc $nix9/ramfs/run.rc
@@ -46,7 +46,7 @@ $environment/session rc $nix9/ramfs/run.rc
 
 Use `nix-profile` to retain environments:
 
-```rc
+```sh
 nix-profile $roots/environment set $environment
 nix-profile $roots/environment list
 ```
@@ -61,7 +61,7 @@ Build updates with a separate `--out-link` before selecting them.
 
 Add these lines to `$home/lib/profile` for login activation:
 
-```rc
+```sh
 . /usr/local/pkg/nix9/activate
 . $nix9/packages/profile /usr/local/nix/state/gcroots/environment
 ```
@@ -73,7 +73,7 @@ its `packages.tar.gz`. Copy the generated `update.nix` into the guest, change it
 URL, and edit `paths` to select packages. It pins the archive's unpacked hash.
 With [webfs mounted](transport.md), run:
 
-```rc
+```sh
 nix-build update.nix --out-link $roots/update &&
   nix-profile $roots/environment set `{cat $roots/update}
 . $nix9/packages/profile $roots/environment
@@ -86,7 +86,7 @@ offline until GC removes them.
 
 Release generations retain Nix itself and its package set:
 
-```rc
+```sh
 nix-build /usr/local/pkg/nix9/release.nix --out-link $roots/release
 nix-profile $roots/nix9 set `{cat $roots/release}
 . /usr/local/pkg/nix9/activate

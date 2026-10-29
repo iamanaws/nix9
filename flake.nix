@@ -41,6 +41,7 @@
         inherit (project) mkPlan9Program mkGuestPackage mkGuestEnvironment;
         inherit (project) stdenv callPackage mkShell;
         mkDerivation = import ./lib/mk-derivation.nix;
+        mkInstallation = import ./lib/installation;
       };
       packages.${system} = project.flakePackages // tests.packages;
       apps.${system} =

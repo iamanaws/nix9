@@ -15,7 +15,7 @@ using [cc9](../pkgs/cc9). Native C and Go development work inside 9front.
 | Filesystem | NARs preserve links and unsupported names, but extraction rejects them before writing. Native symlink resolution is missing. |
 | Store | Clients must share the canonical store path and kernel service namespace, with one connection per store per process. GC, verification, repair and schema changes require exclusive client access. Permanent roots work; automatic GC, runtime root discovery, indirect roots, `nix-env`, WAL and multiuser mode do not. |
 | Processes and locks | Pipes, PATH, environments, wait, kill, exclusive path locks and cancellation notes work. Generic file locks, Unix credential APIs, process groups, signal threads and PTYs are unported. Server crashes may leave lock markers. |
-| Machine configuration | [Nix modules](configuration.md) compose machine settings and generations. Machines sharing runtime files keep writable stores and generation state local. [NDB](discovery.md) declares service locations; [remote CPU login](services.md#remote-cpu-login) uses native 9front authentication. Account and authentication-server provisioning, coordinated deployment, general daemon management, kernel builds and disk configuration remain outside this layer. |
+| Machine configuration | [System modules](configuration.md) and [installation inventories](installation.md) use existing bootable machines with local writable stores and generation state. Native tools manage accounts, keys, filesystem ownership, kernels, disks and boot configuration. General namespace composition, scheduled maintenance, backups, graphical workspaces and daemon supervision have no declarative modules yet. |
 
 ## Verification limits
 

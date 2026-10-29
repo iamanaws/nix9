@@ -2,51 +2,38 @@
   pkgs ? import <nix9>,
 }:
 let
-  base = name: {
-    hostName = name;
-    machineId = name;
-    networking.enable = true;
-    logging.enable = true;
-    logging.files.auth.mode = "0660";
-    services.timesync.enable = true;
-    services.ndb = {
-      enable = true;
-      dns.enable = false;
-      hosts = {
-        files.ip = "10.0.2.100";
-        cpu.ip = "10.0.2.101";
-        terminal.ip = "10.0.2.102";
-      };
-      networks.lab = {
-        address = "10.0.2.0";
-        prefixLength = 24;
-        auth = "files";
-        fs = "files";
-        cpu = "cpu";
-        authdom = "nix9.share";
-      };
-    };
-  };
   export = {
     path = "/usr/glenda/projects";
     allowedUsers = [ "glenda" ];
     keyFile = "/adm/files.keys";
     keyPattern = "dom=nix9.share user=files";
   };
-  fileServer =
-    readOnly: enabled:
-    pkgs.mkSystem {
-      imports = [ (base "files") ];
-      services.auth = {
-        enable = true;
-        speaksFor.cpu = [ "glenda" ];
-      };
-      services.exports =
-        if enabled then
-          {
-            projects = export // {
-              inherit readOnly;
-            };
+  make =
+    extra:
+    pkgs.mkInstallation {
+      imports = [
+        (<nix9> + "/examples/installation/configuration.nix")
+        {
+          machines = builtins.listToAttrs (
+            map
+              (name: {
+                inherit name;
+                value.configuration = {
+                  logging.enable = true;
+                  logging.files.auth.mode = "0660";
+                  services.timesync.enable = true;
+                  services.ndb.dns.enable = false;
+                };
+              })
+              [
+                "files"
+                "cpu"
+                "terminal"
+              ]
+          );
+        }
+        {
+          machines.files.configuration.services.exports = {
             reference = export // {
               port = 17021;
             };
@@ -54,61 +41,78 @@ let
               port = 17022;
               allowedUsers = [ "nobody" ];
             };
-          }
-        else
-          { };
+          };
+          machines.cpu.mounts.projects.timeout = 3;
+          machines.terminal.mounts = {
+            projects.timeout = 3;
+            reference = {
+              provider = "files";
+              timeout = 3;
+            };
+          };
+        }
+        extra
+      ];
     };
+  installation = make { };
   mount = {
     address = "tcp!files!17020";
     keyPattern = "dom=nix9.share";
     timeout = 3;
   };
-  client =
-    name: extra:
-    pkgs.mkSystem {
-      imports = [
-        (base name)
-        extra
-      ];
-      namespace.mounts.projects = mount;
-    };
   invalid = configuration: pkgs.mkSystem ({ hostName = "invalid"; } // configuration);
 in
 {
-  files = fileServer false true;
-  readOnly = fileServer true true;
-  disabled = fileServer true false;
-  cpu = client "cpu" {
-    services.cpu = {
-      enable = true;
-      allowedUsers = [ "glenda" ];
-      keyFile = "/adm/cpu.keys";
-      keyPattern = "dom=nix9.share user=cpu";
-    };
-  };
-  terminal = client "terminal" {
-    namespace.mounts.reference = mount // {
-      address = "tcp!files!17021";
-    };
-  };
-  moved = client "terminal" {
-    namespace.mounts.projects.mountPoint = "/n/work";
-  };
-  optional = client "terminal" {
-    namespace.mounts.absent = mount // {
-      address = "tcp!files!17029";
-      required = false;
-      timeout = 1;
-    };
-  };
-  unavailable = client "terminal" (
-    { lib, ... }: {
-      namespace.mounts.first = mount;
-      namespace.mounts.projects.address = lib.mkForce "tcp!files!17029";
-      namespace.mounts.projects.timeout = lib.mkForce 1;
-    }
-  );
-  empty = pkgs.mkSystem { imports = [ (base "terminal") ]; };
+  inherit installation;
+  inherit (installation.systems) files cpu terminal;
+  readOnly =
+    (make (
+      { lib, ... }: {
+        machines.files.configuration.services.exports.projects.readOnly = lib.mkForce true;
+      }
+    )).systems.files;
+  disabled =
+    (make (
+      { lib, ... }: {
+        defaults.fs = lib.mkForce null;
+        machines.files.configuration.services.exports = lib.mkForce { };
+        machines.cpu.mounts = lib.mkForce { };
+        machines.terminal.mounts = lib.mkForce { };
+      }
+    )).systems.files;
+  moved = (make { machines.terminal.mounts.projects.mountPoint = "/n/work"; }).systems.terminal;
+  optional =
+    (make {
+      machines.files.configuration.services.exports.unavailable = export // {
+        port = 17029;
+      };
+      machines.terminal.mounts.absent = {
+        provider = "files";
+        export = "unavailable";
+        required = false;
+        timeout = 1;
+      };
+    }).systems.terminal;
+  unavailable =
+    (make (
+      { lib, ... }: {
+        machines.files.configuration.services.exports.unavailable = export // {
+          port = 17029;
+        };
+        machines.terminal.mounts = {
+          first = {
+            provider = "files";
+            export = "projects";
+            timeout = 3;
+          };
+          projects = {
+            export = "unavailable";
+            timeout = lib.mkForce 1;
+          };
+        };
+      }
+    )).systems.terminal;
+  empty = (make ({ lib, ... }: { machines.terminal.mounts = lib.mkForce { }; })).systems.terminal;
 
   invalidExportPath = invalid {
     services.exports.projects = export // {

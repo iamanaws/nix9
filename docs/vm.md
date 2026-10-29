@@ -13,7 +13,7 @@ cache. Without cached outputs, preparing it builds native packages in a VM.
 
 Try the included C project:
 
-```rc
+```sh
 mkdir /tmp/hello
 cp $nix9/hello/* /tmp/hello
 cd /tmp/hello
@@ -57,7 +57,7 @@ nix develop -c python -m http.server 8000 --bind 127.0.0.1
 
 Configure guest networking if needed, then extract and activate:
 
-```rc
+```sh
 ip/ipconfig ether /net/ether0
 cd / && hget http://10.0.2.2:8000/result-package | tar x
 . /usr/local/env/default/activate
@@ -70,7 +70,7 @@ command paths for the session. Individual package archives also have an
 
 For native C tools, substitute `guest-development` on the host, then run:
 
-```rc
+```sh
 . /usr/local/env/development/activate
 6c -o main.6 main.c
 6l -o main main.6

@@ -96,7 +96,7 @@ Follow the [quick start](../README.md#quick-start), substituting this archive fo
 [release upgrade](native.md#complete-releases) steps. Use a
 [4 GiB VM](vm.md#persistent-disks) for native Go builds and tests. In the guest:
 
-```rc
+```sh
 . /usr/local/pkg/nix9/activate
 roots=/usr/local/nix/state/gcroots
 nix-build $nix9/packages -A go --out-link $roots/go
@@ -133,7 +133,7 @@ For a shell, use `pkgs.mkShell { nativeBuildInputs = [ pkgs.go ]; }` and set
 `GOCACHE` to a writable directory. Upstream tests that start HTTP servers need
 loopback interfaces if networking has not configured them:
 
-```rc
+```sh
 ip/ipconfig -P loopback /dev/null 127.1
 ip/ipconfig -P loopback /dev/null ::1
 ```

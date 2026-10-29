@@ -29,7 +29,7 @@ Leave the server running. In another terminal, run `nix run .#run-vm`.
 Press Enter at the boot arguments and user prompts, then wait for `term%`.
 A missing-display message from `rio` is expected. In the guest:
 
-```rc
+```sh
 ip/ipconfig ether /net/ether0
 cd / && hget http://10.0.2.2:8000/result-native-bootstrap | tar x
 . /usr/local/pkg/nix9/activate
@@ -50,9 +50,9 @@ and a C development example.
 | [Native Nix](docs/native.md) | Builds, environments, updates, releases and store maintenance. |
 | [Package development](docs/development.md) | Toolchains, recipes, development shells and native Go. |
 | [System configuration](docs/configuration.md) | Machine settings, switching, rollback and boot hooks. |
+| [Installation inventory](docs/installation.md) | Machines, shared discovery, provider references and system closures. |
 | [Services](docs/services.md) | Ethernet, clock synchronization, logging, webfs and remote CPU access. |
 | [Service discovery](docs/discovery.md) | NDB records, service locations and native cs/DNS. |
-| [System roadmap](docs/roadmap.md) | Completed foundations, native roles and distributed deployment plans. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
 | [Limitations](docs/feasibility.md) | Port constraints and missing features. |

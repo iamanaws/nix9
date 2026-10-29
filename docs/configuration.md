@@ -19,7 +19,7 @@ pkgs.mkSystem {
 
 With Nix active:
 
-```rc
+```sh
 nix9-rebuild init cpu1
 nix9-rebuild switch configuration.nix
 . /usr/local/pkg/nix9/system
@@ -31,6 +31,9 @@ Configurations can use `imports = [ ./common.nix ];` and module functions
 receiving `lib`, `pkgs` and `config`. The bundled `pkgs.lib` provides standard
 option types, `mkDefault`, `mkForce`, `mkIf` and list ordering without guest
 flakes or network access.
+
+Use [an installation inventory](installation.md) to describe several machines,
+generate their discovery records and connect session mounts to declared exports.
 
 ## Generations
 
@@ -85,7 +88,7 @@ Do not change the backing store while clients are running.
 For example, a machine booting from a local filesystem can post its original
 Nix directory before binding shared files over `/usr/local/nix`:
 
-```rc
+```sh
 srvfs local-nix /root/usr/local/nix
 ```
 

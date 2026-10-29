@@ -17,7 +17,7 @@ openssl x509 -in server.pem -outform DER | openssl dgst -sha256
 
 In the guest, replace `FINGERPRINT` with that 64-digit hex value:
 
-```rc
+```sh
 mkdir -p /sys/lib/tls/webfs/hosts
 if(! test -e /sys/lib/tls/webfs/revoked) echo -n > /sys/lib/tls/webfs/revoked
 echo 'x509 sha256=FINGERPRINT' >> /sys/lib/tls/webfs/hosts/example.org
@@ -59,7 +59,7 @@ accepts regular files and directories, rejecting links and duplicate files.
 
 For a trusted transfer between machines with the same store path:
 
-```rc
+```sh
 nix-store --export `{nix-store -qR $result} > /tmp/closure.export
 ```
 
@@ -78,7 +78,7 @@ Network caches are read-only. The bootstrap configures its bundled file cache.
 
 To publish a local cache:
 
-```rc
+```sh
 nix-store --generate-binary-cache-key NAME SECRET PUBLIC
 cache='file:///path/to/cache?store=/usr/local/nix/store&secret-key=/path/to/SECRET'
 nix-store --store $cache --import < /tmp/closure.export
