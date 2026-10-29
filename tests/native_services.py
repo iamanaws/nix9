@@ -21,7 +21,7 @@ from tls import certificate_pin
 from webfs_tls import certificate
 
 
-SYSTEM = "/usr/local/nix/state/gcroots/system"
+SYSTEM = "/usr/local/nix/state/gcroots/machines/test/system"
 DIGEST = "sha256-" + base64.b64encode(hashlib.sha256(b"42\n").digest()).decode()
 
 
@@ -97,7 +97,7 @@ with ExitStack() as stack:
     subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
                     "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
-    for name in ("services.nix", "services-legacy.rc", "services-retained.rc"):
+    for name in ("services.nix", "services-retained.rc"):
         shutil.copyfile(Path(__file__).with_name(name), work / name)
     (work / "payload").write_text("42\n")
     pairs = [certificate(work, name) for name in ("one", "two")]
@@ -129,10 +129,11 @@ with ExitStack() as stack:
         guest.child.timeout = 900
         guest.command(f"cd / && hget {http_url}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
-        for name in ("services.nix", "services-legacy.rc", "services-retained.rc", "service-pins.nix",
+        guest.command("nix9-rebuild init test")
+        for name in ("services.nix", "services-retained.rc", "service-pins.nix",
                      "terminal-profile.rc", "login-profile.rc"):
             guest.command(f"hget -o /tmp/{name} {http_url}/{name}")
-        for name in ("one", "two", "disabled", "invalid", "legacy"):
+        for name in ("one", "two", "disabled", "invalid"):
             guest.command(f"echo '(import ./services.nix).{name}' > /tmp/{name}.nix")
         manual = identity(guest)
         reject(guest, "nix9-rebuild switch /tmp/invalid.nix", "services.webfs.enable")
@@ -160,11 +161,10 @@ with ExitStack() as stack:
         guest.command("$nix9/bin/webfs -m /mnt/replaced-webfs")
         guest.command("bind -b /mnt/replaced-webfs /mnt/web")
         reject(guest, ". /usr/local/pkg/nix9/system", "managed overlay")
-        guest.command("nix9-rebuild switch /tmp/legacy.nix")
+        reject(guest, "nix9-rebuild switch /tmp/disabled.nix", "managed overlay")
         reject(guest, ". /usr/local/pkg/nix9/system", "managed overlay")
-        guest.command("~ $#nix9WebfsStop 0")
         guest.command("unmount /mnt/replaced-webfs /mnt/web; unmount /mnt/replaced-webfs")
-        guest.command("nix9-rebuild switch /tmp/one.nix; nix9-rebuild delete 2")
+        guest.command("nix9-rebuild switch /tmp/one.nix")
         if selected(guest) != original:
             raise RuntimeError("an edited overlay replaced the managed server")
         guest.command("mkdir -p /tmp/service-login/lib")
@@ -201,16 +201,9 @@ with ExitStack() as stack:
         guest.command("test ! -e /mnt/nix9-webfs/clone; ~ $#nix9WebfsSystem 0")
         guest.command("nix9-rebuild switch /tmp/two.nix")
         selected(guest)
-        guest.command("nix9-rebuild switch /tmp/legacy.nix")
-        guest.command(". /usr/local/pkg/nix9/system")
-        if identity(guest) != manual:
-            raise RuntimeError("legacy activation retained a managed TLS namespace")
-        guest.command("~ $#nix9WebfsSystem 0")
-        guest.command("nix9-rebuild switch /tmp/two.nix")
-        selected(guest)
         guest.command("cp /usr/glenda/lib/profile /tmp/original-profile")
         guest.command("cp /tmp/terminal-profile.rc /usr/glenda/lib/profile")
-        print("PASS: activation, idempotence, TLS changes, isolated sessions, disable and legacy selection", flush=True)
+        print("PASS: activation, idempotence, TLS changes, isolated sessions, disable and rollback", flush=True)
     options = dict(snapshot=False, configure_network=False)
     with boot(qemu, disk, **options) as guest:
         guest.command("echo $nix9WebfsSystem", two)
@@ -236,6 +229,6 @@ with ExitStack() as stack:
         "status": "passed", "firstSystem": one, "secondSystem": two,
         "checks": ["automatic-boot-and-login", "http-and-https", "nix-fetchurl",
                    "idempotent-activation", "changed-pins", "isolated-sessions", "rollback",
-                   "manual-mount-restored", "legacy-generation", "invalid-configuration",
+                   "manual-mount-restored", "invalid-configuration",
                    "runtime-change", "edited-mount-rejected"],
     }, indent=2) + "\n")

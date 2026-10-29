@@ -45,11 +45,14 @@ with tempfile.TemporaryDirectory() as directory:
     selector = work / "root/usr/local/pkg/nix9"
     selector.mkdir()
     shutil.copyfile(payload / "packages" / "profile", selector / "profile")
+    shutil.copyfile(payload / "packages/system/machine.rc", selector / "machine")
     (selector / "activate").write_text(
+        ". /usr/local/pkg/nix9/machine && {\n"
         "if(test -r /usr/local/nix/state/gcroots/nix9) {\n"
         "\t. /usr/local/pkg/nix9/profile /usr/local/nix/state/gcroots/nix9\n"
         "}\n"
         f"if not . {prefix}/activate\n"
+        "}\n"
     )
     (selector / "release.nix").write_text(f"import {prefix}/release.nix\n")
 

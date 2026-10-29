@@ -32,6 +32,14 @@ in
 {
   inherit one;
   notSystem = pkgs.buildEnv { };
+  unsupportedFormat = one.overrideAttrs (old: {
+    name = "system-unsupported-format";
+    buildCommand = old.buildCommand + "\necho unsupported > $out/system\n";
+  });
+  incompleteSystem = one.overrideAttrs (old: {
+    name = "system-incomplete";
+    buildCommand = old.buildCommand + "\nrm $out/services/webfs.rc\n";
+  });
   two = pkgs.mkSystem {
     hostName = "nix9-two";
     packages = [ (command "two") ];

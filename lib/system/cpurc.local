@@ -1,7 +1,8 @@
-# nix9 CPU hook v1
+# nix9 CPU hook
 if(test -r /rc/bin/cpurc.local.nix9-original) . /rc/bin/cpurc.local.nix9-original
-if(test -r /usr/local/nix/state/gcroots/system) {
-  nix9BootSystem=`{cat /usr/local/nix/state/gcroots/system}
+. /usr/local/pkg/nix9/activate && {
+ if(~ $#nix9SystemRoot 1 && test -r $nix9SystemRoot) {
+  nix9BootSystem=`{cat $nix9SystemRoot}
   if(. $nix9BootSystem/boot) {
     # cpurc always passes -n and does not use TIMESYNCARGS. Start the selected
     # source here; its later native process check prevents a second client.
@@ -14,5 +15,6 @@ if(test -r /usr/local/nix/state/gcroots/system) {
     }
   }
   nix9BootSystem=()
+ }
 }
 status=''

@@ -18,6 +18,7 @@ rfork ne && {
       /$cputype/bin/test -r /sys/lib/tls/webfs/revoked
   } &&
   . `{cat $nix9NextSystem/environment}^/activate && {
+    . $nix9NextSystem/services/ndb.rc && {
     if(! ~ $#nix9System 0) {
       /$cputype/bin/unmount $nix9System/files /cfg/nix9/files
       /$cputype/bin/unmount $nix9System/webfs/hosts /sys/lib/tls/webfs/hosts
@@ -29,5 +30,6 @@ rfork ne && {
         nix9NextSystem=()
         . $nix9System/services/webfs.rc
       }
+  }
   }
 }

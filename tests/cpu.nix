@@ -35,14 +35,9 @@ let
     enable = true;
     logging = true;
   };
-  legacy = system "legacy" rtc { };
 in
 {
-  # Exercise upgrading from a retained generation built before CPU hooks existed.
-  legacy = legacy.overrideAttrs (old: {
-    name = "nix9-cpu-legacy";
-    buildCommand = old.buildCommand + "\nrm $out/hooks/cpurc.local\n";
-  });
+  baseline = system "baseline" rtc { };
   one = system "one" rtc { };
   two =
     system "two"

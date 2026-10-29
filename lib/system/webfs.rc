@@ -15,7 +15,7 @@
     if(! ~ `{identity /mnt/web} $nix9WebfsId)
       fail 'the managed overlay at /mnt/web was changed'
   }
-  if(! ~ $nix9WebfsStop 1 && test -f $nix9System/services/webfs-enabled) {
+  if(test -f $nix9System/services/webfs-enabled) {
     test -x $nix9/bin/webfs || fail 'bundled webfs is unavailable'
     test -d /mnt/web && test -d /mnt/nix9-webfs || fail 'invalid mount point'
     if(~ $#nix9WebfsSystem 0) {
@@ -28,11 +28,11 @@
   # Rebuild checks the target without starting services in its temporary namespace.
   if(~ $nix9SystemCheck 1) exit ''
   if(! ~ $#nix9WebfsSystem 0) {
-    if(! ~ $nix9WebfsStop 1 && ~ $nix9WebfsSystem $nix9System && ~ $nix9WebfsRuntime $nix9) exit ''
+    if(~ $nix9WebfsSystem $nix9System && ~ $nix9WebfsRuntime $nix9) exit ''
     unmount /mnt/nix9-webfs /mnt/web || fail 'cannot remove the managed overlay'
     unmount /mnt/nix9-webfs || fail 'cannot remove the managed mount'
   }
-  if(! ~ $nix9WebfsStop 1 && test -f $nix9System/services/webfs-enabled) {
+  if(test -f $nix9System/services/webfs-enabled) {
     $nix9/bin/webfs -m /mnt/nix9-webfs -t /sys/lib/tls/webfs || fail 'cannot start bundled webfs'
     test -r /mnt/nix9-webfs/clone || fail 'webfs did not mount'
     bind -b /mnt/nix9-webfs /mnt/web || fail 'cannot install the managed overlay'
@@ -40,7 +40,7 @@
   status=''
 } && {
   if(! ~ $nix9SystemCheck 1) {
-    if(! ~ $nix9WebfsStop 1 && test -f $nix9System/services/webfs-enabled) {
+    if(test -f $nix9System/services/webfs-enabled) {
       nix9WebfsSystem=$nix9System
       nix9WebfsRuntime=$nix9
       nix9WebfsId=`{/$cputype/bin/ls -ld /mnt/nix9-webfs | /$cputype/bin/awk '{print $2 ":" $3}'}

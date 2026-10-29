@@ -1,0 +1,8 @@
+# Activate the selected system in this session.
+. /usr/local/pkg/nix9/activate && {
+  if(~ $#nix9SystemRoot 1 && test -r $nix9SystemRoot) {
+    nix9SelectedSystem=`{cat $nix9SystemRoot}
+    . $nix9SelectedSystem/activate && { nix9SelectedSystem=(); status='' }
+  }
+  if not status=''
+}

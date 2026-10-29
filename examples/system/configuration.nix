@@ -3,6 +3,7 @@ let
 in
 pkgs.mkSystem {
   hostName = "nix9";
+  # machineId = "cpu1"; # After nix9-rebuild init cpu1.
   networking.enable = true;
   services.webfs.enable = true;
   # CPU servers: services.listen = { enable = true; tcp."17010" = "cat /cfg/nix9/files/motd"; };

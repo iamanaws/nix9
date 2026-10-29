@@ -1,175 +1,27 @@
-{ mkDerivation, buildEnv }:
 {
-  hostName,
-  packages ? [ ],
-  files ? { },
-  webfs ? { },
-  networking ? { },
-  logging ? { },
-  services ? { },
+  mkDerivation,
+  buildEnv,
+  lib,
+  packages,
 }:
+configuration:
 let
-  quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
-  validName =
-    value: builtins.isString value && builtins.match "[a-z0-9]([a-z0-9-]*[a-z0-9])?" value != null;
-  parts = value: builtins.filter builtins.isString (builtins.split "/" value);
-  validFile =
-    value:
-    builtins.match "[a-zA-Z0-9_+.-]+(/[a-zA-Z0-9_+.-]+)*" value != null
-    && builtins.all (part: part != "." && part != "..") (parts value);
-  targets = builtins.attrNames files;
-  parentOf =
-    parent: child: builtins.substring 0 (builtins.stringLength parent + 1) child == parent + "/";
-  validFiles = builtins.all (
-    target:
-    validFile target
-    && builtins.isString files.${target}
-    && builtins.all (other: !(parentOf target other)) targets
-  ) targets;
-  pins =
-    (
-      {
-        certificatePins ? { },
-      }:
-      certificatePins
-    )
-      webfs;
-  hosts = builtins.attrNames pins;
-  validHost =
-    host:
-    builtins.stringLength host <= 253
-    && builtins.all (label: validName label && builtins.stringLength label <= 63) (
-      builtins.filter builtins.isString (builtins.split "\\." host)
-    );
-  validPins = builtins.all (
-    host:
-    validHost host
-    && builtins.isList pins.${host}
-    && pins.${host} != [ ]
-    && builtins.all (
-      pin: builtins.isString pin && builtins.match "[0-9a-fA-F]{64}" pin != null
-    ) pins.${host}
-  ) hosts;
-  environment = buildEnv {
-    name = "nix9-system-packages";
-    paths = packages;
+  evaluated =
+    (import ./eval.nix {
+      inherit lib;
+      pkgs = packages;
+    } configuration).config;
+  failures = map (check: check.message) (
+    builtins.filter (check: !check.assertion) evaluated.assertions
+  );
+  build = import ./build.nix {
+    inherit mkDerivation buildEnv;
+    ndbPackage = packages.ndb;
   };
-  network = import ./network.nix {
-    inherit hostName;
-    configuration = networking;
-  };
-  serviceConfiguration =
-    (
-      {
-        webfs ? { },
-        timesync ? { },
-        listen ? { },
-      }:
-      {
-        managedWebfs =
-          (
-            {
-              enable ? false,
-            }:
-            enable
-          )
-            webfs;
-        timesync = import ./timesync.nix { configuration = timesync; };
-        timesyncLogging = timesync.logging or false;
-        listen = import ./listen.nix { configuration = listen; };
-      }
-    )
-      services;
-  inherit (serviceConfiguration) managedWebfs timesync listen;
-  logConfiguration = import ./logging.nix {
-    configuration = logging;
-    inherit mkDerivation;
-    inherit (serviceConfiguration) timesyncLogging;
-  };
-  write = path: contents: ''
-    mkdir -p $out/${builtins.dirOf path}
-    echo -n ${quote contents} > $out/${path}
-  '';
-  hook = original: entry: ''
-    # nix9 system hook v1
-    if(test -r ${original}.nix9-original) . ${original}.nix9-original
-    if(test -r /usr/local/nix/state/gcroots/system) {
-      nix9BootSystem=`{cat /usr/local/nix/state/gcroots/system}
-      . $nix9BootSystem/${entry}
-      nix9BootSystem=()
-    }
-    status='''
-  '';
 in
-if !validName hostName || builtins.stringLength hostName > 63 then
-  throw "mkSystem: hostName must be a lowercase DNS label of at most 63 characters"
-else if !validFiles then
-  throw "mkSystem: files must map relative file paths without traversal or parent conflicts to text"
-else if !validPins then
-  throw "mkSystem: certificatePins must map lowercase DNS hosts to nonempty lists of SHA-256 hex fingerprints"
-else if !builtins.isBool managedWebfs then
-  throw "mkSystem: services.webfs.enable must be a boolean"
+if failures != [ ] then
+  throw ("mkSystem: " + builtins.concatStringsSep "; " failures)
 else
-  builtins.deepSeq [ network timesync listen logConfiguration ] (mkDerivation {
-    name = "nix9-system-${hostName}";
-    buildCommand = ''
-      mkdir -p $out/files $out/webfs/hosts $out/hooks $out/services
-      echo nix9-system-1 > $out/system
-      echo ${quote hostName} > $out/hostName
-      echo ${environment} > $out/environment
-      ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}
-      ${builtins.concatStringsSep "\n" (
-        map (
-          host:
-          write ("webfs/hosts/" + host) (
-            builtins.concatStringsSep "" (map (pin: "x509 sha256=${pin}\n") pins.${host})
-          )
-        ) hosts
-      )}
-      echo 'nix9NextSystem='$out > $out/activate
-      echo -n ${quote (builtins.readFile ./activate.rc)} >> $out/activate
-      ${write "boot" (builtins.readFile ./boot.rc)}
-      ${if network == "" then "" else write "network" network}
-      ${write "profile" (builtins.readFile ./profile.rc)}
-      ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
-      ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
-      ${if managedWebfs then write "services/webfs-enabled" "enabled\n" else ""}
-      ${if timesync == "" then "" else write "services/timesync.rc" timesync}
-      ${
-        if listen == null then
-          ""
-        else
-          ''
-            mkdir -p $out/services/listen $out/services/listen-scripts $out/services/listen-bin/aux
-            ${builtins.concatStringsSep "\n" (
-              map (port: ''
-                ${write ("services/listen-scripts/tcp" + port) listen.${port}}
-                echo '#!/bin/rc -e' > $out/services/listen/tcp${port}
-                echo 'nix9ListenConnectionSystem='$out >> $out/services/listen/tcp${port}
-                echo -n ${quote (builtins.readFile ./listen-connection.rc)} >> $out/services/listen/tcp${port}
-                chmod 755 $out/services/listen/tcp${port}
-              '') (builtins.attrNames listen)
-            )}
-            echo 'rfork e' > $out/services/listen-check
-            echo 'nix9ListenCheckSystem='$out >> $out/services/listen-check
-            echo -n ${quote (builtins.readFile ./listen-check.rc)} >> $out/services/listen-check
-            echo 'rfork e' > $out/services/listen-start
-            echo 'nix9ListenStartSystem='$out >> $out/services/listen-start
-            echo -n ${quote (builtins.readFile ./listen-start.rc)} >> $out/services/listen-start
-            echo '#!/bin/rc' > $out/services/listen-bin/aux/listen
-            echo 'exec /$cputype/bin/rc '$out'/services/listen-start $*' >> $out/services/listen-bin/aux/listen
-            chmod 755 $out/services/listen-bin/aux/listen
-            echo 'mount -C #s$srvspec/boot /root $rootspec' > $out/services/listen.namespace
-            echo '. $rootdir/lib/namespace' >> $out/services/listen.namespace
-            echo 'bind -b '$out'/services/listen $nix9ListenDirectory' >> $out/services/listen.namespace
-            echo 'nix9ListenRuntime=$nix9' > $out/services/listen-boot.rc
-            echo 'path=('$out'/services/listen-bin $path)' >> $out/services/listen-boot.rc
-          ''
-      }
-      ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}
-      ${if logConfiguration == null then "" else write "log-event" logConfiguration.event}
-      ${write "hooks/termrc.local" (hook "/rc/bin/termrc.local" "boot")}
-      ${write "hooks/cpurc.local" (builtins.readFile ./cpurc.local)}
-      ${write "hooks/rcmain.local" (hook "/rc/lib/rcmain.local" "profile")}
-    '';
-  })
+  lib.showWarnings evaluated.warnings (
+    build (builtins.intersectAttrs (builtins.functionArgs build) evaluated)
+  )

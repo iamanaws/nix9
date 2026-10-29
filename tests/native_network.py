@@ -16,7 +16,7 @@ import threading
 from guest import boot, files_guest
 
 
-SYSTEM = "/usr/local/nix/state/gcroots/system"
+SYSTEM = "/usr/local/nix/state/gcroots/machines/test/system"
 REMOTE = "10.0.2.200"  # Outside the static guest's /25: requires its default route.
 PAYLOAD = "nix9 declarative networking download"
 INVALID = {
@@ -97,6 +97,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.child.timeout = 900
         guest.command("cd / && tar xf /tmp/bootstrap.tar")
         guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("nix9-rebuild init test")
         guest.command("cp /lib/ndb/local /tmp/original-ndb")
         guest.command("echo 'dom=nix9.test soa= ns=ns.nix9.test' > /tmp/dns.ndb")
         guest.command("echo 'dom=ns.nix9.test ip=127.0.0.1' >> /tmp/dns.ndb")
@@ -111,7 +112,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
                 raise RuntimeError(f"invalid networking was accepted: {name}: {result}")
             if root(guest) != dhcp:
                 raise RuntimeError("invalid networking changed the selected generation")
-            guest.command("test ! -e '#s/nix9-system'")
+            guest.command("test ! -e '#s/nix9-system-test'")
         guest.command("rm /tmp/bootstrap.tar")
     (work / "payload").write_text(PAYLOAD + "\n")
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=work)

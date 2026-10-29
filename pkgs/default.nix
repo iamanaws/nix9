@@ -60,6 +60,7 @@ pkgs.lib.makeScope pkgs.newScope (
     inherit (stdenv) mkDerivation mkShell;
     buildTools = cross.build-tools;
     nativeTools = callPackage ./native-packages/tools.nix { };
+    moduleLibrary = pkgs.callPackage ./native-packages/module-library.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
     nativeGoBootstrap = nativeBootstrap.override { nativePackageSet = nativeGoPackageSet; };
     hello = callPackage ./hello-plan9 { };

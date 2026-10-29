@@ -1,0 +1,10 @@
+# nix9 system hook
+if(test -r /rc/bin/termrc.local.nix9-original) . /rc/bin/termrc.local.nix9-original
+. /usr/local/pkg/nix9/activate && {
+  if(~ $#nix9SystemRoot 1 && test -r $nix9SystemRoot) {
+    nix9BootSystem=`{cat $nix9SystemRoot}
+    . $nix9BootSystem/boot
+    nix9BootSystem=()
+  }
+}
+status=''

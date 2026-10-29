@@ -18,6 +18,10 @@ in
   ar = package ./ar { src = sources.ccSource + "/sys/src/cmd/ar.c"; };
   libflate = package ./libflate { src = sources.gitSource + "/sys/src/libflate"; };
   libauth = package ./libauth { src = sources.ramfsSource + "/sys/src/libauth"; };
+  libip = package ./libip { src = sources.ndbSource + "/sys/src/libip"; };
+  libndb = package ./libndb { src = sources.ndbSource + "/sys/src/libndb"; };
+  libauthsrv = package ./libauthsrv { src = sources.ndbSource + "/sys/src/libauthsrv"; };
+  ndb = package ./ndb { src = sources.ndbSource + "/sys/src/cmd/ndb"; };
   lib9p = package ./lib9p { src = sources.ramfsSource + "/sys/src/lib9p"; };
   patch = package ./patch { src = sources.patchSource + "/sys/src/cmd/patch.c"; };
   ramfs = package ./ramfs { src = sources.ramfsSource + "/sys/src/cmd/ramfs.c"; };

@@ -74,6 +74,7 @@ let
     ) definitions
     // {
       inherit stdenv;
+      lib = import ./nixpkgs-lib/lib;
       buildPackages = pkgs;
       inherit (stdenv) mkDerivation;
       callPackage = import ./call-package.nix pkgs;
@@ -81,7 +82,7 @@ let
       fetchurl = pkgs.callPackage ./pkgs/fetchurl { };
       buildEnv = pkgs.callPackage ./build-env.nix { };
       mkShell = pkgs.callPackage ./mk-shell.nix { };
-      mkSystem = pkgs.callPackage ./system { };
+      mkSystem = pkgs.callPackage ./system { packages = pkgs; };
     }
     // (
       if builtins.pathExists ./go-bootstrap.tar.gz then

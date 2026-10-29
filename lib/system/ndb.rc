@@ -1,0 +1,24 @@
+# Only this namespace changes. Running cs and dns retain their booted database.
+@{
+ rfork e
+ if(test -f $nix9NextSystem/ndb/local) {
+  test -f /lib/ndb/local || exit 'nix9: missing NDB mount point'
+  if(~ $#nix9NdbSystem 0) {
+    if(! test -e /cfg/nix9/ndb-original) echo -n > /cfg/nix9/ndb-original
+    test -f /cfg/nix9/ndb-original || exit 'nix9: invalid original NDB mount point'
+    /$cputype/bin/bind /lib/ndb/local /cfg/nix9/ndb-original || exit 'nix9: cannot preserve original NDB'
+  }
+  for(database in `{cat $nix9NextSystem/ndb/include})
+    test -r $database || { echo 'nix9: unreadable NDB include:' $database >[1=2]; exit 'missing NDB include' }
+ }
+ exit ''
+} && {
+if(~ $#nix9NdbSystem 0 || /$cputype/bin/unmount $nix9NdbSystem/ndb/local /lib/ndb/local) {
+  nix9NdbSystem=()
+  if(test -f $nix9NextSystem/ndb/local) {
+    /$cputype/bin/bind $nix9NextSystem/ndb/local /lib/ndb/local && nix9NdbSystem=$nix9NextSystem
+  }
+  if not status=''
+}
+if not status='cannot unmount old NDB'
+}

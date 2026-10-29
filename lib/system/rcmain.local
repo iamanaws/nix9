@@ -1,0 +1,4 @@
+# nix9 system hook
+if(test -r /rc/lib/rcmain.local.nix9-original) . /rc/lib/rcmain.local.nix9-original
+. /usr/local/pkg/nix9/system
+status=''

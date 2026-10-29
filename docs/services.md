@@ -1,5 +1,7 @@
 # System services
 
+See [service discovery](discovery.md) for generated NDB records and packaged cs/DNS.
+
 These options belong inside [mkSystem](configuration.md) and are disabled by
 default. See its [activation table](configuration.md#generations) for when
 selection changes take effect.

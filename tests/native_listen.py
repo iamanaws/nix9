@@ -18,7 +18,7 @@ import time
 from guest import boot
 
 
-SYSTEM = "/usr/local/nix/state/gcroots/system"
+SYSTEM = "/usr/local/nix/state/gcroots/machines/test/system"
 SERVICE = "/cfg/nix9-listen/service"
 CPU_PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
 INVALID = {
@@ -42,7 +42,7 @@ def reject(guest, command, reason, selected):
         raise RuntimeError(f"did not reject {reason}: {output}")
     if root(guest) != selected:
         raise RuntimeError("rejected service configuration changed the selection")
-    guest.command("test ! -e '#s/nix9-system'")
+    guest.command("test ! -e '#s/nix9-system-test'")
 
 
 def connect(port):
@@ -179,9 +179,10 @@ with ExitStack() as stack:
         guest.child.timeout = 900
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("nix9-rebuild init test")
         for name in ("listen.nix", "listen-fixture.nix", "nvram", "manual-service", "manual-namespace"):
             guest.command(f"hget -o /tmp/{name} {base}/{name}")
-        for name in ("one", "two", "disabled", "empty", "legacy", *INVALID):
+        for name in ("one", "two", "disabled", "empty", "baseline", *INVALID):
             guest.command(f"echo '(import ./listen.nix).{name}' > /tmp/{name}.nix")
         guest.command(f"mkdir -p {SERVICE}")
         guest.command(f"cp /tmp/manual-service {SERVICE}/tcp17011; chmod 755 {SERVICE}/tcp17011")
@@ -191,9 +192,9 @@ with ExitStack() as stack:
         guest.command("echo MANUAL-NAMESPACE > /cfg/nix9-listen/manual-marker")
         guest.command("cp /rc/bin/cpurc /tmp/original-cpurc")
         guest.command("echo 'auth=cpu-auth.invalid' > /rc/bin/cpurc.local")
-        # Exercise installation from a generation without listener or CPU hooks.
-        guest.command("nix9-rebuild switch /tmp/legacy.nix")
-        legacy = root(guest)
+        # Start with the native service set before enabling managed listeners.
+        guest.command("nix9-rebuild switch /tmp/baseline.nix")
+        baseline = root(guest)
         guest.command("nix9-rebuild switch /tmp/one.nix", "TCP service changes take effect after CPU-server reboot.")
         one = root(guest)
         for name, reason in INVALID.items():
@@ -203,7 +204,7 @@ with ExitStack() as stack:
         guest.command(f"rm {SERVICE}/tcp17010; echo manual-conflict > {SERVICE}/tcp17010.namespace")
         reject(guest, "nix9-rebuild switch /tmp/two.nix", "manual service or namespace already owns tcp17010", one)
         guest.command(f"rm {SERVICE}/tcp17010.namespace")
-        guest.command("test ! -f /usr/local/nix/state/gcroots/system-boot")
+        guest.command("test ! -f /usr/local/nix/state/gcroots/machines/test/system-boot")
         guest.command("dd -if /tmp/nvram -of /dev/sdF0/nvram -bs 126 -count 1")
         guest.command("9fs 9fat")
         guest.command("echo 'service=cpu' >> /n/9fat/plan9.ini")
@@ -271,18 +272,18 @@ with ExitStack() as stack:
         native(guest, disabled, manual_port)
         unavailable(guest, main_port, 17010)
         unavailable(guest, extra_port, 17012)
-        guest.command("nix9-rebuild switch /tmp/legacy.nix")
-        if root(guest) != legacy:
-            raise RuntimeError("legacy generation was not reused")
+        guest.command("nix9-rebuild switch /tmp/baseline.nix")
+        if root(guest) != baseline:
+            raise RuntimeError("baseline generation was not reused")
         print("PASS: disabling services removes managed ports and retains manual services", flush=True)
     with boot(qemu, disk, **options) as guest:
-        native(guest, legacy, manual_port)
+        native(guest, baseline, manual_port)
         unavailable(guest, main_port, 17010)
         guest.command("nix9-rebuild switch /tmp/one.nix")
         guest.command(f"echo '#!/bin/rc' > {SERVICE}/tcp17010")
         guest.command(f"echo 'echo LATE-MANUAL; echo LISTEN-END' >> {SERVICE}/tcp17010")
         guest.command(f"chmod 755 {SERVICE}/tcp17010; cp {SERVICE}/tcp17010 /tmp/late-manual")
-        print("PASS: a retained generation without CPU or listener templates boots natively", flush=True)
+        print("PASS: a retained system generation boots with native services", flush=True)
     with boot(qemu, disk, **options) as guest:
         guest.command(f"cat {SYSTEM}-boot", one)
         guest.command(". /usr/local/pkg/nix9/system")
@@ -307,10 +308,10 @@ with ExitStack() as stack:
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({
         "status": "passed", "firstSystem": one, "secondSystem": two,
-        "disabledSystem": disabled, "legacySystem": legacy, "emptySystem": empty,
+        "disabledSystem": disabled, "baselineSystem": baseline, "emptySystem": empty,
         "configuredCpuBoots": 7, "rejectedConfigurations": list(INVALID),
         "checks": ["real-tcp-connections", "native-none-user", "generation-package-environment",
                    "generation-files", "managed-webfs", "native-arguments", "single-native-listener",
                    "manual-services-and-namespaces", "native-directory-fallback", "manual-conflicts-rejected", "late-conflict-fallback", "boot-only-updates",
-                   "persistent-connections", "connection-eof", "removed-port", "rollback", "disable", "legacy", "empty"],
+                   "persistent-connections", "connection-eof", "removed-port", "rollback", "disable", "baseline", "empty"],
     }, indent=2) + "\n")

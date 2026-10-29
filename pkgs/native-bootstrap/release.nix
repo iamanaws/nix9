@@ -16,11 +16,22 @@ pkgs.stdenv.mkDerivation {
         ]
       ));
   };
-  phases = [
-    "unpackPhase"
-    "installPhase"
-  ];
+  phases = [ "installPhase" ];
   installPhase = ''
+    fn copyRelease {
+      mkdir -p $2
+      @{
+        cd $1
+        # rc's * includes dotfiles.
+        for(file in ./*) {
+          if(test -d $file) copyRelease $file $2/$file
+          if not if(test -e $file) cp $file $2/$file
+        }
+        status='''
+      }
+    }
+    copyRelease $src $out
+    fn copyRelease
     mkdir -p $out/bin
     ${builtins.concatStringsSep "\n" (
       map (command: "cp ${./bin + "/${command}"} $out/bin/${command}") [
@@ -33,9 +44,8 @@ pkgs.stdenv.mkDerivation {
         "webfs"
       ]
     )}
-    tar cf /fd/1 . | @{ cd $out; tar xf /fd/0 }
     echo 'nix9Next='$out > $out/activate
-    cat activate.rc >> $out/activate
+    cat $out/activate.rc >> $out/activate
     echo 'substituters = file://'$out'/cache?store=/usr/local/nix/store' > $out/nix.conf
     echo 'trusted-public-keys = '^`{cat $out/cache.pub} >> $out/nix.conf
   '';

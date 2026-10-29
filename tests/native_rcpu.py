@@ -20,7 +20,7 @@ from guest import boot
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
-SYSTEM = ROOTS + "/system"
+SYSTEM = ROOTS + "/machines/test/system"
 SERVICE = "/cfg/nix9-rcpu/service"
 CPU_PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
 PINS = {"one": "a" * 64, "two": "b" * 64}
@@ -182,6 +182,7 @@ with ExitStack() as stack:
         server.child.timeout = 900
         server.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         server.command(". /usr/local/pkg/nix9/activate")
+        server.command("nix9-rebuild init test")
         for name in ("rcpu.nix", "rcpu-fixture.nix", "cpu-hook"):
             server.command(f"hget -o /tmp/{name} {base}/{name}")
         for name in ("nvram", "server.keys", "server.aes", "user.aes"):

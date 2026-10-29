@@ -1,0 +1,74 @@
+# Validate in a child sharing this private namespace, so errors do not exit the caller.
+rfork ne && {
+  nix9MachineValues=`{
+    rfork e
+    # Recreate machine-local Nix mounts before opening a store, including after newns.
+    if(! ~ $#nix9local 0) {
+      if(! ~ $#nix9local 1 || ! echo $nix9local | /$cputype/bin/awk '/^[a-zA-Z0-9_.-]+$/ {ok=1} END {exit !ok}')
+        exit 'nix9: invalid local filesystem service'
+      if(! @{
+        rfork e
+        ~ $#nix9LocalMountedService 1 && ~ $nix9LocalMountedService $nix9local || exit 'local service changed'
+        fn identity { /$cputype/bin/ls -qld $1 >[2]/dev/null | /$cputype/bin/awk '{print $1 ":" $5 ":" $6}' }
+        for(directory in store state log) {
+          source=`{identity /mnt/nix9-local/$directory}
+          target=`{identity /usr/local/nix/$directory}
+          ~ $#source 1 && ~ $#target 1 && ~ $source $target || exit 'local mount missing'
+        }
+        exit ''
+      }) {
+        /$cputype/bin/mkdir -p /mnt/nix9-local /usr/local/nix/store /usr/local/nix/state /usr/local/nix/log
+        /$cputype/bin/mount -C '#s/'^$nix9local /mnt/nix9-local || exit 'nix9: cannot mount local Nix filesystem'
+        for(nix9LocalDirectory in store state log)
+          /$cputype/bin/test -d /mnt/nix9-local/$nix9LocalDirectory || exit 'nix9: local Nix directory is missing'
+        for(nix9LocalDirectory in store state log) {
+          /$cputype/bin/bind -c /mnt/nix9-local/$nix9LocalDirectory /usr/local/nix/$nix9LocalDirectory ||
+            exit 'nix9: cannot bind local Nix directory'
+        }
+        nix9LocalDirectory=()
+      }
+      nix9LocalMountedService=$nix9local
+    }
+    nix9MachineId=()
+    if(/$cputype/bin/test -e /usr/local/nix/state/machine-id) {
+      /$cputype/bin/test -f /usr/local/nix/state/machine-id && /$cputype/bin/test -r /usr/local/nix/state/machine-id || exit 'cannot read machine identity'
+      nix9MachineId=`{/$cputype/bin/cat /usr/local/nix/state/machine-id}
+      ~ $#nix9MachineId 1 || exit 'invalid saved machine identity'
+    }
+    if(! ~ $#nix9machine 0) {
+      if(! ~ $#nix9machine 1) exit 'nix9: invalid boot machine identity'
+      if(! echo $nix9machine | /$cputype/bin/awk 'length($0)<=63 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ {ok=1} END {exit !ok}')
+        exit 'nix9: invalid boot machine identity'
+      if(! ~ $#nix9MachineId 0 && ! ~ $nix9MachineId $nix9machine)
+        exit 'nix9: boot identity differs from local machine identity'
+    }
+
+    if(~ $#nix9MachineId 0) {
+      nix9MachineId=_
+    }
+    if not {
+      if(! echo $nix9MachineId | /$cputype/bin/awk 'length($0)<=63 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ {ok=1} END {exit !ok}')
+        exit 'invalid machine identity'
+    }
+    # A console can inherit init's older namespace rather than the boot shell's.
+    for(networkService in cs dns) {
+      if(! /$cputype/bin/test -e /net/$networkService && /$cputype/bin/test -e /srv/$networkService)
+        /$cputype/bin/mount -a /srv/$networkService /net || exit 'cannot attach native network service'
+    }
+    echo nix9-machine-ready $nix9MachineId
+  }
+  if(~ $#nix9MachineValues 2 && ~ $nix9MachineValues(1) nix9-machine-ready) {
+    nix9MachineId=$nix9MachineValues(2)
+    if(~ $nix9MachineId _) nix9MachineId=()
+    nix9SystemRoot=()
+    if(~ $#nix9MachineId 1) nix9SystemRoot=/usr/local/nix/state/gcroots/machines/$nix9MachineId/system
+    nix9LocalMountedService=$nix9local
+    nix9MachineValues=()
+    status=''
+  }
+  if not {
+    nix9MachineValues=()
+    echo 'nix9: machine setup failed' >[1=2]
+    status='machine setup failed'
+  }
+}

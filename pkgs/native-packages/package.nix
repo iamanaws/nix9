@@ -2,6 +2,7 @@
   lib,
   runCommand,
   nativeTools,
+  moduleLibrary,
   sources,
   packageDefinitions,
   goBootstrap ? null,
@@ -12,6 +13,7 @@ let
   copy = destination: source: ''cp -r ${source} "$out/${destination}"'';
   files = {
     "tools" = nativeTools;
+    "nixpkgs-lib" = moduleLibrary;
     "default.nix" = ./default.nix;
     "bootstrap.nix" = ./bootstrap.nix;
     "pkgs/packages.nix" = ../packages.nix;

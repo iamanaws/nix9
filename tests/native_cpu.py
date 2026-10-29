@@ -19,7 +19,7 @@ from guest import boot
 from ntp import NTP, OFFSET
 
 
-SYSTEM = "/usr/local/nix/state/gcroots/system"
+SYSTEM = "/usr/local/nix/state/gcroots/machines/test/system"
 CPU_HOOK = "/rc/bin/cpurc.local"
 CPU_PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
 
@@ -89,7 +89,7 @@ def reject(guest, command, reason, selected):
         raise RuntimeError(f"did not reject {reason}: {output}")
     if root(guest) != selected:
         raise RuntimeError("rejected operation changed the selection")
-    guest.command("test ! -e '#s/nix9-system'")
+    guest.command("test ! -e '#s/nix9-system-test'")
 
 
 qemu, image, archive, output = sys.argv[1:]
@@ -140,9 +140,10 @@ with ExitStack() as stack:
         guest.child.timeout = 900
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("nix9-rebuild init test")
         for name in ("cpu.nix", "cpu-fixture.nix", "nvram", "original-cpu-hook", "cpustart"):
             guest.command(f"hget -o /tmp/{name} {base}/{name}")
-        for name in ("legacy", "one", "two", "unmanaged"):
+        for name in ("baseline", "one", "two", "unmanaged"):
             guest.command(f"echo '(import ./cpu.nix).{name}' > /tmp/{name}.nix")
         guest.command("cp /rc/bin/cpurc /tmp/original-cpurc; cp /lib/ndb/local /tmp/original-ndb")
         guest.command(f"cp /tmp/original-cpu-hook {CPU_HOOK}")
@@ -161,17 +162,15 @@ with ExitStack() as stack:
         guest.command("echo 'echo timesync $* > /tmp/timesync-invocation' >> /$cputype/bin/aux/timesync")
         guest.command("echo 'exec /tmp/timesync-native/timesync $*' >> /$cputype/bin/aux/timesync")
         guest.command("chmod 755 /$cputype/bin/aux/timesync")
-        # The first selection predates CPU templates: the new rebuild program
-        # must install its runtime template while keeping the existing script.
-        guest.command("nix9-rebuild switch /tmp/legacy.nix")
-        legacy = root(guest)
-        guest.command(f"test ! -f {legacy}/hooks/cpurc.local")
+        # Preserve existing native startup scripts on the first selection.
+        guest.command("nix9-rebuild switch /tmp/baseline.nix")
+        baseline = root(guest)
         guest.command(f"cmp {CPU_HOOK} $nix9/packages/system/cpurc.local")
         guest.command("nix9-rebuild switch /tmp/one.nix")
         one = root(guest)
         guest.command(f"cp {CPU_HOOK} /tmp/managed-cpu-hook")
         guest.command(f"echo '# edited' >> {CPU_HOOK}")
-        reject(guest, "nix9-rebuild switch /tmp/legacy.nix", "startup hook was edited", one)
+        reject(guest, "nix9-rebuild switch /tmp/baseline.nix", "startup hook was edited", one)
         guest.command(f"cp /tmp/managed-cpu-hook {CPU_HOOK}")
         guest.command(f"rm {CPU_HOOK}")
         reject(guest, "nix9-rebuild rollback", "startup hook was removed", one)
@@ -183,7 +182,7 @@ with ExitStack() as stack:
         guest.command("9fs 9fat")
         guest.command("echo 'service=cpu' >> /n/9fat/plan9.ini")
         guest.command("echo 'init=/amd64/init -c' >> /n/9fat/plan9.ini")
-        print("PASS: legacy adoption, original hooks preserved and manual edits rejected", flush=True)
+        print("PASS: initial selection, original hooks preserved and manual edits rejected", flush=True)
     options = dict(snapshot=False, configure_network=False, cpu=True, prompt=CPU_PROMPT)
     with boot(qemu, disk, **options) as guest:
         pid = startup(guest, "one", one, "10.0.2.15", rtc_args)
@@ -214,15 +213,15 @@ with ExitStack() as stack:
         print("PASS: static CPU network, NTP clock correction and rollback without restarting services", flush=True)
     with boot(qemu, disk, **options) as guest:
         startup(guest, "one", one, "10.0.2.15", rtc_args)
-        guest.command("nix9-rebuild switch /tmp/legacy.nix")
-        if root(guest) != legacy:
-            raise RuntimeError("legacy generation was not reused")
+        guest.command("nix9-rebuild switch /tmp/baseline.nix")
+        if root(guest) != baseline:
+            raise RuntimeError("baseline generation was not reused")
         print("PASS: reboot restores rolled-back network and RTC settings", flush=True)
     with boot(qemu, disk, **options) as guest:
-        startup(guest, "legacy", legacy, "10.0.2.15", rtc_args)
+        startup(guest, "baseline", baseline, "10.0.2.15", rtc_args)
         guest.command("nix9-rebuild switch /tmp/unmanaged.nix")
         unmanaged = root(guest)
-        print("PASS: retained generation without a CPU template boots through the stable loader", flush=True)
+        print("PASS: retained system generation boots through the stable loader", flush=True)
     with boot(qemu, disk, **options) as guest:
         startup(guest, "unmanaged", unmanaged, "10.0.2.15", native_args)
         guest.command(f"test ! -f {unmanaged}/services/timesync.rc")
@@ -232,10 +231,10 @@ with ExitStack() as stack:
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({
         "status": "passed", "firstSystem": one, "secondSystem": two,
-        "legacySystem": legacy, "unmanagedSystem": unmanaged, "configuredCpuBoots": 5,
+        "baselineSystem": baseline, "unmanagedSystem": unmanaged, "configuredCpuBoots": 5,
         "checks": ["native-cpu-init", "boot-namespace", "preserved-local-hooks",
                    "native-machine-startup", "edited-hooks-rejected", "dhcp", "static-ipv4",
                    "managed-webfs", "logging", "rtc", "local-ntp-correction", "single-clock",
-                   "fresh-login", "boot-only-changes", "rollback", "legacy-generation",
+                   "fresh-login", "boot-only-changes", "rollback", "baseline-generation",
                    "native-unmanaged-clock"],
     }, indent=2) + "\n")

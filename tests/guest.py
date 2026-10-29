@@ -2,6 +2,7 @@
 
 import contextlib
 import functools
+import gzip
 import http.server
 from pathlib import Path
 import shutil
@@ -98,20 +99,32 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
 
 
 @contextlib.contextmanager
-def files_guest(qemu, disk, files, *, snapshot=True):
+def files_guest(qemu, disk, files, *, snapshot=True, compress=False, **boot_options):
     """Boot a guest and copy host fixtures into /tmp."""
     with tempfile.TemporaryDirectory() as directory:
+        transfers = {}
         for name, source in files.items():
-            shutil.copyfile(source, Path(directory) / name)
+            packed = compress and Path(source).stat().st_size >= 1024 * 1024
+            transfer = name + ".gz" if packed else name
+            if packed:
+                with open(source, "rb") as original, gzip.GzipFile(
+                    filename=str(Path(directory) / transfer), mode="wb", compresslevel=1, mtime=0
+                ) as destination:
+                    shutil.copyfileobj(original, destination)
+            else:
+                shutil.copyfile(source, Path(directory) / transfer)
+            transfers[name] = (transfer, packed)
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
         with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                with boot(qemu, disk, snapshot=snapshot) as guest:
+                with boot(qemu, disk, snapshot=snapshot, **boot_options) as guest:
                     guest.child.timeout = 300
-                    for name in files:
-                        guest.command(f"hget -o /tmp/{name} http://10.0.2.2:{server.server_port}/{name}")
+                    for name, (transfer, packed) in transfers.items():
+                        guest.command(f"hget -o /tmp/{transfer} http://10.0.2.2:{server.server_port}/{transfer}")
+                        if packed:
+                            guest.command(f"gunzip -c /tmp/{transfer} > /tmp/{name} && rm /tmp/{transfer}")
                     yield guest
             finally:
                 server.shutdown()

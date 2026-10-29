@@ -34,7 +34,10 @@ with the Nix sandbox enabled.
 | `native-release-tests`, `native-update-tests` | Release and recipe updates, failed updates, offline rebuilding, reboot, rollback and GC retention. |
 | `native-reproducibility-tests` | Toolchain NAR comparison across two clean VMs without substitution. |
 | `native-system-tests` | Configuration validation, activation preflight, hook preservation and edit rejection, generation reuse, terminal boot, login, rollback and boot roots. |
-| `native-cpu-tests` | Native CPU init, startup namespace, DHCP/static IPv4, clock correction, logging, login, hook checks and older generations. |
+| `native-module-tests` | Offline host/native module evaluation, imports, typed options, overrides, merges, assertions and a composed system build. Samples native evaluation time and memory. |
+| `native-machine-tests` | Two machines sharing runtime files with local writable stores; explicit initialization, independent generations, `newns`, reboot, rollback and boot-root retention through GC. |
+| `native-ndb-tests` | Native NDB build, host and subnet queries on two machines, manual includes, invalid declarations, cs/DNS startup, disable and rollback across four boots. |
+| `native-cpu-tests` | Native CPU init, startup namespace, DHCP/static IPv4, clock correction, logging, login, hook checks and retained generations. |
 | `native-rcpu-tests` | Two-VM dp9ik/authsrv tickets and TLS, client source export, native C build, rejected credentials, persistent sessions, switch, rollback and reboot. |
 | `native-listen-tests` | Real TCP connections as `none`, booted-generation namespaces, manual services and namespaces, directory fallback, conflicts, persistent connections, EOF with webfs, removed ports, disable and rollback. |
 | `native-network-tests` | DHCP, DNS override, static IPv4, loopbacks, native NDB, gateway routing, reboot and rollback. Harness networking is disabled. |

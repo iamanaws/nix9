@@ -1,0 +1,11 @@
+#!/bin/rc
+echo -n > /tmp/module-memory
+nix-instantiate --eval --strict --json /tmp/modules.nix --argstr scenario valid > /tmp/module-result &
+nix9ProbePid=$apid
+while(test -r /proc/$nix9ProbePid/status) {
+  cat /proc/$nix9ProbePid/status >> /tmp/module-memory >[2]/dev/null
+  sleep 0.01
+}
+wait
+cat /tmp/module-result
+cat /tmp/module-memory

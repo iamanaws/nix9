@@ -50,17 +50,13 @@ let
         webfs.enable = true;
       };
     };
-  legacy = system "legacy" { };
 in
 {
   one = system "one" enabled;
   two = system "two" (enabled // { tcp."17010" = script; });
   disabled = system "disabled" { };
   empty = system "empty" { enable = true; };
-  legacy = legacy.overrideAttrs (old: {
-    name = "nix9-listen-legacy";
-    buildCommand = old.buildCommand + "\nrm $out/hooks/cpurc.local\n";
-  });
+  baseline = system "baseline" { };
   invalidEnable = system "invalid" { enable = 1; };
   invalidTCP = system "invalid" {
     enable = true;

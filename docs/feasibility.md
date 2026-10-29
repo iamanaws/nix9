@@ -15,13 +15,13 @@ using [cc9](../pkgs/cc9). Native C and Go development work inside 9front.
 | Filesystem | NARs preserve links and unsupported names, but extraction rejects them before writing. Native symlink resolution is missing. |
 | Store | Clients must share the canonical store path and kernel service namespace, with one connection per store per process. GC, verification, repair and schema changes require exclusive client access. Permanent roots work; automatic GC, runtime root discovery, indirect roots, `nix-env`, WAL and multiuser mode do not. |
 | Processes and locks | Pipes, PATH, environments, wait, kill, exclusive path locks and cancellation notes work. Generic file locks, Unix credential APIs, process groups, signal threads and PTYs are unported. Server crashes may leave lock markers. |
-| Machine configuration | Generations manage the settings in [mkSystem](configuration.md). [Remote CPU login](services.md#remote-cpu-login) uses native 9front authentication. Account and authentication-server provisioning, general daemon management, kernel builds and disk configuration remain outside this layer. |
+| Machine configuration | [Nix modules](configuration.md) compose machine settings and generations. Machines sharing runtime files keep writable stores and generation state local. [NDB](discovery.md) declares service locations; [remote CPU login](services.md#remote-cpu-login) uses native 9front authentication. Account and authentication-server provisioning, coordinated deployment, general daemon management, kernel builds and disk configuration remain outside this layer. |
 
 ## Verification limits
 
 [Tests](validation.md) cover native builds, NAR round trips, concurrent clients,
 offline recovery and system generations. They do not cover torn writes, abrupt
-power loss during initial hook installation or profile selection, external IPv6,
+power loss during initial hook installation or generation selection, external IPv6,
 or DHCP renewal through lease expiration.
 
 For download trust restrictions, see [HTTPS policy](transport.md#https-trust).

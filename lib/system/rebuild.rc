@@ -5,7 +5,7 @@ fn fail {
   exit 'nix9-rebuild failed'
 }
 if(! ~ $#* 1 2)
-  fail 'usage: nix9-rebuild {build [CONFIGURATION] | switch [CONFIGURATION] | rollback | list | delete NUMBER}'
+  fail 'usage: nix9-rebuild {init MACHINE | build [CONFIGURATION] | switch [CONFIGURATION] | rollback | list | delete NUMBER}'
 action=$1
 switch($action) {
 case build switch
@@ -15,14 +15,41 @@ case rollback list
   if(! ~ $#* 1) fail 'unexpected argument for' $action
 case delete
   if(! ~ $#* 2) fail 'expected a generation number'
+case init
+  if(! ~ $#* 2) fail 'expected a machine identity'
 case *
   fail 'unknown action:' $action
 }
 if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
 path=($nix9/bin /$cputype/bin /rc/bin)
-root=/usr/local/nix/state/gcroots/system
-candidate=/usr/local/nix/state/gcroots/system-candidate
-lock='#s/nix9-system'
+. $nix9/packages/system/machine.rc || fail 'machine setup failed'
+if(~ $action init) {
+  machine=$2
+  if(! echo $machine | awk 'length($0)<=63 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ {ok=1} END {exit !ok}')
+    fail 'invalid machine identity'
+  if(! ~ $#nix9MachineId 0 && ! ~ $nix9MachineId $machine)
+    fail 'machine identity is already fixed:' $nix9MachineId
+  if(~ $#nix9machine 1 && ! ~ $machine $nix9machine)
+    fail 'machine identity differs from the boot setting:' $nix9machine
+  lock='#s/nix9-machine'
+  @{ status='' } > $lock || fail 'machine initialization is locked:' $lock
+  fn sigexit { result=$status; rm $lock; status=$result }
+  if(test -f /usr/local/nix/state/machine-id) {
+    if(! ~ `{cat /usr/local/nix/state/machine-id} $machine)
+      fail 'machine identity is already fixed:' `{cat /usr/local/nix/state/machine-id}
+  }
+  if not {
+    mkdir -p /usr/local/nix/state/gcroots/machines/$machine
+    echo $machine > /usr/local/nix/state/machine-id.new
+    mv /usr/local/nix/state/machine-id.new /usr/local/nix/state/machine-id
+  }
+  echo 'Machine identity:' $machine
+  exit ''
+}
+if(! ~ $#nix9MachineId 1) fail 'initialize this machine with nix9-rebuild init MACHINE first'
+root=$nix9SystemRoot
+candidate=$root^-candidate
+lock='#s/nix9-system-'^$nix9MachineId
 @{ status='' } > $lock || fail 'system changes are locked; remove this file if interrupted:' $lock
 changing=0
 previous=()
@@ -43,14 +70,14 @@ case list
   nix-profile $root list
   exit ''
 case delete
-  if(test -r /usr/local/nix/state/gcroots/system-boot && test -r $root^.generations/$2) {
-    if(~ `{cat /usr/local/nix/state/gcroots/system-boot} `{cat $root^.generations/$2})
+  if(test -r $root^-boot && test -r $root^.generations/$2) {
+    if(~ `{cat $root^-boot} `{cat $root^.generations/$2})
       fail 'cannot delete the booted generation; reboot into the selected system first'
   }
   nix-profile $root delete $2
   exit ''
 case build
-  nix-build $configuration --out-link /usr/local/nix/state/gcroots/system-build
+  nix-build $configuration --out-link $root^-build
   exit ''
 case switch
   nix-build $configuration --out-link $candidate
@@ -66,8 +93,11 @@ case rollback
 }
 if(! ~ $#target 1) fail 'invalid system output'
 if(! test -f $target/system) fail 'expected a built nix9 system'
-if(! ~ `{cat $target/system} nix9-system-1) fail 'unsupported system format'
-for(file in activate boot profile hostName environment hooks/termrc.local hooks/rcmain.local)
+if(! ~ `{cat $target/system} nix9-system-2) fail 'unsupported system format'
+if(test -f $target/machine-id) {
+  if(! ~ `{cat $target/machine-id} $nix9MachineId) fail 'system belongs to another machine'
+}
+for(file in activate boot hostName environment services/ndb.rc services/webfs.rc services/reset.rc)
   if(! test -f $target/$file) fail 'incomplete system:' $file
 nix-store --verify-path $target
 # Activation runs in a private namespace before any boot selection changes.
@@ -80,10 +110,7 @@ if(test -f $target/logging) {
 
 # Adopt local startup scripts once, and refuse to overwrite later manual edits.
 fn hookTemplate {
-  template=$target/hooks/`{basename $1}
-  # Retain the CPU loader when selecting a generation that predates CPU hooks.
-  if(~ $1 /rc/bin/cpurc.local && ! test -f $template)
-    template=$nix9/packages/system/cpurc.local
+  template=$nix9/packages/system/`{basename $1}
   echo $template
 }
 for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
@@ -99,8 +126,8 @@ for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
     fail 'startup backup is missing:' $hook
 }
 if(test -e /usr/local/pkg/nix9/system) {
-  if(! cmp -s /usr/local/pkg/nix9/system $target/profile)
-    fail 'system profile was edited: /usr/local/pkg/nix9/system'
+  if(! cmp -s /usr/local/pkg/nix9/system $nix9/packages/system/session.rc)
+    fail 'system session activation was edited: /usr/local/pkg/nix9/system'
 }
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=(); . $target/logging } || fail 'log preparation failed'
@@ -113,13 +140,13 @@ for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
       chmod 644 $hook^.nix9-original
     }
   }
-  if(! test -e $hook) {
+  if(! test -f $hook || ! cmp -s $hook `{hookTemplate $hook}) {
     cp `{hookTemplate $hook} $hook
     chmod u+w $hook
   }
 }
-if(! test -e /usr/local/pkg/nix9/system) {
-  cp $target/profile /usr/local/pkg/nix9/system
+if(! test -f /usr/local/pkg/nix9/system || ! cmp -s /usr/local/pkg/nix9/system $nix9/packages/system/session.rc) {
+  cp $nix9/packages/system/session.rc /usr/local/pkg/nix9/system
   chmod u+w /usr/local/pkg/nix9/system
 }
 if(test -r $root) previous=`{cat $root}
@@ -135,10 +162,10 @@ if(test -f $eventSystem/log-event)
     echo 'nix9-rebuild: system selected, but its event could not be recorded' >[1=2]
 echo 'Selected system:' $target
 echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
-if(test -f $target/network || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/network })
+if(test -f $target/network || { test -r $root^-boot && test -f `{cat $root^-boot}^/network })
   echo 'Network changes take effect after reboot.'
-if(test -f $target/services/timesync.rc || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/services/timesync.rc })
+if(test -f $target/services/timesync.rc || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/timesync.rc })
   echo 'Clock synchronization changes take effect after reboot.'
-if(test -f $target/services/listen-boot.rc || { test -r /usr/local/nix/state/gcroots/system-boot && test -f `{cat /usr/local/nix/state/gcroots/system-boot}^/services/listen-boot.rc })
+if(test -f $target/services/listen-boot.rc || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/listen-boot.rc })
   echo 'TCP service changes take effect after CPU-server reboot.'
 exit ''

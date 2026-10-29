@@ -1,8 +1,0 @@
-# nix9 system profile v1
-if(test -r /usr/local/nix/state/gcroots/system) {
-  . /usr/local/pkg/nix9/activate && {
-    nix9SelectedSystem=`{cat /usr/local/nix/state/gcroots/system}
-    . $nix9SelectedSystem/activate && { nix9SelectedSystem=(); status='' }
-  }
-}
-if not status=''

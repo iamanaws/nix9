@@ -13,7 +13,7 @@ from guest import boot, files_guest
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
-SYSTEM = ROOTS + "/system"
+SYSTEM = ROOTS + "/machines/test/system"
 PIN_A = "a" * 64
 PIN_C = "c" * 64
 REVOCATION = "x509 sha256=" + "d" * 64
@@ -74,6 +74,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.child.timeout = 900
         guest.command("cd / && tar xf /tmp/bootstrap.tar")
         guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("nix9-rebuild init test")
         guest.command("echo 'echo terminal > /tmp/nix9-terminal-hook' >> /rc/bin/termrc.local")
         guest.command("echo 'echo ORIGINAL-LOGIN-HOOK' >> /rc/lib/rcmain.local")
         guest.command("cp /rc/bin/termrc.local /tmp/original-terminal; cp /rc/lib/rcmain.local /tmp/original-login")
@@ -82,11 +83,11 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command("if(test -e /sys/lib/tls/webfs/revoked) rm /sys/lib/tls/webfs/revoked; status=''")
         for host in ("manual.invalid", "example.invalid"):
             guest.command(f"echo 'x509 sha256={PIN_C}' > /sys/lib/tls/webfs/hosts/{host}")
-        for name in ("one", "two", "invalidHost", "invalidFile", "conflictingFiles", "invalidPin", "invalidPinHost", "collision", "failedActivation", "notSystem"):
+        for name in ("one", "two", "invalidHost", "invalidFile", "conflictingFiles", "invalidPin", "invalidPinHost", "collision", "failedActivation", "notSystem", "unsupportedFormat", "incompleteSystem"):
             guest.command(f"echo '(import ./systems.nix).{name}' > /tmp/{name}.nix")
         original_name = guest.command("echo `{cat /dev/sysname}").splitlines()[-1]
         guest.command("nix9-rebuild build /tmp/one.nix")
-        first = rooted(guest, ROOTS + "/system-build")
+        first = rooted(guest, SYSTEM + "-build")
         guest.command("echo `{cat /dev/sysname}", original_name)
         guest.command(f"test ! -e {SYSTEM}")
         # A bad activation target must not select a system or replace local hooks.
@@ -114,6 +115,8 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
             ("invalidPinHost", "certificatePins"), ("collision", "command collision"),
             ("failedActivation", "activation check failed"),
             ("notSystem", "expected a built nix9 system"),
+            ("unsupportedFormat", "unsupported system format"),
+            ("incompleteSystem", "incomplete system"),
         ):
             rejected(guest, f"nix9-rebuild switch /tmp/{name}.nix", reason)
             if rooted(guest) != second:
@@ -121,7 +124,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
             guest.command("echo `{cat /dev/sysname}", "nix9-two")
             guest.command("nix9-system-choice", "two")
             guest.command("cat /cfg/nix9/files/message", "two's configuration")
-            guest.command("test ! -e '#s/nix9-system'")
+            guest.command("test ! -e '#s/nix9-system-test'")
         guest.command("cp /rc/bin/termrc.local /tmp/managed-terminal")
         guest.command("echo '# manual edit' >> /rc/bin/termrc.local")
         rejected(guest, "nix9-rebuild switch /tmp/one.nix", "startup hook was edited")
@@ -135,17 +138,17 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         if rooted(guest) != second:
             raise RuntimeError("selection failure did not restore the system root")
         guest.command("echo `{cat /dev/sysname}", "nix9-two")
-        guest.command("test ! -e '#s/nix9-system'; rm '#s/nix9-profile'")
-        guest.command("@{ status='' } > '#s/nix9-system'")
+        guest.command("test ! -e '#s/nix9-system-test'; rm '#s/nix9-profile'")
+        guest.command("@{ status='' } > '#s/nix9-system-test'")
         rejected(guest, "nix9-rebuild list", "system changes are locked")
-        guest.command("test -e '#s/nix9-system'; rm '#s/nix9-system'")
+        guest.command("test -e '#s/nix9-system-test'; rm '#s/nix9-system-test'")
         guest.command("nix9-rebuild rollback")
         selected(guest, "one", first)
         guest.command("nix9-rebuild switch /tmp/two.nix")
         guest.command(f"test ! -e {SYSTEM}.generations/3")
         selected(guest, "two", second)
         login(guest, "two", second)
-        guest.command(f"rm {ROOTS}/system-build /tmp/bootstrap.tar")
+        guest.command(f"rm {SYSTEM}-build /tmp/bootstrap.tar")
         guest.command("rm /tmp/systems.nix /tmp/one.nix /tmp/two.nix")
         guest.command("test ! -e /tmp/nix9-terminal-hook")
         guest.command("NIX_CONFIG='substituters ='; nix-store --gc")
@@ -157,7 +160,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command("ip/ipconfig ether /net/ether0 unbind")
         guest.command("echo `{cat /dev/sysname}", "nix9-two")
         guest.command("cat /tmp/nix9-terminal-hook", "terminal")
-        guest.command(f"cat {ROOTS}/system-boot", second)
+        guest.command(f"cat {SYSTEM}-boot", second)
         login(guest, "two", second)
         guest.command(". /usr/local/pkg/nix9/activate; NIX_CONFIG='substituters ='")
         guest.command("nix9-rebuild rollback")
@@ -170,7 +173,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command("ip/ipconfig ether /net/ether0 unbind")
         guest.command("echo `{cat /dev/sysname}", "nix9")
         guest.command("cat /tmp/nix9-native-termrc", "device-setup")
-        guest.command(f"cat {ROOTS}/system-boot", first)
+        guest.command(f"cat {SYSTEM}-boot", first)
         login(guest, "one", first)
         guest.command(". /usr/local/pkg/nix9/activate; NIX_CONFIG='substituters ='")
         guest.command("nix9-rebuild delete 2; nix-store --gc")
@@ -178,7 +181,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command(f"nix-store --verify-path {first}")
         selected(guest, "one", first)
         rejected(guest, "nix9-rebuild rollback", "no previous generation")
-        guest.command("test ! -e '#s/nix9-system'")
+        guest.command("test ! -e '#s/nix9-system-test'")
         print("PASS: automatic boot activation, offline logins, rollback and boot-root GC retention", flush=True)
 
 Path(output).mkdir()

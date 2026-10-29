@@ -19,6 +19,37 @@
   vmTest,
 }:
 {
+  native-ndb-tests = vmTest "native-ndb-tests" {
+    script = ./native_ndb.py;
+    files = [ ./ndb.nix ];
+    env.NIX9_NDB_TEST_STATE = "ndb-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
+  native-machine-tests = vmTest "native-machine-tests" {
+    script = ./native_machine.py;
+    files = [
+      ./machines.nix
+      ./machine-newns.c
+    ];
+    env.NIX9_MACHINE_TEST_STATE = "machine-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
+  native-module-tests = vmTest "native-module-tests" {
+    script = ./native_modules.py;
+    files = [
+      ./modules.nix
+      ./module-import.nix
+      ./module-system.nix
+      ./module-probe.rc
+    ];
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-rcpu-tests = vmTest "native-rcpu-tests" {
     script = ./native_rcpu.py;
     files = [
@@ -72,7 +103,6 @@
     script = ./native_services.py;
     files = [
       ./services.nix
-      ./services-legacy.rc
       ./services-retained.rc
       ./tls.py
       ./webfs_tls.py

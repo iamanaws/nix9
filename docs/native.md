@@ -51,6 +51,9 @@ nix-profile $roots/environment set $environment
 nix-profile $roots/environment list
 ```
 
+`nix-profile` is this port's generation manager, using Plan 9 root files.
+It is separate from the upstream `nix profile` CLI.
+
 `set` retains the previous selection and reuses an existing generation when
 possible. After selecting another environment, `rollback` returns to the
 preceding generation; `delete NUMBER` releases an inactive one for GC.
