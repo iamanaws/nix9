@@ -42,6 +42,8 @@ generate their discovery records and connect session mounts to declared exports.
 | `nix9-rebuild init MACHINE` | Set this machine's stable identity. Required before managing system generations. |
 | `nix9-rebuild build [CONFIGURATION]` | Build and retain at `system-build` beside this machine's selected root. |
 | `nix9-rebuild switch [CONFIGURATION]` | Build, check activation in a private namespace, then select. |
+| `nix9-rebuild check PATH` | Verify a local system closure and run selection preflight without selecting it. |
+| `nix9-rebuild select PATH` | Check and select a local system closure without evaluating a configuration. |
 | `nix9-rebuild list` | List retained system generations. |
 | `nix9-rebuild rollback` | Select the preceding generation. |
 | `nix9-rebuild delete NUMBER` | Release an inactive generation for GC. |
@@ -53,7 +55,19 @@ be deleted. Reboot into the selection before deleting an older booted generation
 Refresh sessions before deleting generations they use; runtime roots are not
 discovered automatically.
 
-Switching and rollback apply settings at different times:
+`check` and `select` require a complete, registered system at a canonical
+`/usr/local/nix/store/...` output path. [Import or realise its closure](transport.md#binary-caches)
+first. These commands do not evaluate configurations, build outputs or fetch
+missing paths. Selection checks the contents of the system and every dependency.
+
+Both commands check the machine identity guard, activation, service settings,
+runtime prerequisites and startup hooks. `check` leaves the selected generation,
+history, hostname, hooks and logs unchanged. Activation preflight can create
+missing mount points and an empty revocation file. A temporary GC root protects
+the candidate during checking and selection; retain imported outputs separately
+if they must survive GC before selection.
+
+Selection and rollback apply settings at different times:
 
 | Setting | When it applies |
 | --- | --- |
@@ -65,8 +79,8 @@ Switching and rollback apply settings at different times:
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
 
-Refresh the current shell with `. /usr/local/pkg/nix9/system` after switching
-or rolling back. Other sessions keep their namespaces until refreshed.
+Refresh the current shell with `. /usr/local/pkg/nix9/system` after selection
+or rollback. Other sessions keep their namespaces until refreshed.
 System selection is separate from [updating Nix itself](native.md#complete-releases).
 
 ## Machine identity

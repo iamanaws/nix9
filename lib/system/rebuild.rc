@@ -5,12 +5,15 @@ fn fail {
   exit 'nix9-rebuild failed'
 }
 if(! ~ $#* 1 2)
-  fail 'usage: nix9-rebuild {init MACHINE | build [CONFIGURATION] | switch [CONFIGURATION] | rollback | list | delete NUMBER}'
+  fail 'usage: nix9-rebuild {init MACHINE | build [CONFIGURATION] | switch [CONFIGURATION] | check PATH | select PATH | rollback | list | delete NUMBER}'
 action=$1
 switch($action) {
 case build switch
   configuration=./configuration.nix
   if(~ $#* 2) configuration=$2
+case check select
+  if(! ~ $#* 2) fail 'expected a system store path'
+  target=$2
 case rollback list
   if(! ~ $#* 1) fail 'unexpected argument for' $action
 case delete
@@ -48,10 +51,11 @@ if(~ $action init) {
 }
 if(! ~ $#nix9MachineId 1) fail 'initialize this machine with nix9-rebuild init MACHINE first'
 root=$nix9SystemRoot
-candidate=$root^-candidate
+candidate=$root^-candidate-^$pid
 lock='#s/nix9-system-'^$nix9MachineId
 @{ status='' } > $lock || fail 'system changes are locked; remove this file if interrupted:' $lock
 changing=0
+retained=0
 previous=()
 previousName=()
 fn sigexit {
@@ -61,7 +65,7 @@ fn sigexit {
     if not if(test -e $root) rm $root
     echo -n $previousName > /dev/sysname
   }
-  if(~ $action switch && test -f $candidate) rm $candidate
+  if(~ $retained 1 && test -f $candidate) rm $candidate
   rm $lock
   status=$result
 }
@@ -80,6 +84,7 @@ case build
   nix-build $configuration --out-link $root^-build
   exit ''
 case switch
+  retained=1
   nix-build $configuration --out-link $candidate
   target=`{cat $candidate}
 case rollback
@@ -92,14 +97,31 @@ case rollback
   if(! ~ $#target 1) fail 'no previous generation'
 }
 if(! ~ $#target 1) fail 'invalid system output'
+if(! echo $target | awk 'NR == 1 && /^\/usr\/local\/nix\/store\/[a-zA-Z0-9+._?=-]+$/ {ok=1} END {exit !(ok && NR == 1)}')
+  fail 'expected a canonical system store path'
+nix-store --check-validity $target || fail 'system is not registered locally'
 if(! test -f $target/system) fail 'expected a built nix9 system'
-if(! ~ `{cat $target/system} nix9-system-2) fail 'unsupported system format'
+if(~ $retained 0) {
+  retained=1
+  nix-store --option substitute false --realise $target --add-root $candidate > /dev/null ||
+    fail 'cannot retain the local system'
+}
+# Querying and verifying opaque output paths must not realise missing dependencies.
+closure=`{nix-store --query --requisites $target && echo nix9-closure-ready}
+if(~ $#closure 0) fail 'cannot query system closure'
+if(! ~ $closure($#closure) nix9-closure-ready) fail 'cannot query system closure'
+for(item in $closure) {
+  if(! ~ $item nix9-closure-ready)
+    nix-store --verify-path $item || fail 'system closure verification failed:' $item
+}
+format=`{cat $target/system}
+if(! ~ $#format 1 || ! ~ $format nix9-system-2) fail 'unsupported system format'
 if(test -f $target/machine-id) {
-  if(! ~ `{cat $target/machine-id} $nix9MachineId) fail 'system belongs to another machine'
+  identity=`{cat $target/machine-id}
+  if(! ~ $#identity 1 || ! ~ $identity $nix9MachineId) fail 'system belongs to another machine'
 }
 for(file in activate boot hostName environment services/ndb.rc services/webfs.rc services/reset.rc)
   if(! test -f $target/$file) fail 'incomplete system:' $file
-nix-store --verify-path $target
 # Activation runs in a private namespace before any boot selection changes.
 @{ fn sigexit; nix9SystemCheck=1; . $target/activate } || fail 'activation check failed'
 if(test -f $target/services/listen-check)
@@ -133,6 +155,10 @@ if(test -e /usr/local/pkg/nix9/system) {
   if(! cmp -s /usr/local/pkg/nix9/system $nix9/packages/system/session.rc)
     fail 'system session activation was edited: /usr/local/pkg/nix9/system'
 }
+if(~ $action check) {
+  echo 'System check passed:' $target
+  exit ''
+}
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=(); . $target/logging } || fail 'log preparation failed'
 }
@@ -160,9 +186,11 @@ echo -n `{cat $target/hostName} > /dev/sysname
 nix-profile $root set $target
 changing=0
 eventSystem=$target
+event=$action
+if(~ $action select) event=switch
 if(! test -f $eventSystem/log-event && ~ $#previous 1) eventSystem=$previous
 if(test -f $eventSystem/log-event)
-  if(! /$cputype/bin/rc $eventSystem/log-event $action $target)
+  if(! /$cputype/bin/rc $eventSystem/log-event $event $target)
     echo 'nix9-rebuild: system selected, but its event could not be recorded' >[1=2]
 echo 'Selected system:' $target
 echo 'Refresh this session with: . /usr/local/pkg/nix9/system'

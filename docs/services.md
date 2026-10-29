@@ -106,6 +106,7 @@ writes no successful selection event.
 Boot records precede managed services; switch and rollback records follow
 successful selection. Record failures appear on the console without undoing
 selection.
+Both `nix9-rebuild switch` and `nix9-rebuild select` record a `switch` event.
 
 `services.timesync.logging = true` requires timesync to be enabled and also
 enables log preparation and generation events. Its `timesync` log defaults to

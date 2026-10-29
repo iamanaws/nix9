@@ -19,6 +19,17 @@
   vmTest,
 }:
 {
+  native-prebuilt-tests = vmTest "native-prebuilt-tests" {
+    script = ./native_prebuilt.py;
+    files = [
+      ./prebuilt.nix
+      ./artifacts.py
+    ];
+    env.NIX9_PREBUILT_TEST_STATE = "prebuilt-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-sharing-tests = vmTest "native-sharing-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_sharing.py;

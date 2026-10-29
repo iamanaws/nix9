@@ -22,12 +22,15 @@ advertises `10.0.2.100` through `10.0.2.102` and enables DHCP. Configure DHCP
 reservations or static networking to make those addresses reachable. Inventory
 addresses describe discovery; native networking settings configure interfaces.
 
-Select the appropriate system on each provisioned machine. For the CPU server:
+Select the appropriate system on each provisioned machine. On a CPU server
+that built the bundle locally:
 
 ```sh
-echo '(import ./default.nix {}).systems.cpu' > cpu.nix
+installation=`{cat /usr/local/nix/state/gcroots/installation}
+system=`{cat $installation/systems/cpu}
 nix9-rebuild init cpu
-nix9-rebuild switch cpu.nix
+nix9-rebuild check $system
+nix9-rebuild select $system
 ```
 
 Selection and reboot follow the usual [system rules](configuration.md#generations).
@@ -91,6 +94,9 @@ The flake exposes the constructor as `lib.mkInstallation` for callers supplying
 `lib`, `packages`, `mkDerivation` and `buildEnv`. The native package set binds
 these arguments.
 
-Transfer closures through [export/import or signed caches](transport.md#binary-caches)
-and select systems per machine. Coordinated rollout, deployment health checks
-and rollback across machines require manual orchestration.
+Build on one machine, then transfer closures through
+[export/import or signed caches](transport.md#binary-caches). On the destination,
+pass the imported system's store path to `nix9-rebuild check` and
+`nix9-rebuild select`; the configuration expression is needed only on the builder.
+Coordinated rollout, deployment health checks and rollback across machines require
+manual orchestration.
