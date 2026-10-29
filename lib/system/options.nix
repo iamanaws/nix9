@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ lib, config, ... }:
 let
   inherit (lib) mkOption types;
   settings =
@@ -11,6 +11,19 @@ let
 in
 {
   imports = [ ./modules/directories.nix ];
+  config.logging = lib.mkIf config.services.cron.enable {
+    enable = lib.mkDefault true;
+    files.cron.mode = lib.mkDefault "0660";
+  };
+  config.directories = lib.mkMerge (
+    map (user: {
+      "/sys/log/nix9-jobs/${user}" = {
+        mode = lib.mkDefault "0700";
+        owner = lib.mkDefault user;
+      };
+    }) (lib.unique (map (job: job.user) (builtins.attrValues config.services.cron.jobs)))
+    ++ lib.optional config.services.cron.enable { "/cron".mode = lib.mkDefault "0775"; }
+  );
   options = {
     namespace = lib.mkOption {
       type = lib.types.submodule { imports = [ ./modules/namespace.nix ]; };
@@ -46,6 +59,7 @@ in
           ./modules/auth.nix
           ./modules/cpu.nix
           ./modules/exports.nix
+          ./modules/cron.nix
         ];
       };
       default = { };

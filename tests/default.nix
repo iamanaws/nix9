@@ -20,6 +20,7 @@ let
         {
           installation-tests = import ./installation-host.nix { inherit pkgs nativePackageSet testSupport; };
           directory-tests = import ./directory-host.nix { inherit pkgs nativePackageSet testSupport; };
+          job-tests = import ./job-host.nix { inherit pkgs nativePackageSet testSupport; };
         }
       )
       ./native.nix
@@ -45,4 +46,5 @@ in
       '';
   checks.installation = tests.installation-tests;
   checks.directories = tests.directory-tests;
+  checks.jobs = tests.job-tests;
 }

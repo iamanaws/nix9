@@ -33,6 +33,15 @@ let
           );
         }
         {
+          machines.files.configuration.services.cron.keyFile = "/adm/scheduler.keys";
+          jobs.report = {
+            scheduler = "files";
+            target = "cpu";
+            schedule = "* * * * *";
+            user = "glenda";
+            timeout = 3;
+            command = "echo scheduled-on-`{cat /dev/sysname}; cat /n/projects/hello.c";
+          };
           machines.files.configuration.services.exports = {
             reference = export // {
               port = 17021;

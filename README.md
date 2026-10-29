@@ -51,7 +51,7 @@ and a C development example.
 | [Package development](docs/development.md) | Toolchains, recipes, development shells and native Go. |
 | [System configuration](docs/configuration.md) | Machine settings, switching, rollback and boot hooks. |
 | [Installation inventory](docs/installation.md) | Machines, shared discovery, provider references and system closures. |
-| [Services](docs/services.md) | Ethernet, clock synchronization, logging, webfs and remote CPU access. |
+| [Services](docs/services.md) | Ethernet, clocks, logging, webfs, remote CPU access and scheduled jobs. |
 | [Service discovery](docs/discovery.md) | NDB records, service locations and native cs/DNS. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |

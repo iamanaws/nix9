@@ -200,6 +200,8 @@ if(test -f $eventSystem/log-event)
     echo 'nix9-rebuild: system selected, but its event could not be recorded' >[1=2]
 echo 'Selected system:' $target
 echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
+if(test -f $target/services/cron/start)
+  echo 'Schedule changes take effect within a minute; enabling the scheduler requires CPU-server reboot.'
 if(test -f $target/network || { test -r $root^-boot && test -f `{cat $root^-boot}^/network })
   echo 'Network changes take effect after reboot.'
 if(test -f $target/services/timesync.rc || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/timesync.rc })

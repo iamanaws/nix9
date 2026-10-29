@@ -62,6 +62,22 @@ def listening(guest, ports, present=True):
         time.sleep(0.1)
 
 
+def job_records(guest):
+    output = guest.command("cat /sys/log/nix9-jobs/glenda/report.log >[2]/dev/null")
+    return len(re.findall(r"(?m)^scheduled-on-cpu$", output))
+
+
+def wait_job(guest, command, pattern):
+    deadline = time.monotonic() + 85
+    while True:
+        output = guest.command(command + "; status=''")
+        if re.search(pattern, output, re.M):
+            return output
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"scheduled job did not produce {pattern}: {output}")
+        time.sleep(2)
+
+
 def download(guest, base, name, destination=None, private=False):
     destination = destination or "/tmp/" + name
     if private:
@@ -184,6 +200,7 @@ with ExitStack() as stack:
                     guest.command(f"mkdir /mnt/keys/{identity}")
                     guest.command(f"cp /tmp/{identity}.aes /mnt/keys/{identity}/aeskey")
                 download(guest, base, "files.keys", "/adm/files.keys", private=True)
+                download(guest, base, "glenda.keys", "/adm/scheduler.keys", private=True)
             elif name == "cpu":
                 download(guest, base, "cpu.keys", "/adm/cpu.keys", private=True)
             else:
@@ -200,6 +217,9 @@ with ExitStack() as stack:
                 guest.command("nix9-rebuild build /tmp/files.nix")
                 candidate = store_path(guest, "/usr/local/nix/state/gcroots/machines/files/system-build")
                 guest.command("nix9-rebuild check " + candidate)
+                guest.command("chmod 400 /adm/files.keys /adm/scheduler.keys")
+                guest.command("nix9-rebuild check " + candidate)
+                guest.command("chmod 600 /adm/files.keys /adm/scheduler.keys")
                 guest.command("test ! -e /usr/glenda/projects")
             guest.command(f"nix9-rebuild switch /tmp/{name}.nix")
             systems[name] = selected(guest, name)
@@ -256,6 +276,8 @@ with ExitStack() as stack:
             guest.command(f"cat /usr/local/nix/state/gcroots/machines/{name}/system-boot", root)
             if name != "terminal":
                 guest.command("test -e '#s/nix9-access-" + name + "'")
+            if name == "files":
+                guest.command("ps | awk '$NF == \"cron\" {n++} END {print n+0}'", "1")
             yield guest
 
     provider = stack.enter_context(start("files"))
@@ -263,6 +285,9 @@ with ExitStack() as stack:
     listening(provider, (567, 17020, 17021, 17022))
     cpu = stack.enter_context(start("cpu"))
     cpu.child.timeout = 300
+    wait_job(cpu, "cat /sys/log/nix9-jobs/glenda/report.log >[2]/dev/null", "^scheduled-on-cpu$")
+    wait_job(provider, "cat /sys/log/nix9-jobs/glenda/report.remote.log", r"^end .*status=$")
+    print("PASS: native CPU startup schedules an authenticated job reading the shared project", flush=True)
     listening(cpu, (17019,))
     terminal = stack.enter_context(start("terminal"))
     terminal.child.timeout = 300
@@ -365,6 +390,11 @@ with ExitStack() as stack:
     provider.child.timeout = 300
     listening(provider, (567,))
     listening(provider, (17020, 17021, 17022), present=False)
+    failed_jobs = job_records(cpu)
+    wait_job(provider, "cat /sys/log/nix9-jobs/glenda/report.remote.log", "required share is unavailable")
+    if job_records(cpu) != failed_jobs:
+        raise RuntimeError("job executed while its required share was unavailable")
+    print("PASS: scheduled remote sessions log provider failure without executing the command", flush=True)
     rejected(terminal, "rcpu -h cpu -c 'echo BAD-SESSION > /tmp/missing-share'", "required share is unavailable")
     cpu.command("test ! -e /tmp/missing-share")
     # Boot listeners independently of user-session shares, even without a provider.
@@ -381,6 +411,12 @@ with ExitStack() as stack:
     provider.child.timeout = 300
     listening(provider, (567, 17020, 17021, 17022))
     remote(terminal, "cat /n/projects/restored", "restored")
+    deadline = time.monotonic() + 85
+    while job_records(cpu) <= failed_jobs:
+        if time.monotonic() >= deadline:
+            raise RuntimeError("scheduled job did not recover after its file provider returned")
+        time.sleep(2)
+    print("PASS: scheduled CPU jobs recover when the shared file provider returns", flush=True)
     stop(terminal)
     terminal = stack.enter_context(start("terminal"))
     terminal.child.timeout = 300
@@ -401,5 +437,6 @@ with ExitStack() as stack:
                    "reuse", "retarget", "disable", "rollback", "required-and-optional-providers",
                    "manual-conflicts", "changed-mounts", "boot-only-export-policy", "persistent-project-data",
                    "declared-export-directory", "directory-check-without-creation", "directory-metadata-and-rollback",
-                   "boot-without-file-provider", "reboot-recovery"],
+                   "boot-without-file-provider", "reboot-recovery", "boot-scheduler",
+                   "scheduled-remote-share", "scheduled-provider-failure", "scheduled-provider-recovery"],
     }, indent=2) + "\n")

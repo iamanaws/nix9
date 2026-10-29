@@ -154,6 +154,11 @@ See [CPU access and authentication](access.md) for configuration and runtime key
 `namespace.mounts` places shares in user sessions. See [shared files](sharing.md)
 for configuration, access policy and failure behavior.
 
+## Scheduled jobs
+
+`services.cron` schedules local commands and authenticated remote CPU jobs.
+See [scheduled jobs](jobs.md) for schedules, installation targets and results.
+
 ## CPU TCP services
 
 On CPU servers, `services.listen` adds rc scripts to native `aux/listen`:

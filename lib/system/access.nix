@@ -3,6 +3,7 @@
   auth,
   cpu,
   exports,
+  cronKeyFile ? null,
   authPackage,
   cpuPackage,
   exportfsPackage,
@@ -12,10 +13,10 @@ let
   inherit (import ./modules/types.nix { inherit lib; }) userName;
   error = message: throw "mkSystem: ${message}";
   exportList = builtins.attrValues exports;
-  needsFactotum = cpu.enable || exports != { };
+  needsFactotum = cpu.enable || exports != { } || cronKeyFile != null;
   keys = lib.unique (
     builtins.filter (key: key != null) (
-      (lib.optional cpu.enable cpu.keyFile) ++ map (item: item.keyFile) exportList
+      (lib.optional cpu.enable cpu.keyFile) ++ map (item: item.keyFile) exportList ++ [ cronKeyFile ]
     )
   );
 in

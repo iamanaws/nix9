@@ -44,6 +44,31 @@ in
           };
       };
     };
+    jobs = mkOption {
+      default = { };
+      description = "Scheduled jobs referring to machines in this installation.";
+      type = types.attrsOf (
+        types.submodule (
+          { name, ... }: {
+            options = (import ../system/modules/job.nix { inherit lib; }).options // {
+              scheduler = mkOption {
+                type = label;
+                description = "Authentication server running cron.";
+              };
+              target = mkOption {
+                type = label;
+                description = "Machine running the command; remote targets must enable CPU access.";
+              };
+              keyPattern = mkOption {
+                type = publicKeyPattern;
+                description = "Public factotum attributes for remote CPU authentication.";
+                default = if config.defaults.authdom == null then "" else "dom=${config.defaults.authdom}";
+              };
+            };
+          }
+        )
+      );
+    };
     machines = mkOption {
       description = "Machines, their advertised addresses and system modules.";
       type = types.attrsOf (

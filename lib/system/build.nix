@@ -87,8 +87,20 @@ let
         auth,
         cpu,
         exports,
+        cron,
       }:
       {
+        cron = import ./cron.nix {
+          inherit
+            lib
+            mkDerivation
+            buildEnv
+            authPackage
+            cpuPackage
+            auth
+            ;
+          configuration = cron;
+        };
         managedWebfs =
           (
             {
@@ -114,6 +126,7 @@ let
             exportfsPackage
             ;
           exports = sharing.exports;
+          cronKeyFile = if cron.enable then cron.keyFile else null;
         };
       }
     )
@@ -124,6 +137,7 @@ let
     listen
     ndb
     access
+    cron
     ;
   listenScripts = if listen == null then { } else listen;
   sharing = import ./sharing.nix {
@@ -178,6 +192,7 @@ else
       ndb
       access
       directoryConfiguration
+      cron
     ]
     (mkDerivation {
       name = "nix9-system-${hostName}";
@@ -328,6 +343,23 @@ else
                 else
                   ""
               }
+            ''
+        }
+        ${
+          if cron == null then
+            ""
+          else
+            ''
+              mkdir -p $out/services/cron/tables $out/services/cron/commands
+              ${lib.concatStringsSep "\n" (
+                lib.mapAttrsToList (
+                  name: task: write ("services/cron/commands/" + name) (toString task + "\n")
+                ) cron.tasks
+              )}
+              ${lib.concatStringsSep "\n" (
+                lib.mapAttrsToList (user: table: write ("services/cron/tables/" + user) table) cron.tables
+              )}
+              ${write "services/cron/start" cron.start}
             ''
         }
         ${if logConfiguration == null then "" else write "logging" logConfiguration.prepare}

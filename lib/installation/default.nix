@@ -15,7 +15,24 @@ let
         configuration
       ];
     }).config;
-  inherit (inventory) name defaults machines;
+  inherit (inventory)
+    name
+    defaults
+    machines
+    jobs
+    ;
+  makeJob = import ../system/job.nix { inherit mkDerivation buildEnv; };
+  tasks = lib.mapAttrs (name: job: makeJob (job // { inherit name; })) jobs;
+  scheduledJobs =
+    machine:
+    lib.mapAttrs (
+      _: job:
+      (builtins.removeAttrs job [ "scheduler" ])
+      // {
+        target = if job.target == machine then null else machines.${job.target}.hostName;
+      }
+    ) (lib.filterAttrs (_: job: job.scheduler == machine) jobs);
+  targetJobs = machine: lib.filterAttrs (_: job: job.target == machine) jobs;
   names = builtins.attrNames machines;
   error = message: throw "mkInstallation: ${message}";
   unique = items: builtins.length items == builtins.length (lib.unique items);
@@ -67,7 +84,26 @@ let
         inherit (machine) hostName machineId;
         services.ndb = discovery;
         namespace.mounts = mountConfigurations.${machineName};
+        services.cron = lib.mkIf (scheduledJobs machineName != { }) {
+          enable = true;
+          jobs = scheduledJobs machineName;
+        };
+        packages = lib.mapAttrsToList (name: _: tasks.${name}) (targetJobs machineName);
+        directories = lib.mkMerge (
+          lib.mapAttrsToList (_: job: {
+            "/sys/log/nix9-jobs/${job.user}" = {
+              mode = lib.mkDefault "0700";
+              owner = lib.mkDefault job.user;
+            };
+          }) (targetJobs machineName)
+        );
         assertions = [
+          {
+            assertion = builtins.all (
+              name: configs.${machineName}.services.cron.jobs.${name} == (scheduledJobs machineName).${name}
+            ) (builtins.attrNames (scheduledJobs machineName));
+            message = "installation inventory owns scheduled jobs for ${machineName}";
+          }
           {
             assertion =
               configs.${machineName}.machineId == machine.machineId
@@ -144,10 +180,29 @@ let
         phase = "session";
         mount = mountName;
       }
-    ) mounts;
+    ) mounts
+    ++ lib.mapAttrsToList (jobName: job: {
+      consumer = job.scheduler;
+      provider = job.target;
+      kind = "job";
+      phase = "run";
+      required = true;
+      job = jobName;
+    }) (lib.filterAttrs (_: job: job.scheduler != job.target) jobs);
   manifest = {
     version = 1;
     inherit name defaults dependencies;
+    jobs = lib.mapAttrs (jobName: job: {
+      inherit (job)
+        scheduler
+        target
+        schedule
+        user
+        keyPattern
+        timeout
+        ;
+      command = "${tasks.${jobName}}/run";
+    }) jobs;
     machines = lib.mapAttrs (machineName: machine: {
       inherit (machine) hostName machineId ip;
       system = toString systems.${machineName};
@@ -189,6 +244,27 @@ else if !unique (map (machine: machine.ip) (builtins.attrValues machines)) then
   error "duplicate IPv4 addresses"
 else if !builtins.all (provider: builtins.hasAttr provider machines) providerNames then
   error "discovery defaults refer to an unknown machine"
+else if !builtins.all label (builtins.attrNames jobs) then
+  error "job names must be lowercase labels of at most 63 characters"
+else if
+  !builtins.all (
+    job: builtins.hasAttr job.scheduler machines && builtins.hasAttr job.target machines
+  ) (builtins.attrValues jobs)
+then
+  error "a job refers to an unknown scheduler or target"
+else if
+  !builtins.all (
+    job:
+    serves job.scheduler "auth"
+    && (
+      job.scheduler == job.target
+      || (
+        serves job.target "cpu" && builtins.elem job.user configs.${job.target}.services.cpu.allowedUsers
+      )
+    )
+  ) (builtins.attrValues jobs)
+then
+  error "jobs require an authentication scheduler and remote CPU access for their user"
 else if !builtins.all (item: builtins.hasAttr item.mount.provider machines) mounts then
   error "a mount refers to an unknown provider"
 else if !builtins.all (kind: serves defaults.${kind} kind) providers then

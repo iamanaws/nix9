@@ -51,6 +51,7 @@ like `mkSystem`. Its main settings are:
 | `machines.NAME.configuration` | Ordinary `mkSystem` module declaring packages, services and machine settings. |
 | `defaults.auth`, `defaults.fs`, `defaults.cpu` | Discovery providers, referenced by inventory key. Each defaults to `null`. |
 | `defaults.authdom` | Public authentication domain, default `null`. |
+| `jobs.NAME` | [Scheduled command](jobs.md) with `scheduler` and `target` inventory keys. |
 
 Declare a session mount by provider and export:
 
@@ -82,11 +83,12 @@ controls runtime availability.
 | --- | --- |
 | `systems.NAME` | That machine's system derivation, guarded by its inventory identity. |
 | `discovery` | Generated `services.ndb` host records and discovery defaults. |
-| `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts and dependencies. |
+| `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts, jobs and dependencies. |
 | `build` | An output containing `manifest.json`, `ndb` and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
 
 Roles come from enabled authentication, CPU and export services. Manifest
-dependencies describe authentication and named mounts needed by sessions.
+dependencies describe authentication and named mounts needed by sessions, plus
+remote CPU targets needed when jobs run.
 Discovery defaults for CPU and file servers are locations, not boot dependencies.
 Machines may mount each other's exports because their boot namespaces start
 independently of user sessions.

@@ -13,6 +13,9 @@ if(test -r /rc/bin/cpurc.local.nix9-original) . /rc/bin/cpurc.local.nix9-origina
         if(! ps | grep -s timesync) aux/timesync $TIMESYNCARGS
       }
     }
+    if(test -f $nix9BootSystem/services/cron/start)
+      if(! /$cputype/bin/rc $nix9BootSystem/services/cron/start)
+        echo 'nix9: scheduler startup failed' >[1=2]
   }
   nix9BootSystem=()
  }

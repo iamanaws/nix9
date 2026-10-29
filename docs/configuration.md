@@ -78,6 +78,7 @@ Selection and rollback apply settings at different times:
 | Ethernet and clock synchronization | Next boot. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
+| Scheduled jobs | Enabling and key loading require CPU-server reboot. A running scheduler reloads the selected schedules within a minute; running jobs continue. |
 | Persistent directories and their metadata | Selection, rollback and boot. Login and refresh leave them alone. |
 
 Refresh the current shell with `. /usr/local/pkg/nix9/system` after selection

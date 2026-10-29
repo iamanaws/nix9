@@ -19,6 +19,14 @@
   vmTest,
 }:
 {
+  native-job-tests = vmTest "native-job-tests" {
+    script = ./native_jobs.py;
+    files = [
+      ./jobs.nix
+      ./job-checks.nix
+    ];
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-directory-tests = vmTest "native-directory-tests" {
     script = ./native_directories.py;
     files = [

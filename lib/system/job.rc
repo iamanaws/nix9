@@ -1,0 +1,37 @@
+rfork ne
+logReady=0
+fn fail {
+  echo 'nix9-job:' $* >[1=2]
+  if(~ $logReady 1) echo failure `{date} $* >> $log
+  exit 'job failed'
+}
+. /usr/local/pkg/nix9/activate || fail 'cannot activate Nix'
+if(! ~ `{cat /dev/user} $jobUser) fail 'wrong native user'
+log=/sys/log/nix9-jobs/$jobUser/$jobName^.log
+if(test -e $log && ! test -f $log) fail 'job log is not a file'
+if(! test -e $log) { echo -n > $log || fail 'cannot create job log' }
+chmod 600 $log && chmod +a $log
+# Native chmod can report an error without a failing exit status.
+ls -ld $log | awk -v 'owner='^$jobUser '$1 == "a-rw-------" && $4 == owner {ok=1} END {exit !ok}' || fail 'cannot protect job log'
+logReady=1
+echo start `{date} 'pid='^$pid 'job='^$job >> $log
+roots=/usr/local/nix/state/gcroots/jobs/$jobUser
+mkdir -p $roots || fail 'cannot create job roots'
+chmod 700 $roots || fail 'cannot protect job roots'
+root=$roots/$jobName^-$pid^-^`{date -n}
+fn sigexit {
+  result=$status
+  for(item in $root $root^-system) if(test -f $item) rm $item
+  status=$result
+}
+nix-store --option substitute false --realise $job --add-root $root >/dev/null >>[2]$log || fail 'cannot retain job closure'
+# Keep the namespace's generated files and other system resources alive too.
+if(~ $#nix9System 1)
+  nix-store --option substitute false --realise $nix9System --add-root $root^-system >/dev/null >>[2]$log || fail 'cannot retain job system'
+if(. $jobEnvironment/activate >> $log >[2=1]) {
+  /$cputype/bin/rc -e $job/command >> $log >[2=1]
+  result=$status
+}
+if not result=$status
+echo end `{date} 'pid='^$pid 'status='^$result >> $log
+exit $result
