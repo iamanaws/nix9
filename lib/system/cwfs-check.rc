@@ -1,0 +1,16 @@
+#!/bin/rc -e
+path=(/$cputype/bin /rc/bin)
+. $cwfsSystem/services/cwfs/config
+fn fail {
+  echo 'nix9: CWFS configuration failed:' $* >[1=2]
+  exit 'CWFS configuration failed'
+}
+for(device in $cwfsDevices)
+  test -f $device && test -r $device && test -w $device || fail 'data device is unavailable:' $device
+$cwfsPackage/bin/cwfs-check $cwfsDevice || fail 'invalid provisioned filesystem'
+test -w /mnt/factotum/ctl || fail 'boot factotum is unavailable'
+if(~ $#cwfsKey 1) {
+  test -f $cwfsKey && test -r $cwfsKey || fail 'runtime key file is unavailable'
+  ls -ld $cwfsKey | grep -s '^-[-l]r[-w]------- ' || fail 'runtime key file has unsafe permissions'
+}
+exit ''

@@ -132,6 +132,16 @@ in
                           default = name;
                           description = "Export declared on the provider.";
                         };
+                        fileSystem = mkOption {
+                          type = types.nullOr (
+                            types.enum [
+                              "main"
+                              "dump"
+                            ]
+                          );
+                          default = null;
+                          description = "CWFS attach on the provider; null selects its named directory export.";
+                        };
                         mountPoint = mkOption {
                           type = runtimeFile;
                           default = "/n/${name}";

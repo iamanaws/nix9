@@ -1,0 +1,30 @@
+# Start only at CPU boot. Selection and session refresh leave the running data server alone.
+@{
+  rfork e
+  path=(/$cputype/bin /rc/bin)
+  . $cwfsSystem/services/cwfs/config
+  fn fail {
+    echo 'nix9: CWFS startup failed:' $* >[1=2]
+    exit 'CWFS startup failed'
+  }
+  ~ $service cpu || fail 'native CPU-mode boot is required'
+  rc $cwfsSystem/services/cwfs/check || fail 'preflight failed'
+  if(test -e /srv/cwfs-nix9 || test -e /srv/cwfs-nix9.cmd)
+    fail 'service name is already occupied'
+  netstat -n | awk -v 'port='^$cwfsPort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit found}' ||
+    fail 'TCP port is already occupied'
+  if(~ $#cwfsKey 1)
+    cat $cwfsKey > /mnt/factotum/ctl || fail 'cannot load server key'
+  fsmempercent=$cwfsCache
+  $cwfsPackage/bin/cwfs64x -n cwfs-nix9 -f $cwfsDevice -m $cwfsSystem/services/cwfs/devices \
+    -a tcp!*!$cwfsPort < /dev/null >> /sys/log/cwfs >[2=1] || fail 'server launch failed'
+  attempts=0
+  while(! test -r /srv/cwfs-nix9) {
+    if(~ $attempts 30) fail 'server did not become ready; see /sys/log/cwfs'
+    sleep 1
+    attempts=`{awk -v 'n='^$attempts 'BEGIN {print n+1}'}
+  }
+  chmod 600 /srv/cwfs-nix9.cmd || fail 'cannot protect the administrative console'
+  echo 'nix9: CWFS ready on TCP port' $cwfsPort
+  status=''
+}

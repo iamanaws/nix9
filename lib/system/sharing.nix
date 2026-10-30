@@ -7,6 +7,7 @@
   cpuPackage,
   exportfsPackage,
   namespaceTools,
+  dialPackage,
 }:
 let
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
@@ -36,6 +37,10 @@ if !builtins.all validName names then
   error "export and mount names must be lowercase labels of at most 63 characters"
 else if !builtins.all (item: item.allowedUsers != [ ]) (builtins.attrValues exports) then
   error "services.exports.allowedUsers must name at least one user"
+else if
+  builtins.any (item: item.transport == "tls" && item.attach != "") (builtins.attrValues mounts)
+then
+  error "namespace.mounts.attach requires native TCP transport"
 else if builtins.length ports != builtins.length (lib.unique ports) then
   error "services.exports must use distinct TCP ports"
 else if
@@ -82,6 +87,7 @@ else
       nix9NamespaceCount=${toString (4 * builtins.length (builtins.attrNames mounts))}
       nix9NamespaceBindCount=${toString bindings.count}
       nix9NamespaceTools=${namespaceTools}
+      nix9NamespaceDial=${dialPackage}/bin/dial
       nix9NamespaceBindArguments=(${bindings.arguments})
       nix9NamespaceMountPoints=(${lib.concatMapStringsSep " " quote bindings.mountPoints})
       nix9NamespacePlannedDirectories=(${lib.concatMapStringsSep " " quote bindings.planned})
@@ -93,7 +99,7 @@ else
           lib.mapAttrsToList (name: item: ''
             mountShare ${quote name} ${quote item.mountPoint} ${quote item.address} ${quote item.keyPattern} ${toString item.timeout} ${
               if item.required then "1" else "0"
-            }
+            } ${quote item.transport} ${quote item.attach}
           '') mounts
         )}
         status='''

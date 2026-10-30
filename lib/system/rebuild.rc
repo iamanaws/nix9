@@ -122,6 +122,8 @@ if(test -f $target/machine-id) {
 }
 for(file in activate boot hostName environment services/ndb.rc services/webfs.rc services/reset.rc)
   if(! test -f $target/$file) fail 'incomplete system:' $file
+if(test -f $target/services/cwfs/check)
+  /$cputype/bin/rc $target/services/cwfs/check || fail 'filesystem configuration check failed'
 if(test -f $target/directories)
   /$cputype/bin/rc $target/directories check || fail 'directory configuration check failed'
 # Activation runs in a private namespace before any boot selection changes.
@@ -200,6 +202,8 @@ if(test -f $eventSystem/log-event)
     echo 'nix9-rebuild: system selected, but its event could not be recorded' >[1=2]
 echo 'Selected system:' $target
 echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
+if(test -f $target/services/cwfs/start || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/cwfs/start })
+  echo 'Filesystem service and snapshot policy changes take effect after CPU-server reboot.'
 if(test -f $target/services/cron/start)
   echo 'Schedule changes take effect within a minute; enabling the scheduler requires CPU-server reboot.'
 if(test -f $target/network || { test -r $root^-boot && test -f `{cat $root^-boot}^/network })

@@ -23,6 +23,7 @@ let
           job-tests = import ./job-host.nix { inherit pkgs nativePackageSet testSupport; };
           binding-tests = import ./binding-host.nix { inherit pkgs nativePackageSet testSupport; };
           network-tests = import ./network-host.nix { inherit pkgs nativePackageSet testSupport; };
+          storage-tests = import ./storage-host.nix { inherit pkgs nativePackageSet testSupport; };
         }
       )
       ./native.nix
@@ -51,4 +52,5 @@ in
   checks.jobs = tests.job-tests;
   checks.bindings = tests.binding-tests;
   checks.networking = tests.network-tests;
+  checks.storage = tests.storage-tests;
 }

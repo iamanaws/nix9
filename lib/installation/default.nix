@@ -69,7 +69,14 @@ let
         required
         timeout
         ;
-      address = endpoint mount.provider configs.${mount.provider}.services.exports.${mount.export}.port;
+      address = endpoint mount.provider (
+        if mount.fileSystem == null then
+          configs.${mount.provider}.services.exports.${mount.export}.port
+        else
+          configs.${mount.provider}.services.cwfs.port
+      );
+      transport = if mount.fileSystem == null then "tls" else "tcp";
+      attach = if mount.fileSystem == null then "" else mount.fileSystem;
     }) machine.mounts
   ) machines;
   configs = lib.mapAttrs (
@@ -132,7 +139,7 @@ let
   serves =
     provider: kind:
     if kind == "fs" then
-      configs.${provider}.services.exports != { }
+      configs.${provider}.services.exports != { } || configs.${provider}.services.cwfs.enable
     else
       configs.${provider}.services.${kind}.enable;
   mounts = lib.concatMap (
@@ -180,11 +187,14 @@ let
       }:
       {
         inherit consumer;
-        inherit (mount) provider export required;
+        inherit (mount) provider required;
         kind = "mount";
         phase = "session";
         mount = mountName;
       }
+      // (
+        if mount.fileSystem == null then { inherit (mount) export; } else { inherit (mount) fileSystem; }
+      )
     ) mounts
     ++ lib.mapAttrsToList (jobName: job: {
       consumer = job.scheduler;
@@ -223,6 +233,18 @@ let
           address = endpoint machineName export.port;
           inherit (export) readOnly;
         }) configs.${machineName}.services.exports;
+        cwfs =
+          if configs.${machineName}.services.cwfs.enable then
+            {
+              address = endpoint machineName configs.${machineName}.services.cwfs.port;
+              transport = "tcp";
+              fileSystems = [
+                "main"
+                "dump"
+              ];
+            }
+          else
+            null;
         tcp = lib.mapAttrs (port: _: endpoint machineName port) (
           configs.${machineName}.services.listen.tcp or { }
         );
@@ -230,9 +252,17 @@ let
       mounts = lib.mapAttrs (
         mountName: mount:
         mount
-        // lib.optionalAttrs (builtins.hasAttr mountName machine.mounts) {
-          inherit (machine.mounts.${mountName}) provider export;
-        }
+        // lib.optionalAttrs (builtins.hasAttr mountName machine.mounts) (
+          {
+            inherit (machine.mounts.${mountName}) provider;
+          }
+          // (
+            if machine.mounts.${mountName}.fileSystem == null then
+              { inherit (machine.mounts.${mountName}) export; }
+            else
+              { inherit (machine.mounts.${mountName}) fileSystem; }
+          )
+        )
       ) configs.${machineName}.namespace.mounts;
     }) machines;
   };
@@ -328,10 +358,14 @@ else if !builtins.all (kind: serves defaults.${kind} kind) providers then
   error "a discovery provider does not enable its referenced role"
 else if
   !builtins.all (
-    item: builtins.hasAttr item.mount.export configs.${item.mount.provider}.services.exports
+    item:
+    if item.mount.fileSystem == null then
+      builtins.hasAttr item.mount.export configs.${item.mount.provider}.services.exports
+    else
+      configs.${item.mount.provider}.services.cwfs.enable
   ) mounts
 then
-  error "a mount refers to an unknown export"
+  error "a mount refers to an unknown export or disabled filesystem provider"
 else
   builtins.deepSeq [ ndb deployment ] (
     builtins.deepSeq (map (machineName: systems.${machineName}.drvPath) names) {

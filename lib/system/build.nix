@@ -8,6 +8,8 @@
   listenPackage,
   exportfsPackage,
   namespaceTools,
+  cwfsPackage,
+  dialPackage,
 }:
 {
   hostName,
@@ -72,7 +74,8 @@ let
       packages
       ++ (if ndb == null then [ ] else [ ndb.package ])
       ++ (if access == null then [ ] else access.packages)
-      ++ sharing.packages;
+      ++ sharing.packages
+      ++ lib.optional (storage != null) storage.selected;
   };
   network = import ./network.nix {
     inherit lib hostName;
@@ -89,6 +92,7 @@ let
         cpu,
         exports,
         cron,
+        cwfs,
       }:
       {
         cron = import ./cron.nix {
@@ -128,6 +132,8 @@ let
             ;
           exports = sharing.exports;
           cronKeyFile = if cron.enable then cron.keyFile else null;
+          cwfsEnabled = cwfs.enable;
+          cwfsKeyFile = if cwfs.enable then cwfs.keyFile else null;
         };
       }
     )
@@ -140,6 +146,11 @@ let
     access
     cron
     ;
+  storage = import ./cwfs.nix {
+    inherit lib;
+    configuration = services.cwfs;
+    package = cwfsPackage;
+  };
   listenScripts = if listen == null then { } else listen;
   sharing = import ./sharing.nix {
     inherit
@@ -147,6 +158,7 @@ let
       cpuPackage
       exportfsPackage
       namespaceTools
+      dialPackage
       ;
     exports = services.exports;
     mounts = namespace.mounts;
@@ -182,6 +194,18 @@ else if !validPins then
   throw "mkSystem: certificatePins must map lowercase DNS hosts to nonempty lists of SHA-256 hex fingerprints"
 else if !builtins.isBool managedWebfs then
   throw "mkSystem: services.webfs.enable must be a boolean"
+else if
+  storage != null
+  && (
+    builtins.elem services.cwfs.port [
+      567
+      17019
+    ]
+    || builtins.hasAttr (toString services.cwfs.port) listenScripts
+    || builtins.any (item: item.port == services.cwfs.port) (builtins.attrValues services.exports)
+  )
+then
+  throw "mkSystem: services.cwfs.port conflicts with another TCP service"
 else if access != null && access.cpu.enable && listenScripts ? "17019" then
   throw "mkSystem: services.cpu owns TCP port 17019"
 else if access != null && access.auth.enable && listenScripts ? "567" then
@@ -201,6 +225,7 @@ else
       access
       directoryConfiguration
       cron
+      storage
     ]
     (mkDerivation {
       name = "nix9-system-${hostName}";
@@ -222,6 +247,20 @@ else
         echo 'nix9NextSystem='$out > $out/activate
         echo -n ${quote (builtins.readFile ./activate.rc)} >> $out/activate
         ${write "boot" (builtins.readFile ./boot.rc)}
+        ${
+          if storage == null then
+            ""
+          else
+            ''
+              ${write "services/cwfs/config" storage.settings}
+              ${write "services/cwfs/devices" storage.map}
+              echo 'rfork e' > $out/services/cwfs/check
+              echo 'cwfsSystem='$out >> $out/services/cwfs/check
+              echo -n ${quote (builtins.readFile ./cwfs-check.rc)} >> $out/services/cwfs/check
+              echo 'cwfsSystem='$out > $out/services/cwfs/start
+              echo -n ${quote (builtins.readFile ./cwfs-start.rc)} >> $out/services/cwfs/start
+            ''
+        }
         ${if directoryConfiguration == null then "" else write "directories" directoryConfiguration.script}
         ${if network == "" then "" else write "network" network}
         ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}

@@ -174,6 +174,10 @@ See [CPU access and authentication](access.md) for configuration and runtime key
 `namespace.mounts` places shares in user sessions. See [shared files](sharing.md)
 for configuration, access policy and failure behavior.
 
+`services.cwfs` manages a separate, provisioned CWFS64x data filesystem and its
+daily dump policy. See [storage and recovery](storage.md) for the service and
+an installation with two CPU servers sharing one workspace.
+
 ## Scheduled jobs
 
 `services.cron` schedules local commands and authenticated remote CPU jobs.

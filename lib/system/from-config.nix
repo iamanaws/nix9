@@ -17,6 +17,8 @@ let
     listenPackage = packages.listen;
     exportfsPackage = packages.exportfs;
     namespaceTools = packages.namespaceTools;
+    cwfsPackage = packages.cwfs;
+    dialPackage = packages.dial;
   };
 in
 if failures != [ ] then

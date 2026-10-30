@@ -68,6 +68,10 @@ provider's hostname and export port. `mountPoint`, `required`, `timeout` and
 `keyPattern` follow [session mount](sharing.md#mount-in-a-session) settings.
 The default key pattern selects `defaults.authdom` when set.
 
+Use `fileSystem = "main"` or `"dump"` to mount a provider's enabled
+`services.cwfs` instead of a directory export. The inventory derives native TCP
+transport, the port and attach name. See the [storage example](storage.md).
+
 The inventory owns identities, hostnames, NDB host records and these named
 mounts. Configure NDB includes and DNS through each machine's `configuration`.
 Use `configuration.namespace.mounts` for shares outside the inventory.

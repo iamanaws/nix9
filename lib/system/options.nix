@@ -11,10 +11,16 @@ let
 in
 {
   imports = [ ./modules/directories.nix ];
-  config.logging = lib.mkIf config.services.cron.enable {
-    enable = lib.mkDefault true;
-    files.cron.mode = lib.mkDefault "0660";
-  };
+  config.logging = lib.mkMerge [
+    (lib.mkIf config.services.cron.enable {
+      enable = lib.mkDefault true;
+      files.cron.mode = lib.mkDefault "0660";
+    })
+    (lib.mkIf config.services.cwfs.enable {
+      enable = lib.mkDefault true;
+      files.cwfs.mode = lib.mkDefault "0640";
+    })
+  ];
   config.directories = lib.mkMerge (
     map (user: {
       "/sys/log/nix9-jobs/${user}" = {
@@ -64,6 +70,7 @@ in
           ./modules/cpu.nix
           ./modules/exports.nix
           ./modules/cron.nix
+          ./modules/cwfs.nix
         ];
       };
       default = { };

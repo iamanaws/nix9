@@ -14,6 +14,7 @@
           if(! /$cputype/bin/rc $nix9SelectedSystem/log-event boot $nix9SelectedSystem)
             echo 'nix9: cannot record boot event' >[1=2]
         if(test -f $nix9SelectedSystem/network) . $nix9SelectedSystem/network
+        if(test -f $nix9SelectedSystem/services/cwfs/start) . $nix9SelectedSystem/services/cwfs/start
         if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
         . $nix9SelectedSystem/activate && {
           if(test -f $nix9System/ndb/boot.rc) . $nix9System/ndb/boot.rc

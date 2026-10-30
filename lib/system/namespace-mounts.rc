@@ -81,7 +81,14 @@ fn mountShare {
     anchor=/mnt/nix9-mount-^$pid^-$name
     test -d $anchor || fail 'private mount point is unavailable:' $anchor
     anchors=($anchors $anchor)
-    if($nix9NamespaceTools/bin/alarm $5 $nix9NamespaceClient -a -k $4 $3 $nix9NamespaceTools/bin/mount -nc /fd/0 $anchor) {
+    mountedStatus=''
+    if(~ $7 tls) {
+      $nix9NamespaceTools/bin/alarm $5 $nix9NamespaceClient -a -k $4 $3 $nix9NamespaceTools/bin/mount -nc /fd/0 $anchor || mountedStatus=$status
+    }
+    if not {
+      $nix9NamespaceTools/bin/alarm $5 $nix9NamespaceDial $3 $nix9NamespaceTools/bin/mount -c -k $4 /fd/0 $anchor $8 || mountedStatus=$status
+    }
+    if(~ $mountedStatus '') {
       mounted=`{identity $anchor}
       ~ $#mounted 1 || fail 'cannot identify mounted share:' $name
       staged=($staged $name $target $anchor $mounted)

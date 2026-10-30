@@ -98,6 +98,9 @@ in
   webfsSource = selectSource "9front-webfs-source" {
     paths = "sys/src/cmd/webfs";
   };
+  storageSource = selectSource "9front-storage-source" {
+    paths = "sys/src/cmd/cwfs sys/src/libdisk";
+  };
   machSource = selectSource "9front-libmach-source" {
     paths = ''
       sys/src/libmach \

@@ -77,6 +77,7 @@ Selection and rollback apply settings at different times:
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
+| CWFS data service and daily dump policy | Next CPU-server boot. Project contents and historical dumps persist across system selections. |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
 | Scheduled jobs | Enabling and key loading require CPU-server reboot. A running scheduler reloads the selected schedules within a minute; running jobs continue. |
 | Persistent directories and their metadata | Selection, rollback and boot. Login and refresh leave them alone. |

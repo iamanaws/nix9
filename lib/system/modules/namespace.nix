@@ -69,6 +69,19 @@ in
               default = "";
               description = "Public attributes selecting the client's factotum key.";
             };
+            transport = lib.mkOption {
+              type = lib.types.enum [
+                "tls"
+                "tcp"
+              ];
+              default = "tls";
+              description = "TLS-authenticated exports, or native TCP with 9P attach authentication.";
+            };
+            attach = lib.mkOption {
+              type = lib.types.strMatching "([a-zA-Z0-9][a-zA-Z0-9_.-]*)?";
+              default = "";
+              description = "Native filesystem attach name, such as main or dump.";
+            };
             required = lib.mkOption {
               type = lib.types.bool;
               default = true;

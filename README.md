@@ -56,6 +56,7 @@ and a C development example.
 | [Service discovery](docs/discovery.md) | NDB records, service locations and native cs/DNS. |
 | [Session namespaces](docs/namespaces.md) | Ordered bindings and union directories across local files and shared providers. |
 | [Network server](docs/network-server.md) | Use a lab network from terminal and CPU sessions through authenticated 9P. |
+| [Storage and recovery](docs/storage.md) | Dedicated CWFS storage, shared workspaces and recovery from dump history. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
 | [Limitations](docs/feasibility.md) | Port constraints and missing features. |

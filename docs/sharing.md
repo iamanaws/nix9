@@ -66,6 +66,12 @@ The connection is private to the session and is not posted in `/srv`. Mounts
 apply at login or `. /usr/local/pkg/nix9/system` refresh. Boot and background
 service namespaces do not acquire them.
 
+For a native filesystem server, set `transport = "tcp"` and an `attach` name
+such as `"main"` or `"dump"`. The client authenticates the 9P attach through
+factotum; file data travels unencrypted over TCP. The default `"tls"` transport
+remains for directory exports and requires an empty attach name. See
+[storage and recovery](storage.md).
+
 [Directory bindings](namespaces.md) can combine several shares into one ordered
 view, including shares from different providers.
 
