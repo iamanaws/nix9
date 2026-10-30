@@ -9,6 +9,7 @@
   exportfsPackage,
   namespaceTools,
   cwfsPackage,
+  archivePackage,
   dialPackage,
 }:
 {
@@ -75,7 +76,8 @@ let
       ++ (if ndb == null then [ ] else [ ndb.package ])
       ++ (if access == null then [ ] else access.packages)
       ++ sharing.packages
-      ++ lib.optional (storage != null) storage.selected;
+      ++ lib.optional (storage != null) storage.selected
+      ++ lib.optional (backups != { }) archivePackage;
   };
   network = import ./network.nix {
     inherit lib hostName;
@@ -93,6 +95,7 @@ let
         exports,
         cron,
         cwfs,
+        backups,
       }:
       {
         cron = import ./cron.nix {
@@ -150,6 +153,12 @@ let
     inherit lib;
     configuration = services.cwfs;
     package = cwfsPackage;
+  };
+  backups = import ./backups.nix {
+    inherit lib;
+    configuration = services.backups;
+    mounts = namespace.mounts;
+    package = archivePackage;
   };
   listenScripts = if listen == null then { } else listen;
   sharing = import ./sharing.nix {
@@ -226,6 +235,7 @@ else
       directoryConfiguration
       cron
       storage
+      backups
     ]
     (mkDerivation {
       name = "nix9-system-${hostName}";
@@ -233,6 +243,15 @@ else
         mkdir -p $out/files $out/webfs/hosts $out/services
         echo nix9-system-2 > $out/system
         ${if machineId == null then "" else "echo ${quote machineId} > $out/machine-id"}
+        ${lib.concatStringsSep "\n" (
+          lib.mapAttrsToList (name: backup: ''
+            ${write "services/backups/${name}/config" backup.settings}
+            ${write "services/backups/${name}/proto" backup.prototype}
+            echo 'backupSystem='$out > $out/services/backups/${name}/run
+            echo ${quote "backupConfiguration=services/backups/${name}"} >> $out/services/backups/${name}/run
+            echo -n ${quote (builtins.readFile ./backup.rc)} >> $out/services/backups/${name}/run
+          '') backups
+        )}
         echo ${quote hostName} > $out/hostName
         echo ${environment} > $out/environment
         ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}

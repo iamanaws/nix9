@@ -122,6 +122,7 @@ System rollback does not restore project contents. CWFS retains dump history on
 its archival device; this module does not prune it. Watch available space through
 native CWFS tools. Snapshots share the storage device and do not replace a
 separate backup.
+See [backups and replacement storage](backups.md) for independent archive copies.
 
 Provider reboots close active mounts. New CPU sessions reconnect to persistent
 data and history. See [session mount behavior](sharing.md#changes-and-failures).

@@ -25,6 +25,7 @@ with the Nix sandbox enabled.
 | --- | --- |
 | `c-abi-tests`, `ape-tests` | Native, cross and mixed objects; arguments, callbacks, structures, floating point, varargs and POSIX behavior. |
 | `PACKAGE-tests` | Package behavior. Libraries use known vectors and independent Python results for hashes, compression and arithmetic. |
+| `disk-archive-tests` | Native archive round trips, ownership and modes, filenames with spaces, empty files, SHA-256 vectors, corrupt checksums, truncated payloads, path traversal and missing source files. |
 | `package-tests`, `guest-development-tests` | Archive installation and native/APE C builds, including Lua, with image headers and libraries hidden. |
 | `nix-core-tests` | Nix libraries, commands, NARs, process handling and store primitives. |
 | `nix-native-tests` | Toolchain bootstrap, dependency builds, fixed hashes, multiple outputs, partial rebuilds, rebuild comparisons, cancellation, profiles, roots and GC. |
@@ -51,6 +52,7 @@ with the Nix sandbox enabled.
 | `network-tests`, `native-network-tests` | Host/native validation, DHCP, DNS override, static IPv4, multiple interfaces, primary-interface discovery, loopbacks, native NDB, gateway routing, interface removal, reboot and rollback. Configured boots run without harness networking. Host validation also runs in `nix flake check`. |
 | `native-network-server-tests` | Five machines with an isolated Ethernet link, authenticated network-tree exports, terminal and delegated CPU access to a lab service, failed direct access, export permissions, read-only control rejection, provider address changes, reboot, rollback and recovery. |
 | `storage-tests`, `native-storage-tests` | CWFS configuration validation and a five-machine workspace: independent storage boot, native 9P authentication, TLS export regression, builds on two CPU servers, dump history, file restoration, reboot persistence and policy rollback. Host validation runs in `nix flake check`. |
+| `backup-tests`, `native-backup-tests` | Backup configuration validation and a six-machine installation: scheduled remote archives, native metadata, completed generations, overlap exclusion, failed runs, provider loss, checksum rejection and restoration onto empty replacement storage with the original server offline. Host validation runs in `nix flake check`. |
 | `native-services-tests` | Webfs startup, idempotence, HTTP/HTTPS, pin changes, session isolation, disable and boot without manual setup. |
 | `native-timesync-tests` | RTC UTC/local time, NTP correction through a local fixture, one client, append-only correction logs, rollback and native startup restoration. |
 | `native-logging-tests` | File validation, nontruncating preparation, modes, event order, failed selection, reboot, rollback and retained history. |

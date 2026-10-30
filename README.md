@@ -57,6 +57,7 @@ and a C development example.
 | [Session namespaces](docs/namespaces.md) | Ordered bindings and union directories across local files and shared providers. |
 | [Network server](docs/network-server.md) | Use a lab network from terminal and CPU sessions through authenticated 9P. |
 | [Storage and recovery](docs/storage.md) | Dedicated CWFS storage, shared workspaces and recovery from dump history. |
+| [Backups](docs/backups.md) | Scheduled archives on a separate server and recovery onto replacement storage. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
 | [Limitations](docs/feasibility.md) | Port constraints and missing features. |

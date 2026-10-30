@@ -1,0 +1,82 @@
+# This worker uses the caller's managed session mounts and its own exit trap.
+rfork ne
+path=(/$cputype/bin /rc/bin)
+fn fail {
+  echo 'nix9-backup:' $* >[1=2]
+  exit 'backup failed'
+}
+~ $#* 0 || fail 'run takes no arguments'
+~ $nix9NamespaceSystem $backupSystem || fail 'activate this system before running its backup'
+. $backupSystem/$backupConfiguration/config
+
+fn identity { ls -qld $1 >[2]/dev/null | awk '{print $1 ":" $5 ":" $6}' }
+fn requireMount {
+  expected=$1
+  target=$2
+  shift 2
+  found=0
+  while(! ~ $#* 0) {
+    if(~ $1 $expected && ~ $2 $target) {
+      ~ `{identity $2} $4 && ~ `{identity $3} $4 || fail 'managed mount was changed:' $target
+      found=1
+    }
+    shift 4
+  }
+  ~ $found 1 || fail 'managed mount is unavailable:' $expected
+}
+requireMount $backupSourceName $backupSource $nix9NamespaceMounts
+requireMount $backupDestinationName $backupDestination $nix9NamespaceMounts
+
+# CWFS appends the same-day counter directly: MMDD10 follows MMDD9.
+snapshot=`{ls -d $backupSource/[0-9][0-9][0-9][0-9]/* >[2]/dev/null | awk '
+  {
+    n=split($0, p, "/");
+    if(p[n-1] !~ /^[0-9][0-9][0-9][0-9]$/ || p[n] !~ /^[0-9][0-9][0-9][0-9]([1-9][0-9]*)?$/) next;
+    y=p[n-1]+0; day=substr(p[n],1,4)+0; suffix=substr(p[n],5)+0;
+    if(best == "" || y>by || (y==by && (day>bd || (day==bd && suffix>bs)))) {
+      best=$0; by=y; bd=day; bs=suffix;
+    }
+  }
+  END {if(best != "") print best}
+'}
+~ $#snapshot 1 || fail 'no completed CWFS snapshot is available'
+for(item in $backupPaths) test -d $snapshot/$item || fail 'snapshot directory is unavailable:' $item
+
+repository=$backupDestination/$backupName
+if(! test -e $repository) mkdir $repository || fail 'cannot create backup directory'
+user=`{cat /dev/user}
+ls -ld $repository | awk -v 'owner='^$user '$1 ~ /^d/ && $4 == owner {ok=1} END {exit !ok}' || fail 'backup directory must belong to the native user'
+chmod 700 $repository
+ls -ld $repository | awk '$1 == "d-rwx------" {ok=1} END {exit !ok}' || fail 'cannot protect backup directory'
+
+# Directory creation excludes other runs on this repository, including other CPUs.
+mkdir $repository/lock || fail 'another backup holds the lock; inspect it before removing a stale lock'
+fn sigexit {
+  result=$status
+  if(test -f $repository/lock/owner) rm $repository/lock/owner
+  if(! rm $repository/lock) {
+    echo 'nix9-backup: cannot release backup lock:' $repository/lock >[1=2]
+    if(~ $result '') result='backup lock cleanup failed'
+  }
+  status=$result
+}
+echo machine $sysname user $user pid $pid started `{date} > $repository/lock/owner || fail 'cannot record lock owner'
+generation=`{date -n | awk -v 'pid='^$pid '{printf "%012d-%s", $1, pid}'}
+partial=$repository/.partial-^$generation
+completed=$repository/$generation
+test ! -e $completed || fail 'completed generation already exists'
+mkdir $partial || fail 'cannot create partial generation'
+chmod 700 $partial
+echo snapshot $snapshot > $partial/source || fail 'cannot record source snapshot'
+echo directories $backupPaths >> $partial/source || fail 'cannot record source directories'
+echo started `{date} >> $partial/source || fail 'cannot record backup start'
+
+$backupTools/bin/disk/mkfs -a -s $snapshot $backupSystem/$backupConfiguration/proto > $partial/archive || fail 'archive creation failed'
+# Read the complete archive back from the provider before publishing it.
+$backupTools/bin/disk/mkext -h < $partial/archive > /dev/null || fail 'archive validation failed'
+$backupTools/bin/disk/checksum $partial/archive > $partial/sha256 || fail 'archive checksum failed'
+chmod 600 $partial/archive $partial/sha256 $partial/source
+ls -l $partial | awk '$1 != "--rw-------" {bad=1} END {exit bad}' || fail 'cannot protect archive files'
+mv $partial $completed || fail 'cannot publish completed backup'
+echo 'nix9-backup: completed' $completed 'snapshot' $snapshot
+status=''

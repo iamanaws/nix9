@@ -1,0 +1,167 @@
+--- a/sys/src/cmd/disk/mkfs.c
++++ b/sys/src/cmd/disk/mkfs.c
+@@ -130,7 +130,8 @@
+ 	if(fskind == Archive){
+ 		if(!xflag && !oflag)
+ 			Bprint(&bout, "end of archive\n");
+-		Bterm(&bout);
++		if(Bterm(&bout) < 0)
++			error("archive flush: %r");
+ 	}
+ 	exits(0);
+ }
+@@ -190,8 +191,8 @@
+ 			len = buflen;
+ 		n = read(f, buf, len);
+ 		if(n <= 0) {
+-			if(n < 0 && nowarnyet) {
+-				warn("can't read %q: %r", oldfile);
++			if(n <= 0 && nowarnyet) {
++				error("short or failed read of %q: %r", oldfile);
+ 				nowarnyet = 0;
+ 			}
+ 			/*
+@@ -285,8 +286,9 @@
+ void
+ arch(Dir *d)
+ {
+-	Bprint(&bout, "%q %luo %q %q %lud %lld\n",
+-		newfile, d->mode, d->uid, d->gid, d->mtime, d->length);
++	if(Bprint(&bout, "%q %luo %q %q %lud %lld\n",
++		newfile, d->mode, d->uid, d->gid, d->mtime, d->length) < 0)
++		error("archive header: %r");
+ }
+ 
+ void
+@@ -300,6 +302,8 @@
+ {
+ 	Dir nd;
+ 
++	if(strlen(newroot)+strlen(new) >= sizeof newfile || strlen(old) >= sizeof oldfile)
++		error("archive path too long");
+ 	sprint(newfile, "%s%s", newroot, new);
+ 	sprint(oldfile, "%s", old);
+ 
+@@ -351,7 +355,7 @@
+ 	vseprint(buf+strlen(buf), buf+sizeof(buf), fmt, arg);
+ 	va_end(arg);
+ 	fprint(2, "%s\n", buf);
+-	exits(0);
++	exits("archive error");
+ }
+ 
+ void
+@@ -365,6 +369,7 @@
+ 	vseprint(buf+strlen(buf), buf+sizeof(buf), fmt, arg);
+ 	va_end(arg);
+ 	fprint(2, "%s\n", buf);
++	exits("archive warning");
+ }
+ 
+ void
+--- a/sys/src/libdisk/proto.c
++++ b/sys/src/libdisk/proto.c
+@@ -113,6 +113,7 @@
+ 		domkfs(m, &file, -1);
+ 	else
+ 		rv = -1;
++	Bterm(m->b);
+ 	free(m->oldfile.s);
+ 	free(m->fullname.s);
+ 	m->indent = -1;
+@@ -206,6 +207,8 @@
+ 		}
+ 		free(d);
+ 	}
++	if(n < 0)
++		warn(mkaux, "directory read failed: %r");
+ 	close(fd);
+ }
+ 
+--- a/sys/src/cmd/disk/mkext.c
++++ b/sys/src/cmd/disk/mkext.c
+@@ -65,11 +65,14 @@
+ 	
+ 	Binits(&bin, 0, OREAD, binbuf, sizeof binbuf);
+ 	while(p = Brdline(&bin, '\n')){
++		if(Blinelen(&bin) >= sizeof linebuf)
++			error("archive header too long");
+ 		p[Blinelen(&bin)-1] = '\0';
+ 		strcpy(linebuf, p);
+ 		p = linebuf;
+ 		if(strcmp(p, "end of archive") == 0){
+-			Bterm(&bout);
++			if(hflag && Bterm(&bout) < 0)
++				error("header output failed: %r");
+ 			fprint(2, "done\n");
+ 			exits(0);
+ 		}
+@@ -78,6 +81,15 @@
+ 			continue;
+ 		}
+ 		p = unquotestrdup(fields[0]);
++		if(p[0] != '/' || (namep-name)+strlen(p) >= sizeof name)
++			error("invalid or oversized archive path");
++		{
++			char *clean;
++			clean = strdup(p);
++			if(clean == nil || strcmp(cleanname(clean), p) != 0)
++				error("noncanonical archive path");
++			free(clean);
++		}
+ 		strcpy(namep, p);
+ 		free(p);
+ 		mode = strtoul(fields[1], 0, 8);
+@@ -208,5 +208,5 @@
+ 	char buf[LEN];
+ 	char *p;
+-	ulong n;
++	long n;
+ 	uvlong tot;
+ 
+@@ -244,7 +256,8 @@
+ 	if(Tflag)
+ 		d.mtime = mtime;
+ 	d.mode = mode;
+-	Bflush(b);
++	if(Bflush(b) < 0)
++		error("file flush failed: %r");
+ 	if(dirfwstat(Bfildes(b), &d) < 0)
+ 		warn("can't set modes for %q: %r", name);
+ 	if(uflag||Tflag){
+@@ -263,7 +276,8 @@
+ 			free(nd);
+ 		}
+ 	}
+-	Bterm(b);
++	if(Bterm(b) < 0)
++		error("file close failed: %r");
+ }
+ 
+ void
+@@ -278,7 +292,7 @@
+ 		if(tot + n > bytes)
+ 			n = bytes - tot;
+ 		n = Bread(&bin, buf, n);
+-		if(n < 0)
++		if(n <= 0)
+ 			error("premature eof");
+ 	}
+ }
+@@ -294,7 +308,7 @@
+ 	vseprint(buf+strlen(buf), buf+sizeof(buf), fmt, arg);
+ 	va_end(arg);
+ 	fprint(2, "%s\n", buf);
+-	exits(0);
++	exits("archive error");
+ }
+ 
+ void
+@@ -308,6 +322,7 @@
+ 	vseprint(buf+strlen(buf), buf+sizeof(buf), fmt, arg);
+ 	va_end(arg);
+ 	fprint(2, "%s\n", buf);
++	exits("archive warning");
+ }
+ 
+ void

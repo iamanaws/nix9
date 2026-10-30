@@ -18,6 +18,7 @@ let
     exportfsPackage = packages.exportfs;
     namespaceTools = packages.namespaceTools;
     cwfsPackage = packages.cwfs;
+    archivePackage = packages.diskArchive;
     dialPackage = packages.dial;
   };
 in

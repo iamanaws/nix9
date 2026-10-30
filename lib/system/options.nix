@@ -71,6 +71,7 @@ in
           ./modules/exports.nix
           ./modules/cron.nix
           ./modules/cwfs.nix
+          ./modules/backups.nix
         ];
       };
       default = { };

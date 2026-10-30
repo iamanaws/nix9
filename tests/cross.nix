@@ -9,6 +9,7 @@
   crossShellPrograms,
   clone,
   development,
+  diskArchive,
   guestDevelopment,
   guestEnvironment,
   hello,
@@ -30,6 +31,12 @@
   yacc,
 }:
 {
+  disk-archive-tests = vmTest "disk-archive-tests" {
+    script = ./disk_archive.py;
+    args = ''
+      ${diskArchive} "$out"
+    '';
+  };
   cross-shell-tests = vmTest "cross-shell-tests" {
     script = ./cross_shell.py;
     args = ''

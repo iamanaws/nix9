@@ -22,6 +22,9 @@ from guest import boot
 ROOTS = "/usr/local/nix/state/gcroots"
 PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
 NAMES = ("auth", "files", "build", "batch", "terminal")
+BACKUPS = os.environ.get("NIX9_BACKUP_TEST") == "1"
+if BACKUPS:
+    NAMES += ("backup",)
 
 
 def quote(value):
@@ -65,7 +68,7 @@ with ExitStack() as stack:
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
-    shutil.copyfile(Path(__file__).with_name("storage.nix"), work / "storage.nix")
+    shutil.copyfile(Path(__file__).with_name("backups.nix" if BACKUPS else "storage.nix"), work / "storage.nix")
     (work / "cwfs.setup").write_text("service files\nconfig /adm/storage/config\n"
                                      "filsys main cw0fw1\nfilsys dump o\nream main\nend\n")
     (work / "project.nix").write_text("{ pkgs ? import <nix9> }: pkgs.mkDerivation {\n"
@@ -74,6 +77,8 @@ with ExitStack() as stack:
     (work / "hello.c").write_text('#include <u.h>\n#include <libc.h>\n'
                                   'void main(void) { print("storage-original\\n"); exits(nil); }\n')
     keys = {name: secrets.token_bytes(16) for name in ("files", "build", "batch", "glenda")}
+    if BACKUPS:
+        keys["backup"] = secrets.token_bytes(16)
     for name, key in keys.items():
         roles = ["client"] if name == "glenda" else ["server", "speakfor"] if name in ("build", "batch") else ["server"]
         for suffix, data in (("keys", "".join(f"key proto=dp9ik dom=nix9.storage user={name} role={role} "
@@ -102,7 +107,10 @@ with ExitStack() as stack:
         guest.command(f"hget -o {destination} {base}/{name}")
 
     peers, reservations = [], {}
-    for address, port in (("10.0.2.100", 567), ("10.0.2.101", 564), ("10.0.2.102", 17019), ("10.0.2.102", 17020), ("10.0.2.103", 17019)):
+    endpoints = [("10.0.2.100", 567), ("10.0.2.101", 564), ("10.0.2.102", 17019), ("10.0.2.102", 17020), ("10.0.2.103", 17019)]
+    if BACKUPS:
+        endpoints.append(("10.0.2.105", 17021))
+    for address, port in endpoints:
         reservation = stack.enter_context(socket.socket())
         reservation.bind(("127.0.0.1", 0))
         host = reservation.getsockname()[1]
@@ -122,7 +130,8 @@ with ExitStack() as stack:
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb -A namespaceTools "
-                      "--out-link " + ROOTS + "/storage-tools")
+                      + ("-A diskArchive " if BACKUPS else "")
+                      + "--out-link " + ROOTS + "/storage-tools")
     disks, systems = {}, {}
     for name in NAMES:
         disks[name] = work / (name + ".qcow2")
@@ -140,6 +149,10 @@ with ExitStack() as stack:
                 for identity in keys:
                     download(guest, identity + ".aes", private=True)
                     guest.command(f"mkdir /mnt/keys/{identity}; cp /tmp/{identity}.aes /mnt/keys/{identity}/aeskey")
+                if BACKUPS:
+                    download(guest, "glenda.keys", "/adm/scheduler.keys", private=True)
+            if name == "backup":
+                download(guest, "backup.keys", "/adm/backup.keys", private=True)
             if name in ("files", "build", "batch"):
                 download(guest, name + ".keys", "/adm/" + ("files" if name == "files" else "cpu") + ".keys", private=True)
             if name != "terminal":
@@ -177,9 +190,13 @@ with ExitStack() as stack:
             if name != "terminal":
                 guest.command("9fs 9fat; echo 'service=cpu' >> /n/9fat/plan9.ini; echo 'init=/amd64/init -c' >> /n/9fat/plan9.ini")
 
+    if BACKUPS:
+        # The replacement has its own empty, cleanly halted CWFS volume.
+        shutil.copyfile(disks["files"], work / "replacement.qcow2")
+
     @contextmanager
     def start(name):
-        address = {"auth": "10.0.2.100", "files": "10.0.2.101", "build": "10.0.2.102", "batch": "10.0.2.103"}.get(name)
+        address = {"auth": "10.0.2.100", "files": "10.0.2.101", "build": "10.0.2.102", "batch": "10.0.2.103", "backup": "10.0.2.105"}.get(name)
         forwards = [(host, port) for peer, port, host in peers if peer == address]
         for host, _ in forwards:
             reservations[host].close()
@@ -199,11 +216,18 @@ with ExitStack() as stack:
     builders = {name: stack.enter_context(start(name)) for name in ("build", "batch")}
     for guest in builders.values():
         listening(guest, 17019)
+    backup = stack.enter_context(start("backup")) if BACKUPS else None
+    if BACKUPS:
+        listening(backup, 17021)
     terminal = stack.enter_context(start("terminal"))
     terminal.command(". /usr/local/pkg/nix9/system")
     terminal.command("cat /n/tools/stock-marker", "tls-tools-ready")
     terminal.command("cp /tmp/project.nix /usr/glenda/work/default.nix")
     terminal.command("cp /tmp/hello.c /usr/glenda/work/hello.c")
+    if BACKUPS:
+        # Fail before writing anything when no completed source snapshot exists.
+        rejected(terminal, "rcpu -h build -c 'rc $nix9System/services/backups/projects/run'", "no completed CWFS snapshot")
+        backup.command("test ! -e /usr/glenda/archives/projects")
 
     def remote(name, command, expected=None):
         return terminal.command("rcpu -h " + name + " -c " + quote(command), expected)
@@ -250,31 +274,45 @@ with ExitStack() as stack:
     remote("build", "cmp " + snapshot + "/projects/hello.c /usr/glenda/work/hello.c")
     print("PASS: read-only historical dump, deleted-file recovery and restored builds from both CPU servers", flush=True)
 
-    files.command("nix9-rebuild switch /tmp/noDumps.nix")
-    disabled = selection(files, "files")
-    remote("build", "cat /usr/glenda/work/hello.c")
-    stop(files)
-    files = stack.enter_context(start("files"))
-    listening(files, 564)
-    for name in builders:
-        if compile_on(name) != built[name]:
-            raise RuntimeError("reboot changed the workspace output")
-    remote("build", "cmp " + snapshot + "/projects/hello.c /usr/glenda/work/hello.c")
-    files.command("nix9-rebuild rollback")
-    if selection(files, "files") != systems["files"]:
-        raise RuntimeError("rollback did not restore the filesystem generation")
-    stop(files)
-    files = stack.enter_context(start("files"))
-    listening(files, 564)
-    remote("batch", "cat /usr/glenda/work/hello.c")
-    print("PASS: native fshalt, persistent data and snapshots, new-session reconnection, snapshot policy selection and rollback", flush=True)
+    disabled = None
+    if not BACKUPS:
+        files.command("nix9-rebuild switch /tmp/noDumps.nix")
+        disabled = selection(files, "files")
+        remote("build", "cat /usr/glenda/work/hello.c")
+        stop(files)
+        files = stack.enter_context(start("files"))
+        listening(files, 564)
+        for name in builders:
+            if compile_on(name) != built[name]:
+                raise RuntimeError("reboot changed the workspace output")
+        remote("build", "cmp " + snapshot + "/projects/hello.c /usr/glenda/work/hello.c")
+        files.command("nix9-rebuild rollback")
+        if selection(files, "files") != systems["files"]:
+            raise RuntimeError("rollback did not restore the filesystem generation")
+        stop(files)
+        files = stack.enter_context(start("files"))
+        listening(files, 564)
+        remote("batch", "cat /usr/glenda/work/hello.c")
+        print("PASS: native fshalt, persistent data and snapshots, new-session reconnection, snapshot policy selection and rollback", flush=True)
+
+    backup_results = None
+    if BACKUPS:
+        from native_backups import check_backups
+        backup_results = check_backups(
+            work=work, stack=stack, terminal=terminal, auth=auth, files=files,
+            backup=backup, builders=builders, systems=systems, snapshot=snapshot,
+            start=start, stop=stop, built=built, disks=disks,
+            listening=listening, rejected=rejected,
+        )
 
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({
-        "status": "passed", "machines": 5, "fileServerBoots": 3, "systems": systems,
+        "status": "passed", "machines": len(NAMES), "fileServerBoots": 2 if BACKUPS else 3, "systems": systems,
+        "backups": backup_results,
         "noDumpsSystem": disabled, "builds": built, "snapshot": snapshot,
         "checks": ["unformatted-volume-rejected-without-writes", "private-server-key", "independent-storage-boot",
                    "native-9p-authentication", "tls-export-regression", "delegated-two-cpu-builds", "shared-workspace", "read-only-history",
-                   "file-restoration", "native-shutdown", "persistent-data", "provider-reboot", "policy-selection", "rollback"],
+                   "file-restoration", "native-shutdown"] + ([] if BACKUPS else [
+                   "persistent-data", "provider-reboot", "policy-selection", "rollback"]),
     }, indent=2) + "\n")

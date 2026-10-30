@@ -99,7 +99,7 @@ in
     paths = "sys/src/cmd/webfs";
   };
   storageSource = selectSource "9front-storage-source" {
-    paths = "sys/src/cmd/cwfs sys/src/libdisk";
+    paths = "sys/src/cmd/cwfs sys/src/libdisk sys/src/cmd/disk/mkfs.c sys/src/cmd/disk/mkext.c";
   };
   machSource = selectSource "9front-libmach-source" {
     paths = ''

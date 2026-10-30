@@ -68,7 +68,8 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
         network += f",guestfwd=tcp:{address}:{port}-tcp:127.0.0.1:{host_port}"
     for address, port, host_port in guest_forwards:
         # Start a fresh relay for each connection, including after peer reboots.
-        network += f",guestfwd=tcp:{address}:{port}-cmd:nc 127.0.0.1 {host_port}"
+        # Forward EOF so the peer can release its connection when the guest closes it.
+        network += f",guestfwd=tcp:{address}:{port}-cmd:nc -N 127.0.0.1 {host_port}"
     child = pexpect.spawn(
         qemu,
         [

@@ -178,6 +178,9 @@ for configuration, access policy and failure behavior.
 daily dump policy. See [storage and recovery](storage.md) for the service and
 an installation with two CPU servers sharing one workspace.
 
+`services.backups` archives completed CWFS snapshots onto separate storage.
+See [backups](backups.md) for scheduling and recovery onto a replacement server.
+
 ## Scheduled jobs
 
 `services.cron` schedules local commands and authenticated remote CPU jobs.

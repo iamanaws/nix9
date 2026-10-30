@@ -1,0 +1,10 @@
+rfork ne
+fn fail {
+  echo 'disk/restore:' $* >[1=2]
+  exit 'restore failed'
+}
+~ $#* 2 || fail 'usage: disk/restore generation-directory destination-root'
+test -d $2 || fail 'destination root must already exist'
+$archiveTools/bin/disk/checksum -c $1/sha256 $1/archive || fail 'checksum validation failed'
+$archiveTools/bin/disk/mkext -h < $1/archive > /dev/null || fail 'archive validation failed'
+exec $archiveTools/bin/disk/mkext -u -d $2 < $1/archive
