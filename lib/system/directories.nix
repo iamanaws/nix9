@@ -3,6 +3,7 @@
   mkDerivation,
   directories,
   mounts,
+  namespaceTools,
 }:
 let
   paths = builtins.attrNames directories;
@@ -69,7 +70,9 @@ else
     inherit paths;
     script = ''
       #!/bin/rc -e
-      rfork e
+      rfork ne
+      # Metadata applies to the underlying directory, before session bindings.
+      ${namespaceTools}/bin/nix9-bindings detach $#nix9NamespaceBinds $nix9NamespaceBinds || exit 'cannot inspect underlying directories'
       fn checkSessionMounts {
         while(! ~ $#* 0) {
           if(~ $#* 1 2 3) exit 'invalid inherited session mount state'

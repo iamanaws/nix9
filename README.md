@@ -54,6 +54,7 @@ and a C development example.
 | [Deployment](docs/deployment.md) | Prepare and select machine generations, inspect status and retry transfers. |
 | [Services](docs/services.md) | Ethernet, clocks, logging, webfs, remote CPU access and scheduled jobs. |
 | [Service discovery](docs/discovery.md) | NDB records, service locations and native cs/DNS. |
+| [Session namespaces](docs/namespaces.md) | Ordered bindings and union directories across local files and shared providers. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
 | [Limitations](docs/feasibility.md) | Port constraints and missing features. |

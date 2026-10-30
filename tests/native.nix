@@ -19,6 +19,16 @@
   vmTest,
 }:
 {
+  native-binding-tests = vmTest "native-binding-tests" {
+    script = ./native_bindings.py;
+    files = [
+      ./bindings.nix
+      ./binding-checks.nix
+      ./binding-helper.rc
+      ./binding-failed-refresh.rc
+    ];
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-deployment-tests = vmTest "native-deployment-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_deployment.py;
@@ -72,6 +82,7 @@
       ./installation-checks.nix
       ./sharing-project
       ./sharing-failed-refresh.rc
+      ./binding-failed-refresh.rc
       ./machine-newns.c
     ];
     env.NIX9_SHARING_TEST_STATE = "sharing-state";

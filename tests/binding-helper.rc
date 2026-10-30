@@ -1,0 +1,68 @@
+#!/bin/rc -e
+helper=$1
+state=()
+before=`{ns -r | grep 'nix9-bind-[0-9]' | wc -l}
+root=/tmp/nix9-bind-test
+mkdir -p $root/one $root/two $root/view $root/other
+echo one > $root/one/collision
+echo one-only > $root/one/one
+echo two > $root/two/collision
+echo two-only > $root/two/two
+echo original > $root/view/original
+echo base > $root/view/collision
+fn apply {
+  values=`{$helper apply $#state $state 0 0 0 $* && echo complete}
+  if(! ~ $values(1) nix9-bindings-ready || ! ~ $values($#values) complete)
+    exit 'binding helper failed'
+  state=()
+  for(value in $values)
+    if(! ~ $value nix9-bindings-ready complete) state=($state $value)
+  status=''
+}
+apply $root/one $root/view replace 1 1 $root/two $root/view append 0 1
+~ `{cat $root/view/collision} one
+test -f $root/view/one && test -f $root/view/two && test ! -e $root/view/original
+echo created > $root/view/created
+test -f $root/one/created && test ! -e $root/two/created
+$helper check $#state $state 0 0 0
+echo changed > $root/one/one
+$helper check $#state $state 0 0 0
+if($helper apply $#state $state 0 0 0 $root/missing $root/view replace 0 1)
+  exit 'missing required source accepted'
+~ `{cat $root/view/collision} one
+@{ rfork n; bind -a $root/two $root/view
+  if($helper check $#state $state 0 0 0) exit 'hidden manual union accepted'
+  status=''
+}
+@{ rfork n; bind $root/two $state(4)
+  if($helper check $#state $state 0 0 0) exit 'changed source anchor accepted'
+  status=''
+}
+@{ rfork n; $helper detach $#state $state; test -f $root/view/original }
+test ! -e $root/view/original
+apply $root/one $root/view append 0 1 $root/two $root/view prepend 1 1
+~ `{cat $root/view/collision} two
+test -f $root/view/original && test -f $root/view/one
+echo second > $root/view/second
+test -f $root/two/second && test ! -e $root/one/second
+apply $root/one $root/view replace 0 1 $root/view $root/other replace 0 1
+~ `{cat $root/other/collision} one
+echo updated > $root/other/collision
+~ `{cat $root/one/collision} updated
+if(rc -c 'echo forbidden > '^$root^'/view/forbidden')
+  exit 'creation accepted without create flag'
+apply $root/missing $root/view replace 0 0
+~ $#state 0
+~ `{cat $root/view/collision} base
+test ! -e $root/other/one
+# An unavailable declared share must not expose the directory underneath it.
+values=`{$helper apply 0 1 $root/one 0 0 $root/one $root/view replace 0 0}
+~ $#values 1
+~ `{cat $root/view/collision} base
+@{ rfork n; bind -a $root/one $root/view
+  if($helper check 0 0 0 0 $root/two $root/view replace 0 1)
+    exit 'unmanaged target accepted'
+  status=''
+}
+~ $before `{ns -r | grep 'nix9-bind-[0-9]' | wc -l}
+echo BINDING-HELPER-PASSED

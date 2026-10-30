@@ -21,6 +21,7 @@
   services ? { },
   namespace ? {
     mounts = { };
+    binds = [ ];
   },
 }:
 let
@@ -149,6 +150,8 @@ let
       ;
     exports = services.exports;
     mounts = namespace.mounts;
+    binds = namespace.binds;
+    inherit directories;
   };
   logConfiguration = import ./logging.nix {
     configuration = logging;
@@ -156,7 +159,12 @@ let
     inherit (serviceConfiguration) timesyncLogging;
   };
   directoryConfiguration = import ./directories.nix {
-    inherit lib mkDerivation directories;
+    inherit
+      lib
+      mkDerivation
+      directories
+      namespaceTools
+      ;
     mounts = namespace.mounts;
   };
   write = path: contents: ''

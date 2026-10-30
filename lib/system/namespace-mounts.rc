@@ -56,6 +56,14 @@ fn checkViews {
   }
 }
 checkViews $nix9NamespaceMounts
+fn bindingRequest {
+  $nix9NamespaceTools/bin/nix9-bindings $1 $#nix9NamespaceBinds $nix9NamespaceBinds \
+    $#nix9NamespaceMountPoints $nix9NamespaceMountPoints \
+    $#nix9NamespacePlannedDirectories $nix9NamespacePlannedDirectories \
+    $#activeMounts $activeMounts $nix9NamespaceBindArguments || status=$status
+}
+activeMounts=$nix9NamespaceMounts
+bindingRequest check || fail 'binding configuration check failed'
 fn mountShare {
   name=$1
   target=$2
@@ -86,18 +94,26 @@ fn mountShare {
   }
   status=''
 }
-if(~ $nix9NamespaceSystem $nix9NamespaceNext && ~ $#nix9NamespaceMounts $nix9NamespaceCount && ! ~ $nix9SystemCheck 1) {
-  echo nix9-namespace-ready $nix9NamespaceMounts
+if(~ $nix9NamespaceSystem $nix9NamespaceNext && ~ $#nix9NamespaceMounts $nix9NamespaceCount && ~ $#nix9NamespaceBinds $nix9NamespaceBindCount && ! ~ $nix9SystemCheck 1) {
+  echo nix9-namespace-ready $nix9NamespaceMounts nix9:bindings $nix9NamespaceBinds
   exit ''
 }
 configureMounts
 if(~ $nix9SystemCheck 1) {
-  echo nix9-namespace-ready
+  echo nix9-namespace-ready nix9:bindings
   exit ''
 }
 committing=1
 removeViews $nix9NamespaceMounts || fail 'cannot remove old session mounts'
 installViews $staged
+activeMounts=$staged
+bindingValues=`{bindingRequest apply && echo nix9-bindings-complete}
+if(~ $#bindingValues 0) fail 'binding activation failed'
+if(! ~ $bindingValues(1) nix9-bindings-ready || ! ~ $bindingValues($#bindingValues) nix9-bindings-complete)
+  fail 'binding activation failed'
+newBinds=()
+for(value in $bindingValues)
+  if(! ~ $value nix9-bindings-ready nix9-bindings-complete) newBinds=($newBinds $value)
 removeAnchors $nix9NamespaceMounts
-echo nix9-namespace-ready $staged
+echo nix9-namespace-ready $staged nix9:bindings $newBinds
 exit ''

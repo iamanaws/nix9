@@ -2,6 +2,8 @@
   lib,
   exports,
   mounts,
+  binds,
+  directories,
   cpuPackage,
   exportfsPackage,
   namespaceTools,
@@ -21,6 +23,14 @@ let
     "/cfg/nix9"
   ];
   error = message: throw "mkSystem: ${message}";
+  bindings = import ./bindings.nix {
+    inherit
+      lib
+      binds
+      mounts
+      directories
+      ;
+  };
 in
 if !builtins.all validName names then
   error "export and mount names must be lowercase labels of at most 63 characters"
@@ -54,10 +64,9 @@ then
 else
   {
     inherit exports;
-    packages = lib.optionals (mounts != { }) [
-      cpuPackage
-      namespaceTools
-    ];
+    packages =
+      lib.optionals (mounts != { }) [ cpuPackage ]
+      ++ lib.optionals (mounts != { } || binds != [ ]) [ namespaceTools ];
     scripts = lib.mapAttrs' (
       name: item:
       lib.nameValuePair (toString item.port) ''
@@ -71,8 +80,12 @@ else
     ) exports;
     configuration = ''
       nix9NamespaceCount=${toString (4 * builtins.length (builtins.attrNames mounts))}
+      nix9NamespaceBindCount=${toString bindings.count}
+      nix9NamespaceTools=${namespaceTools}
+      nix9NamespaceBindArguments=(${bindings.arguments})
+      nix9NamespaceMountPoints=(${lib.concatMapStringsSep " " quote bindings.mountPoints})
+      nix9NamespacePlannedDirectories=(${lib.concatMapStringsSep " " quote bindings.planned})
       ${lib.optionalString (mounts != { }) ''
-        nix9NamespaceTools=${namespaceTools}
         nix9NamespaceClient=${cpuPackage}/bin/tlsclient
       ''}
       fn configureMounts {
@@ -83,6 +96,8 @@ else
             }
           '') mounts
         )}
+        status='''
       }
+      status='''
     '';
   }

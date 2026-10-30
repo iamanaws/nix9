@@ -3,7 +3,18 @@ nix9NamespaceValues=`{/$cputype/bin/rc $nix9NamespaceNext/services/namespace-mou
 if(! ~ $#nix9NamespaceValues 0 && ~ $nix9NamespaceValues(1) nix9-namespace-ready) {
   if(! ~ $nix9SystemCheck 1) {
     nix9NamespaceSystem=$nix9NamespaceNext
-    nix9NamespaceMounts=$nix9NamespaceValues(2-)
+    nix9NamespaceMounts=()
+    nix9NamespaceBinds=()
+    nix9NamespacePart=mounts
+    for(nix9NamespaceValue in $nix9NamespaceValues(2-)) {
+      # The colon keeps this marker distinct from valid mount names.
+      if(~ $nix9NamespaceValue nix9:bindings) nix9NamespacePart=binds
+      if not if(~ $nix9NamespacePart mounts)
+        nix9NamespaceMounts=($nix9NamespaceMounts $nix9NamespaceValue)
+      if not nix9NamespaceBinds=($nix9NamespaceBinds $nix9NamespaceValue)
+    }
+    nix9NamespacePart=()
+    nix9NamespaceValue=()
   }
   nix9NamespaceValues=()
   nix9NamespaceNext=()

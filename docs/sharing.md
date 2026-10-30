@@ -66,6 +66,9 @@ The connection is private to the session and is not posted in `/srv`. Mounts
 apply at login or `. /usr/local/pkg/nix9/system` refresh. Boot and background
 service namespaces do not acquire them.
 
+[Directory bindings](namespaces.md) can combine several shares into one ordered
+view, including shares from different providers.
+
 ## Changes and failures
 
 Export configuration takes effect at the next provider boot. Switching or

@@ -3,6 +3,51 @@ let
   inherit (import ./types.nix { inherit lib; }) runtimeFile publicKeyPattern;
 in
 {
+  options.binds = lib.mkOption {
+    default = [ ];
+    description = "Directory bindings applied in list order after session shares.";
+    type = lib.types.listOf (
+      lib.types.submodule {
+        options = {
+          source = lib.mkOption {
+            type = lib.types.addCheck lib.types.str (
+              value:
+              builtins.match "/[a-zA-Z0-9_+.-]+(/[a-zA-Z0-9_+.-]+)*" value != null
+              && builtins.all (part: part != "." && part != "..") (lib.splitString "/" value)
+              && (
+                !(lib.hasPrefix "/usr/local/nix/store" value || lib.hasPrefix "/nix/store" value)
+                || builtins.hasContext value
+              )
+            );
+            description = "Existing source directory, optionally a package output with its Nix reference.";
+          };
+          target = lib.mkOption {
+            type = runtimeFile;
+            description = "Destination directory, supplied by the filesystem or directories declaration.";
+          };
+          mode = lib.mkOption {
+            type = lib.types.enum [
+              "replace"
+              "prepend"
+              "append"
+            ];
+            default = "replace";
+            description = "Replace the destination view or add the source before/after its entries.";
+          };
+          create = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Permit new files to be created through this union entry, within native permissions.";
+          };
+          required = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Fail refresh when the source is unavailable; false skips that entry.";
+          };
+        };
+      }
+    );
+  };
   options.mounts = lib.mkOption {
     default = { };
     description = "Authenticated file shares mounted in user sessions.";

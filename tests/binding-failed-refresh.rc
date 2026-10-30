@@ -1,0 +1,7 @@
+#!/bin/rc
+rfork e
+before=`{ns -r | grep 'nix9-(mount|bind)-' | wc -l}
+. /usr/local/pkg/nix9/system
+failed=$status
+if(~ $before `{ns -r | grep 'nix9-(mount|bind)-' | wc -l}) echo STAGED-NAMESPACE-CLEANED
+exit $failed

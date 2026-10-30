@@ -52,8 +52,39 @@ let
             };
           };
           machines.cpu.mounts.projects.timeout = 3;
+          machines.cpu.configuration = {
+            directories."/usr/glenda/tools".mode = "0750";
+            services.exports.tools = {
+              path = "/usr/glenda/tools";
+              port = 17020;
+              allowedUsers = [ "glenda" ];
+              keyFile = "/adm/cpu.keys";
+              keyPattern = "dom=nix9.share user=cpu";
+            };
+          };
+          machines.terminal.configuration = {
+            directories."/usr/glenda/workspace".mode = "0750";
+            namespace.binds = [
+              {
+                source = "/n/projects";
+                target = "/usr/glenda/workspace";
+                create = true;
+              }
+              {
+                source = "/n/tools";
+                target = "/usr/glenda/workspace";
+                mode = "append";
+              }
+            ];
+          };
           machines.terminal.mounts = {
             projects.timeout = 3;
+            nix9-bindings = {
+              provider = "cpu";
+              export = "tools";
+              mountPoint = "/n/tools";
+              timeout = 3;
+            };
             reference = {
               provider = "files";
               timeout = 3;
@@ -91,7 +122,58 @@ in
         machines.terminal.mounts = lib.mkForce { };
       }
     )).systems.files;
-  moved = (make { machines.terminal.mounts.projects.mountPoint = "/n/work"; }).systems.terminal;
+  moved =
+    (make (
+      { lib, ... }: {
+        machines.terminal.mounts.projects.mountPoint = "/n/work";
+        machines.terminal.configuration.namespace.binds = lib.mkForce [
+          {
+            source = "/n/work";
+            target = "/usr/glenda/workspace";
+            create = true;
+          }
+          {
+            source = "/n/tools";
+            target = "/usr/glenda/workspace";
+            mode = "append";
+          }
+        ];
+      }
+    )).systems.terminal;
+  reordered =
+    (make (
+      { lib, ... }: {
+        machines.terminal.configuration.namespace.binds = lib.mkForce [
+          {
+            source = "/n/tools";
+            target = "/usr/glenda/workspace";
+          }
+          {
+            source = "/n/projects";
+            target = "/usr/glenda/workspace";
+            mode = "append";
+            create = true;
+          }
+        ];
+      }
+    )).systems.terminal;
+  bindingUnavailable =
+    (make (
+      { lib, ... }: {
+        machines.terminal.configuration.namespace.binds = lib.mkForce [
+          {
+            source = "/n/projects";
+            target = "/usr/glenda/workspace";
+            create = true;
+          }
+          {
+            source = "/n/tools/missing";
+            target = "/usr/glenda/workspace";
+            mode = "append";
+          }
+        ];
+      }
+    )).systems.terminal;
   optional =
     (make {
       machines.files.configuration.services.exports.unavailable = export // {
@@ -103,6 +185,14 @@ in
         required = false;
         timeout = 1;
       };
+      machines.terminal.configuration.namespace.binds = pkgs.lib.mkAfter [
+        {
+          source = "/n/absent";
+          target = "/usr/glenda/workspace";
+          mode = "append";
+          required = false;
+        }
+      ];
     }).systems.terminal;
   unavailable =
     (make (
@@ -123,7 +213,13 @@ in
         };
       }
     )).systems.terminal;
-  empty = (make ({ lib, ... }: { machines.terminal.mounts = lib.mkForce { }; })).systems.terminal;
+  empty =
+    (make (
+      { lib, ... }: {
+        machines.terminal.mounts = lib.mkForce { };
+        machines.terminal.configuration.namespace.binds = lib.mkForce [ ];
+      }
+    )).systems.terminal;
 
   invalidExportPath = invalid {
     services.exports.projects = export // {

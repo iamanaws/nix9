@@ -74,7 +74,7 @@ Selection and rollback apply settings at different times:
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
-| Shared-file mounts | New login or session refresh, in that session's namespace. |
+| Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
@@ -140,6 +140,9 @@ to use changed pins; [managed webfs](services.md#webfs) handles this on refresh.
 [Services](services.md) documents networking, timesync, logging, webfs, TCP
 scripts, authenticated access and [shared files](sharing.md). These settings are
 optional.
+
+Use [session bindings](namespaces.md) to compose local directories, package
+outputs and shares into ordered filesystem views.
 
 ## Persistent directories
 

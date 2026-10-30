@@ -123,6 +123,7 @@ with ExitStack() as stack:
     for name in ("installation.nix", "installation-checks.nix"):
         shutil.copyfile(Path(__file__).with_name(name), work / name)
     shutil.copyfile(Path(__file__).with_name("machine-newns.c"), work / "machine-newns.c")
+    shutil.copyfile(Path(__file__).with_name("binding-failed-refresh.rc"), work / "binding-failed-refresh.rc")
     shutil.copyfile(Path(__file__).with_name("sharing-failed-refresh.rc"), work / "sharing-failed-refresh.rc")
     shutil.copytree(Path(__file__).with_name("sharing-project"), work / "project")
 
@@ -164,7 +165,7 @@ with ExitStack() as stack:
     reservations = {}
     for address, port in (("10.0.2.100", 567), ("10.0.2.100", 17020),
                           ("10.0.2.100", 17021), ("10.0.2.100", 17022),
-                          ("10.0.2.101", 17019)):
+                          ("10.0.2.101", 17019), ("10.0.2.101", 17020)):
         reservation = stack.enter_context(socket.socket())
         reservation.bind(("127.0.0.1", 0))
         host_port = reservation.getsockname()[1]
@@ -175,21 +176,33 @@ with ExitStack() as stack:
     systems = {}
     manifest = None
     inventory_checks = None
+    # Share a clean, halted bootstrap image, with independent writable stores
+    # and machine identities in each clone.
+    foundation = work / "bootstrap.qcow2"
+    if foundation.exists():
+        raise RuntimeError(f"refusing to overwrite an existing VM: {foundation}")
+    subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
+                    "-F", "qcow2", "-b", str(Path(image).resolve()), str(foundation)], check=True)
+    with boot(qemu, foundation, snapshot=False) as guest:
+        guest.child.timeout = 900
+        guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
+        guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("nix-build '<nix9>' -A auth -A rcpu -A ndb -A listen -A exportfs "
+                      "-A namespaceTools --out-link /usr/local/nix/state/gcroots/sharing-tools")
     for name in ("files", "cpu", "terminal"):
         disk = work / f"{name}.qcow2"
         if disk.exists():
             raise RuntimeError(f"refusing to overwrite an existing test VM: {disk}")
         subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
-                        "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
+                        "-F", "qcow2", "-b", str(foundation.resolve()), str(disk)], check=True)
         disks[name] = disk
         with boot(qemu, disk, snapshot=False) as guest:
             guest.child.timeout = 900
-            guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
             guest.command(". /usr/local/pkg/nix9/activate")
             guest.command("nix9-rebuild init " + name)
             download(guest, base, "sharing.nix")
             for configuration in ("files", "readOnly", "disabled", "cpu", "terminal", "moved",
-                                  "optional", "unavailable", "empty"):
+                                  "optional", "unavailable", "empty", "reordered", "bindingUnavailable"):
                 guest.command(f"echo '(import ./sharing.nix {{}}).{configuration}' > /tmp/{configuration}.nix")
             download(guest, base, name + ".nvram", "/tmp/boot.nvram", private=True)
             guest.command("dd -if /tmp/boot.nvram -of /dev/sdF0/nvram -bs 126 -count 1")
@@ -210,6 +223,7 @@ with ExitStack() as stack:
                 guest.command("echo 'cat /adm/terminal.keys > /mnt/factotum/ctl' > /rc/bin/termrc.local")
                 download(guest, base, "machine-newns.c")
                 download(guest, base, "sharing-failed-refresh.rc")
+                download(guest, base, "binding-failed-refresh.rc")
                 guest.command("cd /tmp && 6c machine-newns.c && 6l -o newns machine-newns.6")
             if name != "terminal":
                 guest.command(f"mkdir -p /cfg/{name}/service")
@@ -223,7 +237,10 @@ with ExitStack() as stack:
                 guest.command("test ! -e /usr/glenda/projects")
             guest.command(f"nix9-rebuild switch /tmp/{name}.nix")
             systems[name] = selected(guest, name)
+            if name == "cpu":
+                guest.command("echo cpu-priority > /usr/glenda/tools/collision; echo cpu-tool > /usr/glenda/tools/tool")
             if name == "files":
+                guest.command("echo files-priority > /usr/glenda/projects/collision")
                 guest.command("ls -ld /usr/glenda/projects | awk '{print $1}'", "d-rwxr-x---")
                 for file in ("default.nix", "hello.c", "mkfile"):
                     download(guest, base, "project/" + file, "/usr/glenda/projects/" + file)
@@ -288,12 +305,39 @@ with ExitStack() as stack:
     wait_job(cpu, "cat /sys/log/nix9-jobs/glenda/report.log >[2]/dev/null", "^scheduled-on-cpu$")
     wait_job(provider, "cat /sys/log/nix9-jobs/glenda/report.remote.log", r"^end .*status=$")
     print("PASS: native CPU startup schedules an authenticated job reading the shared project", flush=True)
-    listening(cpu, (17019,))
+    listening(cpu, (17019, 17020))
     terminal = stack.enter_context(start("terminal"))
     terminal.child.timeout = 300
     terminal.command(". /usr/local/pkg/nix9/system")
     terminal.command("ndb/query sys files ip", "10.0.2.100")
     terminal.command("cat /n/projects/hello.c", "void")
+    terminal.command("cat /usr/glenda/workspace/collision", "files-priority")
+    terminal.command("cat /usr/glenda/workspace/tool", "cpu-tool")
+    terminal.command("echo combined > /usr/glenda/workspace/combined")
+    provider.command("cat /usr/glenda/projects/combined", "combined")
+    terminal.command("nix9-rebuild switch /tmp/reordered.nix; . /usr/local/pkg/nix9/system")
+    terminal.command("cat /usr/glenda/workspace/collision", "cpu-priority")
+    terminal.command("echo routed > /usr/glenda/workspace/routed")
+    provider.command("cat /usr/glenda/projects/routed", "routed")
+    rejected(terminal, "@{ rfork n; bind -a /tmp /usr/glenda/workspace; . /usr/local/pkg/nix9/system }",
+             "managed binding was changed")
+    terminal.command("nix9-rebuild rollback; . /usr/local/pkg/nix9/system")
+    terminal.command("cat /usr/glenda/workspace/collision", "files-priority")
+    before_mounts = terminal.command("echo $nix9NamespaceMounts")
+    before_binds = terminal.command("echo $nix9NamespaceBinds")
+    terminal.command("nix9-rebuild switch /tmp/bindingUnavailable.nix")
+    failed = rejected(terminal, "rc /tmp/binding-failed-refresh.rc", "required binding source is unavailable")
+    if "STAGED-NAMESPACE-CLEANED\n" not in failed:
+        raise RuntimeError("binding failure leaked staged shares or bindings")
+    terminal.command("cat /usr/glenda/workspace/tool", "cpu-tool")
+    terminal.command("cat /usr/glenda/workspace/collision", "files-priority")
+    if (terminal.command("echo $nix9NamespaceMounts") != before_mounts
+            or terminal.command("echo $nix9NamespaceBinds") != before_binds):
+        raise RuntimeError("binding failure replaced session state")
+    terminal.command("nix9-rebuild switch /tmp/terminal.nix; . /usr/local/pkg/nix9/system")
+    # Keep the original rollback scenarios independent of these extra cases.
+    terminal.command("nix9-rebuild delete 2; nix9-rebuild delete 3")
+    print("PASS: two-provider union, precedence, creation routing, rollback and failed refresh preserving both shares", flush=True)
     terminal.command("echo terminal-edit > /n/projects/terminal-edit")
     provider.command("cat /usr/glenda/projects/terminal-edit", "terminal-edit")
     terminal.command("sed 's/shared project original/edited on terminal, built on cpu/' "
@@ -432,6 +476,8 @@ with ExitStack() as stack:
         "systems": systems, "remoteBuild": built, "rejectedConfigurations": list(INVALID),
         "installation": manifest, "inventoryValidation": inventory_checks,
         "checks": ["native-tls-9p", "separate-auth-and-cpu", "ndb-discovery", "delegated-tickets",
+                   "two-provider-union", "union-precedence", "union-creation-routing", "union-rollback",
+                   "binding-failure-restores-shares", "hidden-manual-union",
                    "terminal-edit-cpu-build", "independent-stores", "read-only-export", "native-permissions",
                    "wrong-credentials", "allowed-users", "runtime-preflight", "private-session-mounts",
                    "reuse", "retarget", "disable", "rollback", "required-and-optional-providers",
