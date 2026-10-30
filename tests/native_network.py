@@ -20,12 +20,15 @@ SYSTEM = "/usr/local/nix/state/gcroots/machines/test/system"
 REMOTE = "10.0.2.200"  # Outside the static guest's /25: requires its default route.
 PAYLOAD = "nix9 declarative networking download"
 INVALID = {
-    "invalidEnable": "enable", "invalidInterface": "interface", "invalidDHCP": "useDHCP",
-    "mixedAddress": "useDHCP", "mixedPrefix": "useDHCP", "missingAddress": "address",
-    "invalidAddress": "address", "loopbackAddress": "address", "multicastAddress": "address",
-    "missingPrefix": "prefixLength", "invalidPrefix": "prefixLength",
+    "invalidEnable": "enable", "invalidInterface": "interfaces", "invalidDHCP": "interfaces.ether0.useDHCP",
+    "invalidPrimary": "primaryInterface", "missingPrimary": "primaryInterface", "empty": "primaryInterface",
+    "mixedAddress": "interfaces.useDHCP", "mixedPrefix": "interfaces.useDHCP", "missingAddress": "interfaces",
+    "invalidAddress": "interfaces.ether0.address", "loopbackAddress": "interfaces.ether0.address",
+    "multicastAddress": "interfaces.ether0.address", "missingPrefix": "interfaces",
+    "invalidPrefix": "interfaces.ether0.prefixLength",
     "invalidGateway": "defaultGateway", "invalidDNS": "nameservers",
     "invalidDNSList": "nameservers", "ambiguousDNS": "nameservers",
+    "duplicateAddress": "interfaces", "unknownOption": "interfaces.ether0.gateway", "misplacedAddress": "address",
 }
 
 
@@ -102,8 +105,8 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command("echo 'dom=nix9.test soa= ns=ns.nix9.test' > /tmp/dns.ndb")
         guest.command("echo 'dom=ns.nix9.test ip=127.0.0.1' >> /tmp/dns.ndb")
         guest.command(f"echo 'dom=fixture.nix9.test ip={REMOTE}' >> /tmp/dns.ndb")
-        for name in ("dhcp", "dns", "static", *INVALID):
-            guest.command(f"echo '(import ./networks.nix).{name}' > /tmp/{name}.nix")
+        for name in ("dhcp", "dns", "static", "dual", "secondPrimary", *INVALID):
+            guest.command(f"echo '(import ./networks.nix {{}}).{name}' > /tmp/{name}.nix")
         guest.command("nix9-rebuild switch /tmp/dhcp.nix", "Network changes take effect after reboot.")
         dhcp = root(guest)
         for name, reason in INVALID.items():
@@ -121,7 +124,7 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         thread.start()
         port = server.server_port
         options = dict(snapshot=False, configure_network=False, prompt=r"(?m)^(?:term)?% ",
-                       guest_forward=(REMOTE, port, port))
+                       guest_forward=(REMOTE, port, port), extra_nics=("user,net=172.23.0.0/24",))
         try:
             with boot(qemu, disk, **options) as guest:
                 network(guest, "10.0.2.15", 24, "10.0.2.3")
@@ -153,6 +156,27 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
                 guest.command(f"cat {SYSTEM}-boot", dns)
                 dns_download(guest, port)
                 print("PASS: rollback restores DHCP and DNS on reboot", flush=True)
+                guest.command("nix9-rebuild switch /tmp/dual.nix")
+            with boot(qemu, disk, **options) as guest:
+                guest.command(". /usr/local/pkg/nix9/system")
+                guest.command("grep 172.23.0.10 /net/ipselftab")
+                guest.command("grep 'device /net/ether1 ' /net/ipifc/*/status")
+                guest.command("ndb/query -f /net/ndb sys nix9-network ip", "10.0.2.15")
+                guest.command("ndb/query -f /net/ndb sys nix9-network dns", "10.0.2.3")
+                download(guest, REMOTE, port)
+                guest.command("nix9-rebuild switch /tmp/secondPrimary.nix")
+            with boot(qemu, disk, **options) as guest:
+                guest.command(". /usr/local/pkg/nix9/system")
+                guest.command("grep 10.0.2.42 /net/ipselftab")
+                guest.command("grep 172.23.0.15 /net/ipselftab")
+                guest.command("ndb/query -f /net/ndb sys nix9-network ip", "172.23.0.15")
+                guest.command("ndb/query -f /net/ndb sys nix9-network dns", "172.23.0.3")
+                download(guest, REMOTE, port)
+                guest.command("nix9-rebuild switch /tmp/dhcp.nix")
+            with boot(qemu, disk, **options) as guest:
+                network(guest, "10.0.2.15", 24, "10.0.2.3")
+                guest.command("cat /net/ipselftab | awk '$1 ~ /^172\\.23\\./ {found=1} END {exit found}'")
+                print("PASS: multiple NICs, secondary DHCP as primary, preserved resolver and interface removal", flush=True)
         finally:
             server.shutdown()
             thread.join()
@@ -160,7 +184,8 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({
         "status": "passed", "dhcpSystem": dhcp, "dnsSystem": dns, "staticSystem": static,
-        "rebootsWithoutHarnessNetworking": 4, "rejectedConfigurations": list(INVALID),
+        "rebootsWithoutHarnessNetworking": 7, "rejectedConfigurations": list(INVALID),
         "checks": ["dhcp", "dns-override", "static-ipv4", "ipv4-and-ipv6-loopback",
-                   "native-ndb-preserved", "off-subnet-download", "boot-only-changes", "rollback"],
+                   "native-ndb-preserved", "off-subnet-download", "boot-only-changes", "rollback",
+                   "two-nics", "second-primary", "secondary-dhcp", "interface-removal"],
     }, indent=2) + "\n")

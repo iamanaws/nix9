@@ -27,6 +27,7 @@ in
   exportfs = package ./exportfs { src = sources.accessSource + "/sys/src/cmd/exportfs"; };
   rcpu = package ./rcpu { src = sources.accessSource; };
   namespaceTools = package ./namespace-tools { src = sources.accessSource; };
+  dial = package ./dial { src = sources.accessSource + "/sys/src/cmd/aux/dial.c"; };
   lib9p = package ./lib9p { src = sources.ramfsSource + "/sys/src/lib9p"; };
   patch = package ./patch { src = sources.patchSource + "/sys/src/cmd/patch.c"; };
   ramfs = package ./ramfs { src = sources.ramfsSource + "/sys/src/cmd/ramfs.c"; };

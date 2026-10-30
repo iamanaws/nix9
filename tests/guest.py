@@ -55,8 +55,10 @@ class SerialLog:
 @contextlib.contextmanager
 def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
          memory="2G", prompt=r"(?m)^term% ", configure_network=True, cpu=False,
-         forward_ports=(), guest_forwards=()):
-    network = "user"
+         forward_ports=(), guest_forwards=(), network_options=(), extra_nics=(), network_backend="user"):
+    network = network_backend
+    for option in network_options:
+        network += "," + option
     if forward_port is not None:
         network += f",hostfwd=tcp:127.0.0.1:{forward_port}-:17010"
     for host_port, guest_port in forward_ports:
@@ -74,7 +76,8 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
             "-display", "none", "-monitor", "none", "-serial", "stdio",
             "-drive", f"file={disk},format=qcow2,if=virtio",
             "-nic", network,
-        ] + (["-snapshot"] if snapshot else []),
+        ] + [argument for nic in extra_nics for argument in ("-nic", nic)]
+        + (["-snapshot"] if snapshot else []),
         encoding="utf-8",
         codec_errors="replace",
         timeout=120,

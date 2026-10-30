@@ -9,36 +9,56 @@ selection changes take effect.
 ## Ethernet networking
 
 `networking.enable = true` configures `ether0` with DHCP, lease renewal, gateway
-and DNS. `interface` selects another device such as `ether1`.
-One primary Ethernet interface is supported. For static IPv4:
+and DNS. Declare `interfaces` to configure several Ethernet devices or static IPv4:
 
 ```nix
 networking = {
   enable = true;
-  useDHCP = false;
-  address = "192.168.1.42";
-  prefixLength = 24;
+  interfaces = {
+    ether0 = {
+      useDHCP = false;
+      address = "192.168.1.42";
+      prefixLength = 24;
+    };
+    ether1 = {
+      useDHCP = false;
+      address = "172.23.0.10";
+      prefixLength = 24;
+    };
+  };
   defaultGateway = "192.168.1.1";
   nameservers = [ "192.168.1.1" ];
 };
 ```
 
-Static mode requires an address and a prefix length from 1 to 32; the gateway
-is optional. DHCP rejects a static address or prefix. IPv4 octets are decimal
+Each interface defaults to DHCP. Static mode requires an address and a prefix
+length from 1 to 32. DHCP rejects a static address or prefix. Static addresses
+must be distinct. IPv4 octets are decimal
 without leading zeros. Interface addresses and gateways exclude unspecified,
 loopback and multicast ranges; DNS servers may use loopback. External IPv6
 configuration is unavailable.
 
-Networking configures both loopbacks, then starts `ndb/cs` and `ndb/dns -r`.
-`ipconfig` records interface and DHCP data in `/net/ndb`, preserving
+`primaryInterface` defaults to `"ether0"` and must appear in `interfaces`.
+An explicit interface map replaces the default map; include `ether0 = { };`
+to keep it on DHCP. All interfaces use the native `/net` stack and acquire
+their connected routes. `defaultGateway` applies to the primary interface;
+DHCP can also install native routes for each interface's source addresses.
+
+Networking attaches the configured devices, configures both loopbacks, then
+starts `ndb/cs` and `ndb/dns -r`. The primary interface publishes its address
+and DHCP data in `/net/ndb`, preserving
 `/lib/ndb/local`. Explicit `nameservers` override DHCP DNS through `DNSSERVER`,
-including after lease renewal. An empty list uses native NDB/DHCP settings.
+including after lease renewal. Secondary interfaces leave that discovery data
+and DNS selection alone. An empty list uses native NDB/DHCP settings.
 The resolver clears inherited `DNSSERVER` and `DOTSERVER`.
 
 Remove conflicting manual interface setup before enabling this option.
 A preexisting `cs` or `dns` causes an error. Boot reports networking failures
 on the console and continues. Disabling management restores native startup
 on the next boot, which may still configure a network.
+
+See the [network-server example](network-server.md) for using a second interface
+through an authenticated 9P export.
 
 ## Clock synchronization
 

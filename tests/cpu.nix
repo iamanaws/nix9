@@ -49,9 +49,11 @@ in
         logging = true;
       }
       {
-        useDHCP = false;
-        address = "10.0.2.42";
-        prefixLength = 24;
+        interfaces.ether0 = {
+          useDHCP = false;
+          address = "10.0.2.42";
+          prefixLength = 24;
+        };
         defaultGateway = "10.0.2.2";
         nameservers = [ "10.0.2.3" ];
       };

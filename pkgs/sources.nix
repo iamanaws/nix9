@@ -93,7 +93,7 @@ in
     paths =
       "sys/src/cmd/auth sys/src/cmd/aux/listen.c sys/src/cmd/exportfs "
       + "sys/src/cmd/tlsclient.c sys/src/cmd/tlssrv.c sys/src/cmd/mount.c sys/src/cmd/alarm.c "
-      + "rc/bin/rcpu rc/bin/rconnect";
+      + "sys/src/cmd/aux/dial.c rc/bin/rcpu rc/bin/rconnect";
   };
   webfsSource = selectSource "9front-webfs-source" {
     paths = "sys/src/cmd/webfs";

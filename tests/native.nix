@@ -19,6 +19,13 @@
   vmTest,
 }:
 {
+  native-network-server-tests = vmTest "native-network-server-tests" {
+    nativeBuildInputs = [ pkgs.netcat-openbsd ];
+    script = ./native_network_server.py;
+    files = [ ./network-server.nix ];
+    env.NIX9_NETWORK_SERVER_TEST_STATE = "network-server-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-binding-tests = vmTest "native-binding-tests" {
     script = ./native_bindings.py;
     files = [

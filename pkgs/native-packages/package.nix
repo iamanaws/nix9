@@ -26,6 +26,7 @@ let
     "system" = ../../lib/system;
     "installation" = ../../lib/installation;
     "examples/installation" = ../../examples/installation;
+    "examples/network-server" = ../../examples/network-server;
   }
   // (lib.optionalAttrs (goBootstrap != null) {
     "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";

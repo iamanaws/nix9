@@ -50,7 +50,11 @@ in
       description = "Text files under /cfg/nix9/files.";
     };
     webfs = settings "Certificate pin configuration.";
-    networking = settings "Native Ethernet configuration.";
+    networking = mkOption {
+      type = types.submodule { imports = [ ./modules/networking.nix ]; };
+      default = { };
+      description = "Native Ethernet configuration.";
+    };
     logging = settings "Native log configuration.";
     services = mkOption {
       type = types.submodule {

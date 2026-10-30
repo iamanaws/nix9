@@ -75,7 +75,7 @@ let
       ++ sharing.packages;
   };
   network = import ./network.nix {
-    inherit hostName;
+    inherit lib hostName;
     configuration = networking;
   };
   serviceConfiguration =
