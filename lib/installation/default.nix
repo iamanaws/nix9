@@ -150,6 +150,11 @@ let
       ;
   };
   systems = builtins.mapAttrs (_: buildSystem) configs;
+  deployment = lib.mapAttrs (machineName: machine: {
+    inherit (machine.deployment) user keyPattern timeout;
+    host = if machine.deployment.host == null then machine.ip else machine.deployment.host;
+    remote = serves machineName "cpu" || machine.deployment.host != null;
+  }) machines;
   dependencies =
     (lib.concatMap (
       consumer:
@@ -205,6 +210,7 @@ let
     }) jobs;
     machines = lib.mapAttrs (machineName: machine: {
       inherit (machine) hostName machineId ip;
+      deployment = deployment.${machineName};
       system = toString systems.${machineName};
       roles =
         (lib.optional (serves machineName "auth") "auth")
@@ -231,6 +237,45 @@ let
     }) machines;
   };
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
+  deploymentScript = ''
+    installationName=${quote name}
+    machineNames=(${lib.concatMapStringsSep " " quote names})
+    cpuClient=${packages.rcpu}/bin/rcpu
+    fn machine {
+      switch($1) {
+      ${lib.concatMapStringsSep "\n" (
+        machineName:
+        let
+          machine = machines.${machineName};
+          connection = deployment.${machineName};
+        in
+        ''
+          case ${quote machineName}
+            identity=${quote machine.machineId}
+            system=${quote (toString systems.${machineName})}
+            remote=${if connection.remote then "1" else "0"}
+            host=${quote connection.host}
+            loginUser=(${lib.optionalString (connection.user != null) (quote connection.user)})
+            keyPattern=${quote connection.keyPattern}
+            timeout=${toString connection.timeout}
+            jobTargets=(${
+              lib.concatMapStringsSep " " quote (
+                lib.unique (
+                  map (job: job.target) (
+                    builtins.attrValues (
+                      lib.filterAttrs (_: job: job.scheduler == machineName && job.target != machineName) jobs
+                    )
+                  )
+                )
+              )
+            })
+        ''
+      ) names}
+      }
+      status='''
+    }
+    status='''
+  '';
 in
 if names == [ ] then
   error "machines must not be empty"
@@ -242,6 +287,18 @@ else if !unique (map (machine: machine.hostName) (builtins.attrValues machines))
   error "duplicate hostnames"
 else if !unique (map (machine: machine.ip) (builtins.attrValues machines)) then
   error "duplicate IPv4 addresses"
+else if
+  !builtins.all (
+    machineName:
+    let
+      user = machines.${machineName}.deployment.user;
+    in
+    user == null
+    || !serves machineName "cpu"
+    || builtins.elem user configs.${machineName}.services.cpu.allowedUsers
+  ) names
+then
+  error "deployment user must be allowed by the machine's CPU service"
 else if !builtins.all (provider: builtins.hasAttr provider machines) providerNames then
   error "discovery defaults refer to an unknown machine"
 else if !builtins.all label (builtins.attrNames jobs) then
@@ -276,7 +333,7 @@ else if
 then
   error "a mount refers to an unknown export"
 else
-  builtins.deepSeq ndb (
+  builtins.deepSeq [ ndb deployment ] (
     builtins.deepSeq (map (machineName: systems.${machineName}.drvPath) names) {
       inherit systems discovery manifest;
       build = mkDerivation {
@@ -285,6 +342,7 @@ else
           mkdir -p $out/systems
           echo -n ${quote (builtins.toJSON manifest + "\n")} > $out/manifest.json
           echo -n ${quote ndb.database} > $out/ndb
+          echo -n ${quote deploymentScript} > $out/deployment.rc
           ${lib.concatMapStringsSep "\n" (machineName: ''
             echo ${quote (toString systems.${machineName})} > $out/systems/${machineName}
           '') names}

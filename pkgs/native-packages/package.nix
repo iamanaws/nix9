@@ -22,6 +22,7 @@ let
     "profile" = ../../lib/profile.rc;
     "bin/nix-profile" = ../../lib/nix-profile.rc;
     "bin/nix9-rebuild" = ../../lib/system/rebuild.rc;
+    "bin/nix9-deploy" = ../../lib/installation/deploy.rc;
     "system" = ../../lib/system;
     "installation" = ../../lib/installation;
     "examples/installation" = ../../examples/installation;
@@ -54,5 +55,5 @@ runCommand "native-packages" { } ''
     "mk-shell.nix"
     "build-env.nix"
   ]}
-  chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild"
+  chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild" "$out/bin/nix9-deploy"
 ''

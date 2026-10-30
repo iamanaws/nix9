@@ -1,0 +1,7 @@
+#!/bin/rc -e
+rfork ne
+# Model a connection dropping after complete objects but before the export's
+# final record. The receiver must reject the stream and retain its selection.
+cp $nix9/bin/nix-store /tmp/deploy-real-store
+bind /tmp/deployment-store.rc $nix9/bin/nix-store
+exec rc -ex $nix9/bin/nix9-deploy prepare $*

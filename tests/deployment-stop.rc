@@ -1,0 +1,5 @@
+#!/bin/rc -e
+rfork ne
+cp $nix9/packages/installation/target.rc /tmp/deploy-real-target.rc
+bind /tmp/deployment-target.rc $nix9/packages/installation/target.rc
+exec nix9-deploy select $*

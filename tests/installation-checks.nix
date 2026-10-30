@@ -16,6 +16,8 @@ let
   ];
   positive = [
     "valid"
+    "deployment"
+    "retiringCpu"
     "renamed"
     "movedPort"
     "optional"
@@ -49,6 +51,19 @@ assert
   ];
 assert valid.manifest.machines.cpu.roles == [ "cpu" ];
 assert valid.manifest.machines.terminal.roles == [ ];
+assert
+  valid.manifest.machines.cpu.deployment == {
+    remote = true;
+    host = "10.0.2.101";
+    user = null;
+    keyPattern = "dom=nix9.share";
+    timeout = 300;
+  };
+assert !valid.manifest.machines.terminal.deployment.remote;
+assert fixtures.deployment.manifest.machines.cpu.deployment.host == "cpu-admin";
+assert fixtures.deployment.manifest.machines.cpu.deployment.user == "glenda";
+assert fixtures.retiringCpu.manifest.machines.cpu.deployment.remote;
+assert fixtures.retiringCpu.manifest.machines.cpu.roles == [ ];
 assert valid.manifest.machines.cpu.mounts.projects.address == "tcp!files!17020";
 assert valid.manifest.machines.cpu.mounts.projects.keyPattern == "dom=nix9.share";
 assert renamed.manifest.machines.files.machineId == "file-id";

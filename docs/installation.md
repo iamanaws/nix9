@@ -49,6 +49,7 @@ like `mkSystem`. Its main settings are:
 | `machines.NAME.machineId` | Stable provisioned identity, default `NAME`. |
 | `machines.NAME.hostName` | Mutable hostname, default `NAME`. |
 | `machines.NAME.configuration` | Ordinary `mkSystem` module declaring packages, services and machine settings. |
+| `machines.NAME.deployment` | Optional CPU connection settings for [deployment](deployment.md). |
 | `defaults.auth`, `defaults.fs`, `defaults.cpu` | Discovery providers, referenced by inventory key. Each defaults to `null`. |
 | `defaults.authdom` | Public authentication domain, default `null`. |
 | `jobs.NAME` | [Scheduled command](jobs.md) with `scheduler` and `target` inventory keys. |
@@ -84,7 +85,7 @@ controls runtime availability.
 | `systems.NAME` | That machine's system derivation, guarded by its inventory identity. |
 | `discovery` | Generated `services.ndb` host records and discovery defaults. |
 | `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts, jobs and dependencies. |
-| `build` | An output containing `manifest.json`, `ndb` and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
+| `build` | An output containing `manifest.json`, `ndb`, deployment settings and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
 
 Roles come from enabled authentication, CPU and export services. Manifest
 dependencies describe authentication and named mounts needed by sessions, plus
@@ -97,9 +98,7 @@ The flake exposes the constructor as `lib.mkInstallation` for callers supplying
 `lib`, `packages`, `mkDerivation` and `buildEnv`. The native package set binds
 these arguments.
 
-Build on one machine, then transfer closures through
-[export/import or signed caches](transport.md#binary-caches). On the destination,
-pass the imported system's store path to `nix9-rebuild check` and
-`nix9-rebuild select`; the configuration expression is needed only on the builder.
-Coordinated rollout, deployment health checks and rollback across machines require
-manual orchestration.
+Use [deployment commands](deployment.md) to prepare, select and inspect machines
+from the bundle. Manual [export/import or signed caches](transport.md#binary-caches)
+also work with `nix9-rebuild check` and `select`. The configuration expression is
+needed only on the builder.

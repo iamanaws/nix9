@@ -1,0 +1,8 @@
+#!/bin/rc -e
+# Fail the second selection after every preflight and the first selection passed.
+original=/tmp/deploy-real-target.rc
+if(~ $3 cpu) {
+  if(~ $1 select) exit 'injected connection failure'
+  original=/mnt/term/tmp/deploy-real-target.rc
+}
+exec /bin/rc $original $*

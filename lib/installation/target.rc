@@ -1,0 +1,67 @@
+#!/bin/rc -e
+rfork ne
+
+fn fail {
+  echo nix9-deploy: $* >[1=2]
+  exit 'deployment target failed'
+}
+if(! ~ $#* 6) fail 'invalid target request'
+action=$1
+installation=$2
+name=$3
+identity=$4
+system=$5
+input=$6
+if(! ~ $action status missing prepare ready select) fail 'invalid target action'
+. /usr/local/pkg/nix9/activate || fail 'cannot activate target Nix'
+path=($nix9/bin /$cputype/bin /rc/bin)
+if(! ~ $#nix9MachineId 1 || ! ~ $nix9MachineId $identity)
+  fail $name 'machine identity differs from the inventory'
+root=/usr/local/nix/state/gcroots/deployments/^$installation^/^$identity
+
+fn readRoot {
+  value=-
+  if(test -e $1) {
+    value=`{cat $1}
+    if(! ~ $#value 1) fail 'invalid root:' $1
+    if(! echo $value | awk 'NR == 1 && /^\/usr\/local\/nix\/store\/[a-zA-Z0-9+._?=-]+$/ {ok=1} END {exit !(ok && NR == 1)}')
+      fail 'invalid root:' $1
+  }
+  status=''
+}
+if(~ $action status) {
+  readRoot $root
+  echo $name prepared $value
+  readRoot $nix9SystemRoot
+  selected=$value
+  readRoot $nix9SystemRoot^-boot
+  booted=$value
+  echo $name selected $selected
+  echo $name booted $booted
+  reboot=required
+  if(~ $selected -) reboot=unselected
+  if not if(~ $selected $booted) reboot=no
+  echo $name reboot $reboot
+  exit ''
+}
+
+lock='#s/nix9-deploy-target-'^$identity
+@{ status='' } > $lock || fail 'target deployment is locked:' $lock
+fn sigexit { result=$status; rm $lock; status=$result }
+switch($action) {
+case missing
+  # --print-invalid returns only unregistered paths, without trying to build.
+  nix-store --check-validity --print-invalid `{cat $input/paths} || fail 'cannot inspect target store'
+case prepare
+  if(test -f $input/closure.export)
+    nix-store --import < $input/closure.export > /dev/null || fail 'closure import failed'
+  mkdir -p /usr/local/nix/state/gcroots/deployments/$installation
+  nix-store --option substitute false --realise $system --add-root $root > /dev/null ||
+    fail 'cannot retain the imported system'
+  nix9-rebuild check $system || fail 'system preflight failed'
+case ready select
+  if(! test -r $root || ! ~ `{cat $root} $system) fail $name 'has not prepared the intended system'
+  nix9-rebuild check $system || fail 'system preflight failed'
+  if(~ $action select) nix9-rebuild select $system || fail 'system selection failed'
+}
+exit ''

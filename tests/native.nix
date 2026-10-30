@@ -19,6 +19,20 @@
   vmTest,
 }:
 {
+  native-deployment-tests = vmTest "native-deployment-tests" {
+    nativeBuildInputs = [ pkgs.netcat-openbsd ];
+    script = ./native_deployment.py;
+    files = [
+      ./deployment.nix
+      ./deployment-truncate.rc
+      ./deployment-store.rc
+      ./deployment-stop.rc
+      ./deployment-target.rc
+      ./artifacts.py
+    ];
+    env.NIX9_DEPLOYMENT_TEST_STATE = "deployment-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-job-tests = vmTest "native-job-tests" {
     script = ./native_jobs.py;
     files = [

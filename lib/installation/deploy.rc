@@ -1,0 +1,133 @@
+#!/bin/rc -e
+rfork ne
+
+fn fail {
+  echo nix9-deploy: $* >[1=2]
+  exit 'nix9-deploy failed'
+}
+if(test $#* -lt 2)
+  fail 'usage: nix9-deploy {prepare | select | status} BUNDLE [MACHINE ...]'
+action=$1
+bundle=$2
+shift 2
+if(! ~ $action prepare select status) fail 'unknown action:' $action
+if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
+path=($nix9/bin /$cputype/bin /rc/bin)
+. $nix9/packages/system/machine.rc || fail 'machine setup failed'
+if(! echo $bundle | awk 'NR == 1 && /^\/usr\/local\/nix\/store\/[a-zA-Z0-9+._?=-]+$/ {ok=1} END {exit !(ok && NR == 1)}')
+  fail 'expected an installation store path'
+nix-store --check-validity $bundle || fail 'installation is not registered locally'
+if(! test -f $bundle/deployment.rc) fail 'installation has no deployment configuration'
+. $bundle/deployment.rc
+requested=$*
+if(~ $#requested 0) requested=$machineNames
+for(name in $requested)
+  if(! ~ $name $machineNames) fail 'unknown machine:' $name
+
+# Serialize this installation on the coordinator. Target operations also lock
+# independently, so different coordinators cannot import/select simultaneously.
+lock='#s/nix9-deploy-client-'^$installationName
+@{ status='' } > $lock || fail 'deployment is locked:' $lock
+work=/usr/local/nix/state/deploy-^$installationName^-^$pid
+clientRoot=/usr/local/nix/state/gcroots/deployments/.clients/^$installationName^-^$pid
+workOwned=0
+retained=0
+fn sigexit {
+  result=$status
+  if(~ $workOwned 1 && test -d $work) rm -r $work
+  if(~ $retained 1 && test -f $clientRoot) rm $clientRoot
+  rm $lock
+  status=$result
+}
+if(test -e $work) fail 'temporary directory already exists:' $work
+if(test -e $clientRoot) fail 'temporary root already exists:' $clientRoot
+mkdir $work
+workOwned=1
+chmod 700 $work
+mkdir -p /usr/local/nix/state/gcroots/deployments/.clients
+retained=1
+nix-store --option substitute false --realise $bundle --add-root $clientRoot > /dev/null ||
+  fail 'cannot retain the installation'
+helper=$nix9/packages/installation/target.rc
+
+# Native rc keeps -e inside functions called by if/||. Preserve child failures
+# here so callers can report them or continue querying other machines.
+fn target {
+  operation=$1
+  if(~ $#nix9MachineId 1 && ~ $nix9MachineId $identity) {
+    /$cputype/bin/rc $helper $operation $installationName $name $identity $system $work || status=$status
+  }
+  if not {
+    if(~ $remote 0) {
+      echo nix9-deploy: $name 'needs local deployment; run this command on that machine' >[1=2]
+      status='local deployment required'
+    }
+    if not {
+      login=()
+      if(~ $#loginUser 1) login=(-u $loginUser)
+      alarm $timeout $cpuClient -h $host $login -k $keyPattern -c \
+        /bin/rc /mnt/term^$helper $operation $installationName $name $identity $system /mnt/term^$work || status=$status
+    }
+  }
+}
+
+switch($action) {
+case status
+  failed=0
+  for(name in $requested) {
+    machine $name
+    echo $name intended $system
+    if(! target status) {
+      echo $name unavailable >[1=2]
+      failed=1
+    }
+  }
+  if(~ $failed 1) fail 'some machines could not be queried'
+case prepare
+  for(name in $requested) {
+    machine $name
+    echo Preparing $name
+    closure=`{nix-store --query --requisites $system && echo nix9-closure-ready}
+    if(~ $#closure 0 || ! ~ $closure($#closure) nix9-closure-ready)
+      fail 'cannot query the local closure for' $name
+    {
+      for(item in $closure) {
+        if(! ~ $item nix9-closure-ready) echo $item
+      }
+    } > $work/paths
+    probe=`{target missing && echo nix9-probe-ready}
+    if(~ $#probe 0 || ! ~ $probe($#probe) nix9-probe-ready)
+      fail 'cannot inspect' $name
+    missing=`{echo $probe | awk '{for(i=1;i<NF;i++) print $i}'}
+    for(item in $missing)
+      if(! ~ $item $closure) fail 'unexpected missing path from' $name
+    # Export only unregistered paths. A retry reuses complete objects from a
+    # previous import, and recreates the remainder of the stream.
+    if(! ~ $#missing 0) {
+      echo Exporting $#missing paths for $name
+      nix-store --export $missing > $work/closure.export || fail 'export failed for' $name
+    }
+    if not if(test -f $work/closure.export) rm $work/closure.export
+    target prepare || fail 'preparation failed for' $name
+    echo $name prepared $system
+  }
+case select
+  # Check every requested machine and every remote job target before changing
+  # any selection. Runtime session mounts may be cyclic and impose no boot order.
+  checking=$requested
+  for(name in $requested) {
+    machine $name
+    for(provider in $jobTargets)
+      if(! ~ $provider $checking) checking=($checking $provider)
+  }
+  for(name in $checking) {
+    machine $name
+    target ready || fail 'prepare the intended system on' $name 'before selecting'
+  }
+  for(name in $requested) {
+    machine $name
+    target select || fail 'selection stopped at' $name '; use status before retrying'
+    echo $name selected $system
+  }
+}
+exit ''

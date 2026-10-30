@@ -1,0 +1,8 @@
+#!/bin/rc -e
+if(~ $1 --export) {
+  /tmp/deploy-real-store $* > /tmp/deploy-full.export
+  bytes=`{ls -l /tmp/deploy-full.export | awk '{print $6 - 8}'}
+  dd -if /tmp/deploy-full.export -bs 1 -count $bytes
+  exit ''
+}
+exec /tmp/deploy-real-store $*

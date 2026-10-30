@@ -5,7 +5,7 @@ let
     value:
     builtins.stringLength value <= 63 && builtins.match "[a-z0-9]([a-z0-9-]*[a-z0-9])?" value != null
   );
-  inherit (import ../system/modules/types.nix { inherit lib; }) runtimeFile publicKeyPattern;
+  inherit (import ../system/modules/types.nix { inherit lib; }) runtimeFile publicKeyPattern userName;
 in
 {
   options = {
@@ -93,6 +93,28 @@ in
                 type = types.deferredModule;
                 default = { };
                 description = "Ordinary mkSystem module for this machine.";
+              };
+              deployment = {
+                host = mkOption {
+                  type = types.nullOr (types.strMatching "[a-zA-Z0-9][a-zA-Z0-9_.-]*");
+                  default = null;
+                  description = "CPU connection hostname or IPv4 address; null uses the inventory IP.";
+                };
+                user = mkOption {
+                  type = types.nullOr userName;
+                  default = null;
+                  description = "CPU login user; null uses the caller's native user.";
+                };
+                keyPattern = mkOption {
+                  type = publicKeyPattern;
+                  default = if config.defaults.authdom == null then "" else "dom=${config.defaults.authdom}";
+                  description = "Public factotum attributes for deployment connections.";
+                };
+                timeout = mkOption {
+                  type = types.ints.between 1 3600;
+                  default = 300;
+                  description = "Maximum seconds for each remote deployment operation, including transfer.";
+                };
               };
               mounts = mkOption {
                 default = { };

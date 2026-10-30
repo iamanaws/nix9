@@ -13,6 +13,31 @@ let
 in
 {
   valid = make { };
+  deployment = make {
+    machines.cpu.deployment = {
+      host = "cpu-admin";
+      user = "glenda";
+      keyPattern = "dom=nix9.share user=glenda";
+      timeout = 30;
+    };
+  };
+  retiringCpu = make (
+    { lib, ... }: {
+      defaults.cpu = lib.mkForce null;
+      machines.cpu = {
+        deployment = {
+          host = "cpu-admin";
+          user = "glenda";
+        };
+        configuration.services.cpu = {
+          enable = lib.mkForce false;
+          allowedUsers = lib.mkForce [ ];
+          keyFile = lib.mkForce null;
+          keyPattern = lib.mkForce "";
+        };
+      };
+    }
+  );
   renamed = make {
     machines.files = {
       hostName = "storage";
@@ -96,6 +121,11 @@ in
     }
   );
   unknownOption = make { machines.cpu.unknown = true; };
+  invalidDeploymentHost = make { machines.cpu.deployment.host = "cpu\necho bad"; };
+  invalidDeploymentUser = make { machines.cpu.deployment.user = "*"; };
+  deniedDeploymentUser = make { machines.cpu.deployment.user = "nobody"; };
+  secretDeploymentPattern = make { machines.cpu.deployment.keyPattern = "!password=bad"; };
+  invalidDeploymentTimeout = make { machines.cpu.deployment.timeout = 0; };
   optionalUnknownProvider = make {
     machines.terminal.mounts.projects = {
       provider = "missing";
