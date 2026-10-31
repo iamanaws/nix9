@@ -5,19 +5,21 @@ Use `namespace.binds` to arrange local directories, package outputs and
 combine projects from a file server with tools from another machine:
 
 ```nix
-directories."/usr/glenda/work".mode = "0750";
-namespace.binds = [
-  {
-    source = "/n/projects";
-    target = "/usr/glenda/work";
-    create = true;
-  }
-  {
-    source = "/n/tools";
-    target = "/usr/glenda/work";
-    mode = "append";
-  }
-];
+{
+  directories."/usr/glenda/work".mode = "0750";
+  namespace.binds = [
+    {
+      source = "/n/projects";
+      target = "/usr/glenda/work";
+      create = true;
+    }
+    {
+      source = "/n/tools";
+      target = "/usr/glenda/work";
+      mode = "append";
+    }
+  ];
+}
 ```
 
 Both shares must be declared in `namespace.mounts`, directly or through an

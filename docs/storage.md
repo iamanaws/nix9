@@ -16,14 +16,16 @@ and [configuration](https://github.com/9front/9front/blob/602faae9a52f342a40b086
 Inside `mkSystem`:
 
 ```nix
-services.cwfs = {
-  enable = true;
-  configDevice = "/adm/storage/config";
-  deviceMap = { w0 = "/adm/storage/cache"; w1 = "/adm/storage/worm"; };
-  keyFile = "/adm/files.keys";
-  autoDump = true;
-  dumpHour = 5;
-};
+{
+  services.cwfs = {
+    enable = true;
+    configDevice = "/adm/storage/config";
+    deviceMap = { w0 = "/adm/storage/cache"; w1 = "/adm/storage/worm"; };
+    keyFile = "/adm/files.keys";
+    autoDump = true;
+    dumpHour = 5;
+  };
+}
 ```
 
 Devices may be files or native disk partitions. The configuration must already
@@ -80,12 +82,14 @@ key. All use authentication domain `nix9.storage`.
 Inventory mounts select a native filesystem attach:
 
 ```nix
-machines.build.mounts.work = { provider = "files"; fileSystem = "main"; };
-machines.terminal.mounts.history = {
-  provider = "files";
-  fileSystem = "dump";
-  mountPoint = "/n/history";
-};
+{
+  machines.build.mounts.work = { provider = "files"; fileSystem = "main"; };
+  machines.terminal.mounts.history = {
+    provider = "files";
+    fileSystem = "dump";
+    mountPoint = "/n/history";
+  };
+}
 ```
 
 These use authenticated native 9P over TCP. Filesystem data is unencrypted on

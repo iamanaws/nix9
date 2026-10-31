@@ -10,14 +10,16 @@ for authentication-server configuration and runtime keys.
 On the file server, inside `mkSystem`:
 
 ```nix
-directories."/usr/glenda/projects".mode = "0750";
-services.exports.projects = {
-  path = "/usr/glenda/projects";
-  allowedUsers = [ "glenda" ];
-  readOnly = false;
-  keyFile = "/adm/files.keys";
-  keyPattern = "dom=lab user=files";
-};
+{
+  directories."/usr/glenda/projects".mode = "0750";
+  services.exports.projects = {
+    path = "/usr/glenda/projects";
+    allowedUsers = [ "glenda" ];
+    readOnly = false;
+    keyFile = "/adm/files.keys";
+    keyPattern = "dom=lab user=files";
+  };
+}
 ```
 
 Use a [directory declaration](configuration.md#persistent-directories) to prepare
@@ -39,11 +41,13 @@ attributes. Private keys stay outside Nix expressions and the store.
 On a terminal or CPU server:
 
 ```nix
-namespace.mounts.projects = {
-  address = "tcp!files!17020";
-  mountPoint = "/n/projects";
-  keyPattern = "dom=lab";
-};
+{
+  namespace.mounts.projects = {
+    address = "tcp!files!17020";
+    mountPoint = "/n/projects";
+    keyPattern = "dom=lab";
+  };
+}
 ```
 
 `mountPoint` defaults to `/n/NAME`. It must be an existing directory; native

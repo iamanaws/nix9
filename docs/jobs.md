@@ -6,14 +6,16 @@ be provisioned. Use an account that can operate that machine's Nix store and
 state, normally the account that installed Nix. Add a local job to its module:
 
 ```nix
-services.cron = {
-  enable = true;
-  jobs.report = {
-    schedule = "0 6 * * 1-5";
-    user = "glenda";
-    command = "echo daily-report; ls /usr/glenda/projects";
+{
+  services.cron = {
+    enable = true;
+    jobs.report = {
+      schedule = "0 6 * * 1-5";
+      user = "glenda";
+      command = "echo daily-report; ls /usr/glenda/projects";
+    };
   };
-};
+}
 ```
 
 `services.auth.enable` must also be true. `packages` adds packages to a job's
@@ -32,14 +34,16 @@ must match; day and weekday use AND. Times use the scheduler's native timezone.
 Declare relationships by inventory key:
 
 ```nix
-jobs.report = {
-  scheduler = "files";
-  target = "cpu";
-  schedule = "0 6 * * *";
-  user = "glenda";
-  command = "cat /n/projects/report";
-};
-machines.files.configuration.services.cron.keyFile = "/adm/scheduler.keys";
+{
+  jobs.report = {
+    scheduler = "files";
+    target = "cpu";
+    schedule = "0 6 * * *";
+    user = "glenda";
+    command = "cat /n/projects/report";
+  };
+  machines.files.configuration.services.cron.keyFile = "/adm/scheduler.keys";
+}
 ```
 
 The [installation](installation.md) enables cron on the scheduler and includes

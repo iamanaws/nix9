@@ -9,7 +9,9 @@ The [example](../examples/netroot/configuration.nix) describes auth, files and a
 build CPU. On an existing inventory CPU, enable network-root boot with:
 
 ```nix
-boot.provider = "files";
+{
+  boot.provider = "files";
+}
 ```
 
 The CPU must enable `services.cpu` and use a static primary interface matching

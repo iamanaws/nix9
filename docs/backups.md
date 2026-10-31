@@ -10,11 +10,13 @@ TLS directory export.
 On a machine with [session mounts](sharing.md#mount-in-a-session):
 
 ```nix
-services.backups.projects = {
-  sourceMount = "history";
-  destinationMount = "archives";
-  paths = [ "projects" ];
-};
+{
+  services.backups.projects = {
+    sourceMount = "history";
+    destinationMount = "archives";
+    paths = [ "projects" ];
+  };
+}
 ```
 
 `sourceMount` must name a native TCP mount with `attach = "dump"`.
@@ -32,13 +34,15 @@ rc $nix9System/services/backups/projects/run
 Or use an ordinary [installation job](jobs.md):
 
 ```nix
-jobs.projects-backup = {
-  scheduler = "auth";
-  target = "build";
-  user = "glenda";
-  schedule = "0 6 * * *";
-  command = "exec rc $nix9System/services/backups/projects/run";
-};
+{
+  jobs.projects-backup = {
+    scheduler = "auth";
+    target = "build";
+    user = "glenda";
+    schedule = "0 6 * * *";
+    command = "exec rc $nix9System/services/backups/projects/run";
+  };
+}
 ```
 
 The job uses the target's selected backup configuration and session mounts. Its

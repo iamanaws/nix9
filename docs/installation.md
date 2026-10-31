@@ -61,10 +61,12 @@ like `mkSystem`. Its main settings are:
 Declare a session mount by provider and export:
 
 ```nix
-machines.cpu.mounts.projects = {
-  provider = "files";
-  export = "projects";
-};
+{
+  machines.cpu.mounts.projects = {
+    provider = "files";
+    export = "projects";
+  };
+}
 ```
 
 `export` defaults to the mount's name. The builder derives its address from the

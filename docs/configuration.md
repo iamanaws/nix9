@@ -157,11 +157,13 @@ For Rio, Acme and plumbing startup, see [graphical sessions](workstation.md).
 Declare directories outside the store:
 
 ```nix
-directories."/usr/glenda/projects" = {
-  mode = "0750";
-  owner = "glenda";
-  group = "glenda";
-};
+{
+  directories."/usr/glenda/projects" = {
+    mode = "0750";
+    owner = "glenda";
+    group = "glenda";
+  };
+}
 ```
 
 `mode` defaults to `0755`. `owner` and `group` default to `null`, preserving

@@ -45,13 +45,15 @@ login in this example. Reboot to start networking and listeners.
 The export uses the existing sharing options:
 
 ```nix
-services.exports.lab = {
-  path = "/net";
-  allowedUsers = [ "glenda" ];
-  readOnly = false;
-  keyFile = "/adm/labnet.keys";
-  keyPattern = "dom=nix9.lab user=labnet";
-};
+{
+  services.exports.lab = {
+    path = "/net";
+    allowedUsers = [ "glenda" ];
+    readOnly = false;
+    keyFile = "/adm/labnet.keys";
+    keyPattern = "dom=nix9.lab user=labnet";
+  };
+}
 ```
 
 Network connections require writes to `clone`, `ctl` and `data` files, so the

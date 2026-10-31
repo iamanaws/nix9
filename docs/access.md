@@ -9,12 +9,14 @@ first. See [boot integration](configuration.md#boot-integration).
 Inside `mkSystem`:
 
 ```nix
-services.cpu = {
-  enable = true;
-  allowedUsers = [ "glenda" ];
-  keyFile = "/adm/cpu.keys";
-  keyPattern = "dom=lab user=cpu1";
-};
+{
+  services.cpu = {
+    enable = true;
+    allowedUsers = [ "glenda" ];
+    keyFile = "/adm/cpu.keys";
+    keyPattern = "dom=lab user=cpu1";
+  };
+}
 ```
 
 This serves authenticated, encrypted `rcpu` connections on TCP 17019. The
@@ -42,11 +44,13 @@ part of native startup.
 ## Authentication server
 
 ```nix
-services.auth = {
-  enable = true;
-  keyDatabase = "/adm/keys";
-  speaksFor.terminal1 = [ "glenda" ];
-};
+{
+  services.auth = {
+    enable = true;
+    keyDatabase = "/adm/keys";
+    speaksFor.terminal1 = [ "glenda" ];
+  };
+}
 ```
 
 This starts packaged `keyfs` and serves authentication tickets on TCP 567.

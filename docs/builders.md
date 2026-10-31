@@ -11,11 +11,13 @@ Declare builders on the machine submitting builds. Names refer to CPU machines
 in the [installation inventory](installation.md):
 
 ```nix
-machines.terminal = {
-  builders.build = { maxJobs = 2; };
-  builders.batch = { };
-  configuration.nix.maxJobs = 0;
-};
+{
+  machines.terminal = {
+    builders.build = { maxJobs = 2; };
+    builders.batch = { };
+    configuration.nix.maxJobs = 0;
+  };
+}
 ```
 
 `nix.maxJobs = 0` disables local compilation. Omit it to allow local builds too.

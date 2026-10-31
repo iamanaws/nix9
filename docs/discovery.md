@@ -5,21 +5,23 @@ It describes service locations; it does not provision authentication keys,
 accounts or file exports. Inside a `mkSystem` configuration:
 
 ```nix
-services.ndb = {
-  enable = true;
-  hosts = {
-    fs1.ip = "10.0.0.2";
-    cpu1 = { ip = "10.0.0.3"; dom = "cpu1.example.net"; auth = "fs1"; fs = "fs1"; };
+{
+  services.ndb = {
+    enable = true;
+    hosts = {
+      fs1.ip = "10.0.0.2";
+      cpu1 = { ip = "10.0.0.3"; dom = "cpu1.example.net"; auth = "fs1"; fs = "fs1"; };
+    };
+    networks.lab = {
+      address = "10.0.0.0";
+      prefixLength = 24;
+      auth = "fs1";
+      fs = "fs1";
+      cpu = "cpu1";
+      authdom = "lab";
+    };
   };
-  networks.lab = {
-    address = "10.0.0.0";
-    prefixLength = 24;
-    auth = "fs1";
-    fs = "fs1";
-    cpu = "cpu1";
-    authdom = "lab";
-  };
-};
+}
 ```
 
 Host names are lowercase labels. Each host has one IPv4 address and may also
@@ -37,10 +39,12 @@ Declared entries are searched first, followed by the ordered `include` list.
 Its default is:
 
 ```nix
-services.ndb.include = [
-  "/lib/ndb/common"
-  "/cfg/nix9/ndb-original"
-];
+{
+  services.ndb.include = [
+    "/lib/ndb/common"
+    "/cfg/nix9/ndb-original"
+  ];
+}
 ```
 
 Activation preserves the original local database through a separate file bind

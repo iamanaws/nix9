@@ -55,6 +55,7 @@ or `package.overrideAttrs (old: { version = "2"; })` for derivation attributes.
 For a simple cross-built program, the flake exports `lib.mkPlan9Program`:
 
 ```nix
+{ mkPlan9Program }:
 mkPlan9Program {
   name = "my-program";
   sources = [ ./main.c ];

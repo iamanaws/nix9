@@ -12,23 +12,25 @@ selection changes take effect.
 and DNS. Declare `interfaces` to configure several Ethernet devices or static IPv4:
 
 ```nix
-networking = {
-  enable = true;
-  interfaces = {
-    ether0 = {
-      useDHCP = false;
-      address = "192.168.1.42";
-      prefixLength = 24;
+{
+  networking = {
+    enable = true;
+    interfaces = {
+      ether0 = {
+        useDHCP = false;
+        address = "192.168.1.42";
+        prefixLength = 24;
+      };
+      ether1 = {
+        useDHCP = false;
+        address = "172.23.0.10";
+        prefixLength = 24;
+      };
     };
-    ether1 = {
-      useDHCP = false;
-      address = "172.23.0.10";
-      prefixLength = 24;
-    };
+    defaultGateway = "192.168.1.1";
+    nameservers = [ "192.168.1.1" ];
   };
-  defaultGateway = "192.168.1.1";
-  nameservers = [ "192.168.1.1" ];
-};
+}
 ```
 
 Each interface defaults to DHCP. Static mode requires an address and a prefix
@@ -67,11 +69,13 @@ RTC as UTC. Set `rtcLocalTime = true` for an RTC in the existing 9front timezone
 For NTP instead:
 
 ```nix
-services.timesync = {
-  enable = true;
-  source = "ntp";
-  server = "time.example.org";
-};
+{
+  services.timesync = {
+    enable = true;
+    source = "ntp";
+    server = "time.example.org";
+  };
+}
 ```
 
 | Option | Values |
@@ -99,15 +103,17 @@ terminals and NTP on CPU servers. It does not stop synchronization.
 9front's `syslog(2)` writes to existing files in `/sys/log`. Prepare them with:
 
 ```nix
-logging = {
-  enable = true;
-  files = {
-    cs.mode = "0660";
-    dns.mode = "0660";
-    application = { }; # Defaults to 0640.
-    nix9.mode = "0600";
+{
+  logging = {
+    enable = true;
+    files = {
+      cs.mode = "0660";
+      dns.mode = "0660";
+      application = { }; # Defaults to 0640.
+      nix9.mode = "0600";
+    };
   };
-};
+}
 ```
 
 Logging always prepares `/sys/log/nix9`. Additional names may contain letters,
@@ -191,12 +197,14 @@ See [scheduled jobs](jobs.md) for schedules, installation targets and results.
 On CPU servers, `services.listen` adds rc scripts to native `aux/listen`:
 
 ```nix
-services.listen = {
-  enable = true;
-  tcp."17010" = ''
-    cat /cfg/nix9/files/motd
-  '';
-};
+{
+  services.listen = {
+    enable = true;
+    tcp."17010" = ''
+      cat /cfg/nix9/files/motd
+    '';
+  };
+}
 ```
 
 `tcp` maps decimal ports from 1 to 65535, without leading zeros, to nonempty rc

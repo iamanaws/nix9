@@ -3,14 +3,16 @@
 Declare a graphical workspace in a machine configuration:
 
 ```nix
-session = {
-  enable = true;
-  acme = {
-    directory = "/n/projects/hello";
-    files = [ "hello.c" "default.nix" ];
+{
+  session = {
+    enable = true;
+    acme = {
+      directory = "/n/projects/hello";
+      files = [ "hello.c" "default.nix" ];
+    };
+    windows = [ { directory = "/n/projects/hello"; } ];
   };
-  windows = [ { directory = "/n/projects/hello"; } ];
-};
+}
 ```
 
 Select the system, then run `nix9-session` from a terminal with graphics and

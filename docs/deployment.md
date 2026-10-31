@@ -48,12 +48,14 @@ The connection defaults to the inventory IP and caller's native user. For a
 different administration address or identity:
 
 ```nix
-machines.cpu.deployment = {
-  host = "cpu-admin";
-  user = "glenda";
-  keyPattern = "dom=lab user=glenda";
-  timeout = 300;
-};
+{
+  machines.cpu.deployment = {
+    host = "cpu-admin";
+    user = "glenda";
+    keyPattern = "dom=lab user=glenda";
+    timeout = 300;
+  };
+}
 ```
 
 `host` and `user` default to `null`. The default key pattern selects
