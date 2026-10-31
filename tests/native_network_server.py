@@ -138,7 +138,7 @@ with ExitStack() as stack:
         disks[name] = disk
         with boot(qemu, disk, snapshot=False) as guest:
             guest.child.timeout = 900
-            guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init " + name)
+            guest.command(". /usr/local/pkg/nix9/activate; nix9 init " + name)
             download(guest, "network-server.nix")
             for configuration in (name, "moved", "disabled"):
                 guest.command(f"echo '(import ./network-server.nix {{}}).{configuration}' > /tmp/{configuration}.nix")
@@ -247,7 +247,7 @@ with ExitStack() as stack:
     stop(cpu)
     cpu = stack.enter_context(start("cpu"))
     listening(cpu, (17019,))
-    provider.command("nix9-rebuild select " + systems["labnet"])
+    provider.command("nix9 select " + systems["labnet"])
     stop(provider)
     provider = stack.enter_context(start("labnet"))
     listening(provider, (17020,))

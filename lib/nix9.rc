@@ -1,0 +1,135 @@
+#!/bin/rc -e
+rfork ne
+
+fn fail {
+  echo nix9: $* >[1=2]
+  exit 'nix9 failed'
+}
+fn usage {
+  echo 'Usage: nix9 ACTION [OPTIONS] [ARGUMENTS]
+
+  init MACHINE       Record the stable identity of this machine once.
+  check OUTPUT       Check a prebuilt local system without selecting it.
+  select OUTPUT      Check and select a prebuilt local system.
+  status             Show local identity, selected, booted and session systems.
+  status MACHINE ... Query machines from a built installation.
+  show [MACHINE ...] Describe a built installation offline.
+  deploy MACHINE ... Build, prepare, check and select the requested machines.
+  select-root MACHINE ... Select prepared next-boot OS roots explicitly.
+
+Installation options:
+  --file FILE        Source expression, default ./default.nix.
+  --from BUNDLE      Use an existing bundle or retained root without building.
+  --all              Request every machine; select-root requests network-root CPUs.
+  --prepare          With deploy, prepare without selecting.
+  --select           With deploy, select the previously prepared bundle.
+
+Prepare and select are mutually exclusive. Deploy and select-root require
+machine names or --all. Inspection and --select reuse the last successful
+build of FILE unless --from is given. Reboots remain explicit.
+Use nix9-rebuild for local builds, switching, rollback and generations.'
+}
+if(~ $#* 1 && ~ $1 help -h --help) {
+  usage
+  exit ''
+}
+if(~ $#* 0) {
+  usage >[1=2]
+  exit usage
+}
+action=$1
+shift
+if(~ $#* 1 && ~ $1 help -h --help) {
+  usage
+  exit ''
+}
+if(! ~ $action init check select status show deploy select-root) fail 'unknown action:' $action '; see nix9 help'
+if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
+path=($nix9/bin /$cputype/bin /rc/bin)
+if(~ $action init check select || { ~ $action status && ~ $#* 0 })
+  exec /$cputype/bin/rc -e $nix9/packages/system/manage.rc nix9 $action $*
+
+file=./default.nix
+from=()
+requested=()
+all=0
+mode=apply
+fileGiven=0
+while(! ~ $#* 0) {
+  switch($1) {
+  case --file --from
+    if(test $#* -lt 2) fail 'missing argument for' $1
+    if(~ $1 --file) {
+      if(~ $fileGiven 1) fail 'duplicate --file'
+      file=$2
+      fileGiven=1
+    }
+    if not {
+      if(! ~ $#from 0) fail 'duplicate --from'
+      from=$2
+    }
+    shift
+  case --all
+    all=1
+  case --prepare --select
+    if(! ~ $action deploy) fail $1 'is only valid with deploy'
+    if(! ~ $mode apply) fail '--prepare and --select are mutually exclusive'
+    mode=prepare
+    if(~ $1 --select) mode=select
+  case -*
+    fail 'unknown option:' $1
+  case *
+    requested=($requested $1)
+  }
+  shift
+}
+if(~ $fileGiven 1 && ! ~ $#from 0) fail '--file and --from are mutually exclusive'
+if(~ $all 1 && ! ~ $#requested 0) fail 'choose machine names or --all'
+if(~ $action deploy select-root && ~ $all 0 && ~ $#requested 0)
+  fail 'specify machine names or --all'
+if(~ $action deploy) operation=$mode
+if not operation=$action
+
+. $nix9/packages/system/machine.rc || fail 'machine setup failed'
+. $nix9/packages/system/output.rc
+if(~ $#from 1) {
+  bundle=`{resolveOutput installation $from}
+  if(! ~ $#bundle 1) exit 'nix9 failed'
+}
+if not {
+  # A source reference is independent of its contents and remains usable after
+  # a failed edit or removal. Keep path spaces intact while canonicalising it.
+  ifs='
+' { source=`{cleanname -d `{pwd} $file} }
+  if(! ~ $#source 1) fail 'cannot resolve the source expression'
+  sourceId=`{echo -n $source | sha1sum}
+  if(! ~ $#sourceId 1 || ! echo $sourceId | awk '/^[0-9a-f]+$/ && length($0)==40 {ok=1} END {exit !ok}')
+    fail 'cannot identify the source expression'
+  reference=/usr/local/nix/state/gcroots/installations/$sourceId
+  if(~ $action deploy && ! ~ $mode select) {
+    lock='#s/nix9-source-'^$sourceId
+    @{ status='' } > $lock || fail 'source deployment is locked:' $source
+    candidate=/usr/local/nix/state/gcroots/installations/.candidates/^$sourceId^-^$pid
+    fn sigexit {
+      result=$status
+      if(test -f $candidate) rm $candidate
+      rm $lock
+      status=$result
+    }
+    if(test -e $candidate) fail 'temporary root already exists:' $candidate
+    mkdir -p /usr/local/nix/state/gcroots/installations/.candidates
+    nix-build $source -A build --out-link $candidate || fail 'installation build failed; previous bundle retained'
+    bundle=`{resolveOutput installation $candidate}
+    if(! ~ $#bundle 1) exit 'nix9 failed'
+    if(! test -f $bundle/deployment.rc) fail 'expected a built installation'
+    nix-store --option substitute false --realise $bundle --add-root $reference > /dev/null || fail 'cannot retain the built installation'
+    echo Retained installation at $reference
+  }
+  if not {
+    if(! test -f $reference) fail 'no retained build for' $source '; use --from BUNDLE or deploy --prepare first'
+    bundle=`{resolveOutput installation $reference}
+    if(! ~ $#bundle 1) exit 'nix9 failed'
+  }
+}
+echo Using installation $bundle
+/$cputype/bin/rc -e $nix9/packages/installation/deploy.rc $operation $bundle $requested

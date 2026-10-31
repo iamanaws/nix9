@@ -47,9 +47,12 @@
       configuration = {
         networking.enable = true;
         nix.maxJobs = 0;
-        session = {
-          enable = true;
+        services.plumber.enable = true;
+        programs = {
+          rio.enable = true;
           acme = {
+            enable = true;
+            start = true;
             directory = "/n/projects/hello";
             files = [
               "hello.c"
@@ -62,7 +65,7 @@
               540
             ];
           };
-          windows = [
+          rio.windows = [
             {
               directory = "/n/projects/hello";
               rectangle = [

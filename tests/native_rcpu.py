@@ -206,7 +206,7 @@ with ExitStack() as stack:
         server.child.timeout = 900
         server.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         server.command(". /usr/local/pkg/nix9/activate")
-        server.command("nix9-rebuild init test")
+        server.command("nix9 init test")
         for name in ("rcpu.nix", "rcpu-fixture.nix", "access.nix"):
             server.command(f"hget -o /tmp/{name} {base}/{name}")
         for name in ("nvram", "server.keys", "server.aes", "user.aes", "terminal.aes"):

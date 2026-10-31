@@ -115,7 +115,7 @@ with ExitStack() as stack:
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
         # -b compiles the entire file before executing the initial exit.
-        guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9-deploy $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
+        guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9 $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
         guest.command("rc -b /tmp/deployment-syntax.rc")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb --out-link " + ROOTS + "/netroot-tools")
 
@@ -134,7 +134,7 @@ with ExitStack() as stack:
         disk(disks[name], foundation)
         with boot(qemu, disks[name], snapshot=False, qemu_options=storage_drives if name == "files" else ()) as guest:
             guest.child.timeout = 1200
-            guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init " + name)
+            guest.command(". /usr/local/pkg/nix9/activate; nix9 init " + name)
             download(guest, "server.nvram", "/tmp/server.nvram", private=True)
             guest.command("dd -if /tmp/server.nvram -of /dev/sdF0/nvram -bs 126 -count 1")
             download(guest, "netroot.nix")
@@ -290,7 +290,7 @@ with ExitStack() as stack:
             guest.command(f"nix-store --realise {artifact} --add-root {ROOTS}/boot-first")
             for root in root_bundles.values():
                 rejected(guest, "nix-store --check-validity " + root, "not valid")
-            guest.command("nix9-rebuild select " + systems[name]["first"])
+            guest.command("nix9 select " + systems[name]["first"])
             guest.command(". /usr/local/pkg/nix9/system")
             guest.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
         files.command("test -e /srv/cwfs-nix9; cat /usr/local/nix/state/machine-id", "files")
@@ -313,11 +313,11 @@ with ExitStack() as stack:
                               + quote("echo `{cat /dev/sysname}; nix-store --verify-path " + systems[name]["first"]), name)
             untrusted_service("one")
             first, second = bundles["first"], bundles["second"]
-            rejected(auth, f"nix9-deploy select-root {second} build", "prepare the intended boot artifact")
-            prepared = auth.command(f"nix9-deploy prepare {first} build batch")
+            rejected(auth, f"nix9 select-root --from {second} build", "prepare the intended boot artifact")
+            prepared = auth.command(f"nix9 deploy --prepare --from {first} build batch")
             if len(re.findall(r"(?m)^Root already published:", prepared)) != 1:
                 raise RuntimeError("shared root was not prepared once for its provider")
-            status = auth.command(f"nix9-deploy status {second} build batch")
+            status = auth.command(f"nix9 status --from {second} build batch")
             for name in CPUS:
                 for field in ("root-running", "root-next"):
                     if f"{name} {field} {root_directories['stable']}\n" not in status:
@@ -329,10 +329,10 @@ with ExitStack() as stack:
             build.command("cat $nix9SystemRoot", systems["build"]["first"])
             build.command("cat /cfg/nix9/root", root_directories["stable"].rsplit("/", 1)[1])
             files.command(f"mkdir /n/site{root_directories['next']}.partial")
-            rejected(auth, f"nix9-deploy prepare {second} build", "partial publication already exists")
+            rejected(auth, f"nix9 deploy --prepare --from {second} build", "partial publication already exists")
             files.command(f"rm /n/site{root_directories['next']}.partial")
-            auth.command(f"nix9-deploy prepare {second} build batch")
-            auth.command(f"nix9-deploy prepare {second} build batch")
+            auth.command(f"nix9 deploy --prepare --from {second} build batch")
+            auth.command(f"nix9 deploy --prepare --from {second} build batch")
             for name, guest in (("build", build), ("batch", batch)):
                 guest.command("cat " + ROOTS + "/deployments/netroot/" + name + "-boot", boot_artifacts[name]["second"])
                 for root in root_bundles.values():
@@ -347,16 +347,16 @@ with ExitStack() as stack:
             build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
             batch.command("9fs 9fat; cp /n/9fat/plan9.ini /tmp/original.ini")
             batch.command("echo 'nix9machine=build' > /n/9fat/plan9.ini")
-            rejected(auth, f"nix9-deploy select-root {second} build batch", "boot medium belongs to another machine")
+            rejected(auth, f"nix9 select-root --from {second} build batch", "boot medium belongs to another machine")
             build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
             batch.command("cp /tmp/original.ini /n/9fat/plan9.ini")
             batch.command("mkdir /n/9fat/nix9lock")
-            rejected(auth, f"nix9-deploy select-root {second} build batch", "boot medium is locked")
+            rejected(auth, f"nix9 select-root --from {second} build batch", "boot medium is locked")
             build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
             batch.command("rm /n/9fat/nix9lock")
             root_path = "/n/site" + root_directories["next"]
             files.command(f"mv {root_path} {root_path}.saved")
-            rejected(auth, f"nix9-deploy select-root {second} build", "incomplete published root")
+            rejected(auth, f"nix9 select-root --from {second} build", "incomplete published root")
             build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
             files.command(f"mv {root_path}.saved {root_path}")
             # Run the expensive compiler imports after deployment preflight,
@@ -370,16 +370,16 @@ with ExitStack() as stack:
                 guest.command("nix-store --verify-path " + project_output)
                 guest.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
             print("PASS: native C builds retain distinct CPU stores through newns", flush=True)
-            auth.command(f"nix9-deploy select {second} build")
+            auth.command(f"nix9 deploy --select --from {second} build")
             build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
             build.command("nix-store --gc; nix-store --verify-path " + next_boot)
-            auth.command(f"nix9-deploy select-root {second} build")
+            auth.command(f"nix9 select-root --from {second} build")
             build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
-            auth.command(f"nix9-deploy select-root {second} build")
+            auth.command(f"nix9 select-root --from {second} build")
             build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
             build.command("cat /network-root-marker", "root-one")
             build.command("cat $nix9SystemRoot^-boot", systems["build"]["first"])
-            status = auth.command(f"nix9-deploy status {second} build batch")
+            status = auth.command(f"nix9 status --from {second} build batch")
             for line in (f"build root-next {root_directories['next']}",
                          f"build root-running {root_directories['stable']}",
                          "build root-reboot required", "batch root-reboot no"):
@@ -396,7 +396,7 @@ with ExitStack() as stack:
         build.command("cat /network-root-marker", "root-two")
         build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "two")
         build.command("echo `{cat /dev/sysname}", "worker")
-        status = auth.command(f"nix9-deploy status {bundles['second']} build batch")
+        status = auth.command(f"nix9 status --from {bundles['second']} build batch")
         for line in (f"build root-running {root_directories['next']}", "build root-reboot no", "build reboot no"):
             if line + "\n" not in status:
                 raise RuntimeError(f"incorrect booted root deployment status: {status}")
@@ -407,8 +407,8 @@ with ExitStack() as stack:
         build.command(project_output + "/bin/hello", "hello from a network-root CPU")
         build.command("nix9-rebuild rollback; . /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "one")
         build.command("cat /network-root-marker", "root-two")
-        auth.command(f"nix9-deploy prepare {bundles['first']} build")
-        auth.command(f"nix9-deploy select-root {bundles['first']} build")
+        auth.command(f"nix9 deploy --prepare --from {bundles['first']} build")
+        auth.command(f"nix9 select-root --from {bundles['first']} build")
     selected_roots["build"] = "stable"
     with cpu("build") as build:
         build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "one")

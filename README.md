@@ -3,7 +3,11 @@
 Nix for Plan 9, tested on 9front. Build packages natively with `nix-build`,
 evaluate expressions with `nix-instantiate`, or cross-compile on Linux.
 Package environments and machine configurations support retained generations
-and rollback.
+and rollback. Describe a machine with `mkSystem`, or use `mkInstallation` to
+connect machines through NDB, file exports, session mounts and remote CPU services.
+
+Use `nix9-rebuild` for local builds, switching and rollback. Use `nix9` for
+machine identity, prebuilt systems, inspection and installation deployment.
 
 The port is experimental. Native builds have no full sandbox, and the modern
 `nix` CLI and flakes are unavailable in the guest.
@@ -51,7 +55,7 @@ and a C development example.
 | [Package development](docs/development.md) | Toolchains, recipes, development shells and native Go. |
 | [System configuration](docs/configuration.md) | Machine settings, switching, rollback and boot hooks. |
 | [Installation inventory](docs/installation.md) | Machines, shared discovery, provider references and system closures. |
-| [Deployment](docs/deployment.md) | Prepare systems and shared roots, select machines, inspect status and retry transfers. |
+| [Deployment](docs/deployment.md) | Inspect an installation, prepare systems and shared roots, select machines and check status. |
 | [Services](docs/services.md) | Ethernet, clocks, logging, webfs, remote CPU access and scheduled jobs. |
 | [Service discovery](docs/discovery.md) | NDB records, service locations and native cs/DNS. |
 | [Session namespaces](docs/namespaces.md) | Ordered bindings and union directories across local files and shared providers. |
@@ -59,7 +63,7 @@ and a C development example.
 | [Storage and recovery](docs/storage.md) | Dedicated CWFS storage, shared workspaces and recovery from dump history. |
 | [Backups](docs/backups.md) | Scheduled archives on a separate server and recovery onto replacement storage. |
 | [Remote builders](docs/builders.md) | Schedule Nix builds on CPU servers and return results to the terminal. |
-| [Graphical sessions](docs/workstation.md) | Rio, Acme and plumbing, with shared projects and remote builds. |
+| [Rio, Acme and plumbing](docs/workstation.md) | Native startup configuration, shared projects and remote builds. |
 | [Network-root CPUs](docs/netroot.md) | Boot CPUs from shared OS files with separate writable Nix state. |
 | [Shared root versions](docs/roots.md) | Publish OS userland, upgrade individual CPUs and return to an earlier root. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |

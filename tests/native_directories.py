@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory() as directory:
     with files_guest(qemu, disk, fixtures, snapshot=False) as guest:
         guest.child.timeout = 900
         guest.command("cd / && tar xf /tmp/bootstrap.tar")
-        guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init test")
+        guest.command(". /usr/local/pkg/nix9/activate; nix9 init test")
         guest.command("nix-instantiate --eval --strict --json /tmp/directory-checks.nix")
         for name in ("one", "two", "removed", "conflict", "special", "deniedOwner", "unknownGroup"):
             guest.command(f"echo '(import ./directories.nix {{}}).{name}' > /tmp/{name}.nix")
@@ -67,11 +67,11 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("echo existing-data > /usr/glenda/nix9-preserved/existing")
         guest.command("nix9-rebuild build /tmp/one.nix")
         one = root(guest, "-build")
-        guest.command("nix9-rebuild check " + one)
+        guest.command("nix9 check " + one)
         guest.command("test ! -e " + DATA + " && test ! -e /usr/glenda/nix9-recreated && test ! -e " + ROOT)
         mode(guest, "/usr/glenda/nix9-preserved", "-rwxr-xr-x", "glenda", "sys")
         guest.command("test ! -e /sys/log/nix9")
-        guest.command("nix9-rebuild select " + one)
+        guest.command("nix9 select " + one)
         mode(guest, DATA, "-rwxr-x---", "glenda", "sys")
         mode(guest, DATA + "/nested", "-rwxr-xr-x")
         mode(guest, DATA + "/nested/deeper", "-rwx--x---")
@@ -79,12 +79,12 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("echo kept-after-removal > /usr/glenda/nix9-only-one/kept")
         contents(guest)
         history = guest.command("nix9-rebuild list")
-        guest.command("nix9-rebuild select " + one)
+        guest.command("nix9 select " + one)
         if guest.command("nix9-rebuild list") != history:
             raise RuntimeError("repeated directory preparation changed history")
         guest.command("nix9-rebuild build /tmp/two.nix")
         two = root(guest, "-build")
-        guest.command("nix9-rebuild check " + two)
+        guest.command("nix9 check " + two)
         mode(guest, DATA, "-rwxr-x---", "glenda", "sys")
         guest.command("mkdir -m 700 /usr/glenda/nix9-bind-source")
         guest.command("echo mounted-data > /usr/glenda/nix9-bind-source/data")
@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("mkdir /usr/glenda/nix9-special; chmod +a /usr/glenda/nix9-special")
         for name in ("conflict", "special"):
             guest.command("nix9-rebuild build /tmp/" + name + ".nix")
-            rejected(guest, "nix9-rebuild check " + root(guest, "-build"), "not a regular directory")
+            rejected(guest, "nix9 check " + root(guest, "-build"), "not a regular directory")
         for name, reason in (("conflict", "not a regular directory"), ("special", "not a regular directory"),
                              ("deniedOwner", "cannot set directory metadata"), ("unknownGroup", "cannot set directory metadata")):
             rejected(guest, "nix9-rebuild switch /tmp/" + name + ".nix", reason)
@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory() as directory:
             mode(guest, DATA, "-rwxr-x---", "glenda", "sys")
             contents(guest)
         guest.command("test ! -e /usr/glenda/nix9-a-new")
-        guest.command("nix9-rebuild select " + two)
+        guest.command("nix9 select " + two)
         mode(guest, DATA, "-rwx--x---", "glenda", "glenda")
         mode(guest, DATA + "/nested/deeper", "-rwxr-x---")
         contents(guest)

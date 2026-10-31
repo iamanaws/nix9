@@ -5,6 +5,8 @@ let
 in
 assert builtins.all (value: value) (builtins.attrValues rejected);
 assert builtins.isString fixtures.initial.build.drvPath;
+assert builtins.match ".*builder build: build.*" fixtures.initial.overview != null;
+assert builtins.match ".*builder build: compile.*" fixtures.renamed.overview != null;
 assert builtins.isString fixtures.second.build.drvPath;
 assert builtins.isString fixtures.standalone.drvPath;
 assert builtins.isString (import <nix9/examples/builders> { }).build.drvPath;

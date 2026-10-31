@@ -122,7 +122,7 @@ with ExitStack() as stack:
         disk(disks[name], foundation)
         with boot(qemu, disks[name], snapshot=False) as guest:
             guest.child.timeout = 900
-            guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init " + name)
+            guest.command(". /usr/local/pkg/nix9/activate; nix9 init " + name)
             download(guest, "builders.nix")
             guest.command(f"echo '(import ./builders.nix {{}}).second.systems.{name}' > /tmp/system.nix")
             download(guest, name + ".nvram", "/tmp/boot.nvram", private=True)

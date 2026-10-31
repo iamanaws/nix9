@@ -4,4 +4,4 @@ rfork ne
 # final record. The receiver must reject the stream and retain its selection.
 cp $nix9/bin/nix-store /tmp/deploy-real-store
 bind /tmp/deployment-store.rc $nix9/bin/nix-store
-exec rc -ex $nix9/bin/nix9-deploy prepare $*
+exec rc -ex $nix9/bin/nix9 deploy --prepare --from $*

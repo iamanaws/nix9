@@ -1,0 +1,19 @@
+# Accept a store output or one native root/path file, without realising it.
+# Run in a command substitution so temporary variables stay in the child.
+fn resolveOutput {
+  rfork e
+  fn sigexit
+  output=$2
+  if(test -f $output) {
+    output=`{awk '
+      NR == 1 && /^\/usr\/local\/nix\/store\/[a-zA-Z0-9+._?=-]+$/ {value=$0}
+      END {if(NR == 1 && value != "") print value}
+    ' $output}
+  }
+  if(! ~ $#output 1 || ! echo $output | awk '
+    NR == 1 && /^\/usr\/local\/nix\/store\/[a-zA-Z0-9+._?=-]+$/ {ok=1}
+    END {exit !(ok && NR == 1)}
+  ') fail 'expected a canonical' $1 'store path or a file containing one:' $2
+  echo $output
+}
+status=''

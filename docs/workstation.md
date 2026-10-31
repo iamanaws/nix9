@@ -1,56 +1,76 @@
-# Graphical sessions
+# Rio, Acme and plumbing
 
-Declare a graphical workspace in a machine configuration:
+Configure native programs in a machine module:
 
 ```nix
 {
-  session = {
-    enable = true;
+  services.plumber.enable = true;
+  programs = {
+    rio = {
+      enable = true;
+      windows = [ { directory = "/n/projects/hello"; } ];
+    };
     acme = {
+      enable = true;
+      start = true;
       directory = "/n/projects/hello";
       files = [ "hello.c" "default.nix" ];
     };
-    windows = [ { directory = "/n/projects/hello"; } ];
   };
 }
 ```
 
-Select the system, then run `nix9-session` from a terminal with graphics and
-mouse devices. It activates the selected generation, including shared mounts
-and builders, then starts a private plumber and Rio with an Acme window and
-the declared shell windows. Rio, Acme, plumbing tools and DejaVu bitmap fonts
-are built from the pinned 9front sources.
+Nix installs the programs and generates their arguments, Rio startup commands
+and plumbing rules. `programs.acme.start` includes an Acme window in Rio's
+startup; `enable` alone installs and configures Acme for manual use.
 
-For the test VM, use `nix run .#run-vm -- --graphics`. At the serial prompt,
-prepare the display once per boot before starting the session:
+## Native startup
+
+After selection, activate the system and source the generated defaults. Launch
+ordinary programs:
+
+```sh
+. /usr/local/pkg/nix9/system
+. $nix9System/programs/profile
+plumber $plumberargs
+rio $rioargs
+```
+
+In `$home/lib/profile`, source `programs/profile` after native font defaults
+and before the terminal's `plumber` and `rio` calls. Pass the corresponding
+argument lists to those calls. Selection does not edit the user's profile or
+start programs.
+
+The fragment sets `font`, `tabstop`, `rioargs`, `acmeargs` and `plumberargs`,
+and exposes Nix commands in `/bin` for programs such as Acme. It launches nothing.
+For manual editor startup, run `acme $acmeargs`. Native commands and explicit
+arguments remain available for custom workflows.
+
+Rio's arguments include `-i` with the generated `riostart` script; bare `rio`
+does not run that script. Plumber uses `-p` with generated rules. Plumber has its
+own lifetime and remains running when Rio exits. Existing windows and plumbers
+keep their configuration until explicitly restarted. Refreshing a namespace
+or selecting another generation does not restart them.
+
+For the test VM, use `nix run .#run-vm -- --graphics` and prepare the display
+before starting Rio:
 
 ```sh
 monitor=vesa vgasize=1024x768x32 screenrc
-nix9-session
 ```
 
-Use the QEMU window for mouse and keyboard input once Rio starts. See
-[VM details](vm.md) for installation and disk options.
+Use the QEMU window for keyboard and mouse input. Display hardware and boot
+configuration remain native; see [VM details](vm.md).
 
-## Settings and lifecycle
+## Settings
 
 | Option | Default and behavior |
 | --- | --- |
-| `session.font` | Packaged DejaVu 12. Used by Rio and Acme. A font in another package retains that dependency. |
-| `session.scroll` | `true`, enabling scrolling in new Rio windows. |
-| `session.windows` | One interactive rc shell. Each entry accepts `command`, `directory` and `rectangle`. Commands are argument lists; directories default to the user's home. Rectangles are `[ left top right bottom ]` in pixels, or `null` for native placement. |
-| `session.acme` | Starts Acme by default. Supports `enable`, `directory`, `files`, `rectangle`, `columns`, `tabStop` and `fixedFont`. Files are relative to the editor's directory; columns default to 2 and tabs to 4. |
-| `session.plumbingRules` | Native rules routing existing files, directories and file addresses such as `hello.c:7` to an open editor. Supply your own rules for other destinations. |
-
-Settings apply when starting the next session. Selection, rollback and sourcing
-`/usr/local/pkg/nix9/system` leave running windows alone. Exit Rio before starting
-another managed session; starting one inside an existing managed session fails.
-The session's plumber stops when Rio exits; an existing plumber remains running.
-Save editor buffers before exiting.
-
-The launcher is explicit. To use it at login, replace the `plumber` and `rio`
-calls in your native `$home/lib/profile` with `nix9-session`. Machine selection
-does not edit that file. Display hardware and boot configuration remain native.
+| `programs.rio.font` | Packaged DejaVu 12, also used by the editor. Package references retain their font dependencies. |
+| `programs.rio.scroll` | `true`, enabling scrolling in new windows. |
+| `programs.rio.windows` | One interactive rc shell. Entries accept `command`, `directory` and `rectangle`. Commands are argument lists; directories default to home. Rectangles are `[ left top right bottom ]`, or `null` for native placement. |
+| `programs.acme` | `enable` installs Acme; `start` opens it from `riostart`. Also accepts `directory`, `files`, `rectangle`, `columns`, `tabStop` and `fixedFont`. Columns default to 2 and tabs to 4. |
+| `services.plumber.rules` | Native rules routing files, directories and addresses such as `hello.c:7` to an open editor. |
 
 ## Shared development installation
 
@@ -82,7 +102,8 @@ mkdir -p /usr/glenda/projects/hello
 cp $nix9/packages/examples/workstation/project/* /usr/glenda/projects/hello/
 ```
 
-Start `nix9-session` on the terminal. Acme opens the shared source and recipe.
+Use the native startup commands above on the terminal. Acme opens the shared
+source and recipe.
 Edit and `Put` the source, then run `nix-build default.nix` in the shell window.
 Nix sends the source snapshot to the CPU and returns the compiled output.
 Run it locally:

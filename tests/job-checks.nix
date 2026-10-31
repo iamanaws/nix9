@@ -40,6 +40,7 @@ assert builtins.all (name: builtins.isString fixtures.${name}.drvPath) positive;
 assert builtins.all (x: x) (builtins.attrValues rejected);
 assert manifest.jobs.report.scheduler == "files";
 assert manifest.jobs.report.target == "cpu";
+assert builtins.match ".*job report: .* as glenda on cpu.*" fixtures.installation.overview != null;
 assert builtins.any (
   d: d.kind == "job" && d.consumer == "files" && d.provider == "cpu" && d.phase == "run"
 ) manifest.dependencies;

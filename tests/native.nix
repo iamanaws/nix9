@@ -19,6 +19,11 @@
   vmTest,
 }:
 {
+  native-cli-tests = vmTest "native-cli-tests" {
+    script = ./native_cli.py;
+    files = [ ./cli.nix ];
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-netroot-tests = vmTest "native-netroot-tests" {
     nativeBuildInputs = [
       pkgs.netcat-openbsd

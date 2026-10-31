@@ -1,4 +1,9 @@
-{ lib, config, ... }:
+{
+  lib,
+  config,
+  pkgs,
+  ...
+}:
 let
   inherit (lib) mkOption types;
   settings =
@@ -13,7 +18,7 @@ in
   imports = [
     ./modules/directories.nix
     ./modules/builders.nix
-    ./modules/session.nix
+    ./modules/programs.nix
   ];
   config.logging = lib.mkMerge [
     (lib.mkIf config.services.cron.enable {
@@ -76,6 +81,7 @@ in
           ./modules/cron.nix
           ./modules/cwfs.nix
           ./modules/backups.nix
+          (import ./modules/plumber.nix { inherit lib pkgs; })
         ];
       };
       default = { };

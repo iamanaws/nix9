@@ -103,7 +103,7 @@ Start authentication and storage before the CPU. At its first console:
 . /usr/local/pkg/nix9/activate
 nix-store --import < /tmp/initial.export
 nix-store --realise `{cat /tmp/boot-path} --add-root /usr/local/nix/state/gcroots/boot-stable
-nix9-rebuild select `{cat /tmp/system-path}
+nix9 select /tmp/system-path
 fshalt -r
 ```
 

@@ -21,6 +21,7 @@ let
     "renamed"
     "movedPort"
     "optional"
+    "view"
     "noConsumerMounts"
     "minimal"
     "mutualMounts"
@@ -37,6 +38,20 @@ in
 assert builtins.all (value: value) (builtins.attrValues rejected);
 assert builtins.all (name: builtins.isString sharing.${name}.drvPath) sharingSystems;
 assert builtins.isString valid.build.drvPath;
+assert builtins.match ".*Installation lab.*" valid.overview != null;
+assert
+  builtins.match ".*mount projects: files export projects at /n/projects, tls, required.*" valid.overview
+  != null;
+assert
+  builtins.match ".*export projects: /usr/glenda/projects at tcp!storage!17020, writable.*" renamed.overview
+  != null;
+assert
+  builtins.match ".*mount projects: files export projects at /n/projects, tls, optional.*" fixtures.optional.overview
+  != null;
+assert builtins.all (name: builtins.isString fixtures.${name}.overview) positive;
+assert
+  builtins.match ".*bind: /n/projects at /usr/glenda/work, replace, create, required.*" fixtures.view.overview
+  != null;
 assert valid.manifest.version == 1;
 assert
   builtins.attrNames valid.systems == [

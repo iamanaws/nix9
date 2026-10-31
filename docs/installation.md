@@ -7,6 +7,11 @@ Native boot, accounts and keys remain provisioning prerequisites. The example
 declares its shared project directory. See [authentication](access.md) and
 [sharing](sharing.md).
 
+A machine can provide several services. Enable them in its `configuration`;
+the inventory derives its roles. `defaults` names providers for the shared NDB
+address book. A `mounts` entry connects a session to a provider's export, and
+`configuration.namespace.binds` arranges that tree in the session's view.
+
 For CPUs using a shared OS root, [network-root boot](netroot.md) generates native
 boot settings and per-machine namespace files from the inventory.
 
@@ -17,8 +22,9 @@ With native Nix active, copy the example into a writable directory:
 ```sh
 cp -r $nix9/packages/examples/installation /usr/glenda/installation
 cd /usr/glenda/installation
-nix-instantiate --eval --strict --json default.nix -A manifest
-nix-build default.nix -A build --out-link /usr/local/nix/state/gcroots/installation
+bundle=/usr/local/nix/state/gcroots/installation
+nix-build default.nix -A build --out-link $bundle
+nix9 show --from $bundle
 ```
 
 Edit `configuration.nix` for the site before selecting a system. The example
@@ -30,11 +36,10 @@ Select the appropriate system on each provisioned machine. On a CPU server
 that built the bundle locally:
 
 ```sh
-installation=`{cat /usr/local/nix/state/gcroots/installation}
-system=`{cat $installation/systems/cpu}
-nix9-rebuild init cpu
-nix9-rebuild check $system
-nix9-rebuild select $system
+installation=`{cat $bundle}
+nix9 init cpu
+nix9 check $installation/systems/cpu
+nix9 select $installation/systems/cpu
 ```
 
 Selection and reboot follow the usual [system rules](configuration.md#generations).
@@ -75,6 +80,28 @@ provider's hostname and export port. `mountPoint`, `required`, `timeout` and
 `keyPattern` follow [session mount](sharing.md#mount-in-a-session) settings.
 The default key pattern selects `defaults.authdom` when set.
 
+To use that mounted tree at a working directory, add a native namespace binding:
+
+```nix
+{
+  machines.cpu.configuration = {
+    directories."/usr/glenda/work" = { };
+    namespace.binds = [
+      {
+        source = "/n/projects";
+        target = "/usr/glenda/work";
+        create = true;
+      }
+    ];
+  };
+}
+```
+
+The mount connects to `files`; the binding places its tree at `work` in each
+CPU session. `create` permits new files through that binding. File-server
+permissions still apply. See [namespace bindings](namespaces.md) for unions
+and ordering.
+
 Use `fileSystem = "main"` or `"dump"` to mount a provider's enabled
 `services.cwfs` instead of a directory export. The inventory derives native TCP
 transport, the port and attach name. See the [storage example](storage.md).
@@ -96,6 +123,7 @@ controls runtime availability.
 | `systems.NAME` | That machine's system derivation, guarded by its inventory identity. |
 | `discovery` | Generated `services.ndb` host records and discovery defaults. |
 | `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts, jobs and dependencies. |
+| `overview` | Readable inventory text. `nix9 show` displays it from the built bundle, with optional machine names. |
 | `build` | An output containing `manifest.json`, `ndb`, deployment settings under `deployment/` and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
 | `boot.NAME` | Native boot artifacts for each network-root CPU, also copied under `build/boot/NAME`; its `path` file records the standalone artifact for transfer. |
 | `roots.NAME` | OS root derivation with `tree/`, base metadata and `publish`; `build/roots/NAME` records its store path. |
@@ -114,5 +142,5 @@ these arguments.
 
 Use [deployment commands](deployment.md) to prepare, select and inspect machines
 from the bundle. Manual [export/import or signed caches](transport.md#binary-caches)
-also work with `nix9-rebuild check` and `select`. The configuration expression is
+also work with `nix9 check` and `select`. The configuration expression is
 needed only on the builder.

@@ -52,7 +52,7 @@ def failed(guest, command, reason):
 
 
 def services(guest):
-    return set(re.findall(r"(?m)^(?:rio\.glenda\.[0-9]+|acme\.glenda\.[0-9]+|nix9-plumb\.glenda\.[0-9]+)$",
+    return set(re.findall(r"(?m)^(?:rio\.glenda\.[0-9]+|acme\.glenda\.[0-9]+|plumb\.glenda\.[0-9]+)$",
                           guest.command("ls -p /srv")))
 
 
@@ -130,7 +130,7 @@ with ExitStack() as stack:
         disk(disks[name], foundation)
         with boot(qemu, disks[name], snapshot=False) as guest:
             guest.child.timeout = 900
-            guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init " + name)
+            guest.command(". /usr/local/pkg/nix9/activate; nix9 init " + name)
             download(guest, "graphical.nix", "/tmp/graphical.nix")
             download(guest, name + ".nvram", "/tmp/boot.nvram", private=True)
             guest.command("dd -if /tmp/boot.nvram -of /dev/sdF0/nvram -bs 126 -count 1")
@@ -151,7 +151,7 @@ with ExitStack() as stack:
                     guest.command(f"echo '(import ./graphical.nix {{}}).{variant}.systems.terminal' > /tmp/{variant}.nix")
                     variants[variant] = paths(guest.command(f"nix-build /tmp/{variant}.nix --out-link {ROOTS}/graph-{variant}"))[0]
                 systems[name] = variants["first"]
-                guest.command("nix9-rebuild select " + systems[name])
+                guest.command("nix9 select " + systems[name])
             else:
                 guest.command(f"mkdir -p /cfg/{name}/service")
                 guest.command(f"echo '(import ./graphical.nix {{}}).first.systems.{name}' > /tmp/system.nix")
@@ -180,7 +180,8 @@ with ExitStack() as stack:
     files = stack.enter_context(start("files"))
     build = stack.enter_context(start("build"))
     terminal = stack.enter_context(start("terminal"))
-    failed(terminal, "nix9-session", "graphics and mouse devices are required")
+    terminal.command(". $nix9System/programs/profile")
+    failed(terminal, "rio $rioargs", "open display")
     terminal.command("monitor=vesa vgasize=1024x768x32 screenrc")
     terminal.command("test -e /dev/draw/new && test -e /dev/mouse")
     # Rio owns the serial keyboard. A one-shot test console keeps automation separate.
@@ -195,10 +196,23 @@ with ExitStack() as stack:
     child.expect(r"(?m)^graph% ")
     control = Guest(child, r"(?m)^graph% ")
     baseline = services(control)
-    stock_plumbers = re.findall(r"(?m)^plumb\.glenda\.[0-9]+$", control.command("ls -p /srv"))
+    # An earlier runtime can have identical command contents and different file
+    # identities. Sourcing defaults must select the active runtime for Acme.
+    control.command("cp $nix9/bin/nix-build /tmp/previous-nix-build; bind /tmp/previous-nix-build /bin/nix-build")
+    control.command(". $nix9System/programs/profile; . $nix9System/programs/profile")
+    control.command("runtime=`{ls -qld $nix9/bin/nix-build | awk '{print $1}'}; exposed=`{ls -qld /bin/nix-build | awk '{print $1}'}; ~ $runtime $exposed")
+    if services(control) != baseline:
+        raise RuntimeError("sourcing program defaults started a native service")
+    # An ordinary user profile sources defaults, then launches native programs.
+    control.command("echo '#!/bin/rc -e' > /tmp/graph-profile")
+    control.command("echo 'rfork ne' >> /tmp/graph-profile")
+    control.command("echo '. /usr/local/pkg/nix9/system' >> /tmp/graph-profile")
+    control.command("echo '. $nix9System/programs/profile' >> /tmp/graph-profile")
+    control.command("echo '@{ rfork s; rc -c ''cat /proc/$pid/noteid > /tmp/plumber-group; exec plumber $plumberargs'' }' >> /tmp/graph-profile")
+    control.command("echo 'rio $rioargs' >> /tmp/graph-profile")
 
     def launch(expected_system, tabs):
-        control.command("rm -f /tmp/window-system /tmp/window-tabs /tmp/window-directory /tmp/graph-build.status; nix9-session > /tmp/session.log >[2=1] &")
+        control.command("rm -f /tmp/window-system /tmp/window-tabs /tmp/window-directory /tmp/plumber-group /tmp/graph-build.status; rc -e /tmp/graph-profile > /tmp/session.log >[2=1] &")
         try:
             until(control, "test -r /tmp/window-system && test -r /tmp/window-tabs && test -r /tmp/window-directory")
         except RuntimeError as error:
@@ -206,8 +220,6 @@ with ExitStack() as stack:
         control.command("cat /tmp/window-system", expected_system)
         control.command("cat /tmp/window-tabs", str(tabs))
         control.command("cat /tmp/window-directory", "/n/projects/hello")
-        until(control, "grep -s 'already running' /tmp/nested.log")
-        control.command("test -s /tmp/nested.status")
         deadline = time.monotonic() + 15
         active = services(control) - baseline
         while len(active) < 3 and time.monotonic() < deadline:
@@ -216,23 +228,33 @@ with ExitStack() as stack:
         if len(active) != 3:
             screenshot("startup-failed.png")
             raise RuntimeError(f"expected one Rio, Acme and plumber: {active}: "
-                               + control.command("cat /tmp/session.log; ls -p /srv; cat $nix9System/session/init; ps"))
+                               + control.command("cat /tmp/session.log; ls -p /srv; cat $nix9System/programs/rio/riostart; ps"))
         rio = next(item for item in active if item.startswith("rio."))
         acme = next(item for item in active if item.startswith("acme."))
-        plumber = next(item for item in active if item.startswith("nix9-plumb."))
+        plumber = next(item for item in active if item.startswith("plumb."))
         control.command(f"mount /srv/{plumber} /mnt/plumb; mount /srv/{rio} /mnt/wsys none")
         return rio, acme, plumber
 
     def stop_session(active):
         control.command("unmount /mnt/plumb; unmount /mnt/wsys")
         control.command("echo hangup > /proc/" + active[0].rsplit(".", 1)[1] + "/note")
-        for service in active:
+        for service in active[:2]:
             until(control, "test ! -e /srv/" + service)
+        # Native plumber has its own lifetime. Closing Rio must leave it running.
+        control.command("test -e /srv/" + active[2])
+        # The PID in plumber's service name is its initial process, which exits
+        # after daemonising. Find a live member of this fixture's note group.
+        group = re.findall(r"(?m)^\s*(\d+)\s*$", control.command("cat /tmp/plumber-group; echo"))[0]
+        members = re.findall(r"(?m)^/proc/\d+$", control.command(
+            "for(proc in /proc/[0-9]*) if(test -r $proc/noteid && ~ `{cat $proc/noteid >[2]/dev/null} "
+            + group + ") echo $proc; status=''")
+        )
+        if not members:
+            raise RuntimeError("native plumber lost its note group")
+        control.command("echo kill > " + members[0] + "/notepg")
+        until(control, "test ! -e /srv/" + active[2])
         if services(control) != baseline:
-            raise RuntimeError("graphical session leaked services")
-        current = re.findall(r"(?m)^plumb\.glenda\.[0-9]+$", control.command("ls -p /srv"))
-        if current != stock_plumbers:
-            raise RuntimeError("managed session changed an existing native plumber")
+            raise RuntimeError("native startup changed unrelated services")
 
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)
@@ -278,7 +300,7 @@ with ExitStack() as stack:
     editor_child.expect(r"(?m)^acme% ")
     editor_control = Guest(editor_child, r"(?m)^acme% ")
     editor_control.command("/bin/nix-build --version")
-    failed(editor_control, "/bin/nix9-session", "already running")
+    editor_control.command("/bin/nix9 status", "machine terminal")
     until(editor_control, "grep -s 'hello[.]c' /mnt/acme/index")
     editor = editor_window(editor_control, "hello.c")
     editor_control.command("echo -n '/shared workspace/' > /mnt/acme/" + editor + "/addr")
@@ -317,7 +339,7 @@ with ExitStack() as stack:
     control.command(". /usr/local/pkg/nix9/system; . /usr/local/pkg/nix9/system")
     if services(control) - baseline != set(active):
         raise RuntimeError("refresh duplicated a graphical session")
-    control.command("nix9-rebuild select " + variants["second"])
+    control.command("nix9 select " + variants["second"])
     control.command("cat /tmp/window-tabs", "4")
     stop_session(active)
     active = launch(variants["second"], 8)
@@ -325,14 +347,20 @@ with ExitStack() as stack:
     control.command("cat /tmp/window-tabs", "8")
     stop_session(active)
     stop_session(launch(variants["first"], 4))
-    for variant, reason in (("malformed", "parse error"), ("missingDirectory", "working directory is unavailable"),
-                            ("missingFont", "configured font is unavailable"), ("disabled", "session.enable")):
-        control.command("nix9-rebuild select " + variants[variant])
-        failed(control, "nix9-session", reason)
-        until(control, "test ! -e /srv/" + active[2])
+    for variant, reason in (("malformed", "parse error"), ("missingFont", "font")):
+        control.command("nix9 select " + variants[variant])
+        control.command(". /usr/local/pkg/nix9/system; . $nix9System/programs/profile")
+        command = "plumber $plumberargs" if variant == "malformed" else "rio $rioargs"
+        failed(control, command, reason)
         if services(control) != baseline:
-            raise RuntimeError(f"failed {variant} startup leaked services")
-    control.command("nix9-rebuild select " + variants["first"])
-    print("PASS: private lifecycle, nested-start rejection, refresh, generation changes, rollback and startup failures", flush=True)
+            raise RuntimeError(f"failed {variant} startup changed native services")
+    control.command("nix9 select " + variants["missingDirectory"])
+    control.command(". /usr/local/pkg/nix9/system; . $nix9System/programs/profile")
+    failed(control, "rc $nix9System/programs/rio/riostart", "working directory is unavailable")
+    control.command("nix9 select " + variants["disabled"])
+    control.command(". /usr/local/pkg/nix9/system; . $nix9System/programs/profile")
+    control.command("test $#rioargs -eq 0 && test $#acmeargs -eq 0 && test $#plumberargs -eq 0")
+    control.command("nix9 select " + variants["first"])
+    print("PASS: native profile startup, independent plumber lifetime, refresh, generation changes, rollback and startup failures", flush=True)
     (destination / "results.json").write_text(json.dumps({"status": "passed", "machines": 4,
         "systems": systems, "remoteOutput": result, "editedFile": "/n/projects/hello/hello.c"}, indent=2) + "\n")

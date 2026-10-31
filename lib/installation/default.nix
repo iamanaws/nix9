@@ -372,6 +372,8 @@ let
       ) configs.${machineName}.namespace.mounts;
     }) machines;
   };
+  summaries = import ./overview.nix { inherit lib manifest configs; };
+  overview = summaries.header + lib.concatStrings (builtins.attrValues summaries.machines);
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
   deploymentScript = ''
     installationName=${quote name}
@@ -592,19 +594,22 @@ else
         systems
         discovery
         manifest
+        overview
         boot
         ;
       roots = rootTrees;
       build = mkDerivation {
         name = "nix9-installation-${name}";
         buildCommand = ''
-          mkdir -p $out/systems $out/boot $out/roots $out/deployment
+          mkdir -p $out/systems $out/boot $out/roots $out/deployment $out/overview
           echo -n ${quote (builtins.toJSON manifest + "\n")} > $out/manifest.json
           echo -n ${quote ndb.database} > $out/ndb
           echo -n ${quote deploymentScript} > $out/deployment.rc
+          echo -n ${quote summaries.header} > $out/overview-header
           ${lib.concatMapStringsSep "\n" (machineName: ''
             echo ${quote (toString systems.${machineName})} > $out/systems/${machineName}
             echo -n ${quote deploymentConfigurations.${machineName}} > $out/deployment/${machineName}.rc
+            echo -n ${quote summaries.machines.${machineName}} > $out/overview/${machineName}
           '') names}
           ${lib.concatMapStringsSep "\n" (machineName: ''
             mkdir -p $out/boot/${machineName}

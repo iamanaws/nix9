@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory() as directory:
     with files_guest(qemu, disk, fixtures, snapshot=False) as guest:
         guest.child.timeout = 900
         guest.command("cd / && tar xf /tmp/bootstrap.tar")
-        guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init test")
+        guest.command(". /usr/local/pkg/nix9/activate; nix9 init test")
         checks = guest.command("nix-instantiate --eval --strict --json /tmp/job-checks.nix")
         if '\"status\":\"passed\"' not in checks:
             raise RuntimeError(checks)
@@ -70,9 +70,9 @@ with tempfile.TemporaryDirectory() as directory:
             guest.command(f"echo '(import ./jobs.nix {{}}).{name}' > /tmp/{name}.nix")
         guest.command("nix9-rebuild build /tmp/one.nix")
         one = re.findall(r"(?m)^/usr/local/nix/store/\S+$", guest.command("cat " + ROOT + "-build"))[0]
-        guest.command("nix9-rebuild check " + one)
+        guest.command("nix9 check " + one)
         guest.command("test ! -e /sys/log/nix9-jobs/glenda && test ! -e " + ROOT)
-        guest.command("nix9-rebuild select " + one)
+        guest.command("nix9 select " + one)
         guest.command("ls -ld /sys/log/nix9-jobs/glenda | awk '{print $1}'", "d-rwx------")
         # The same boot entrypoint can be invoked here while caphash is available.
         # The distributed sharing test covers invocation by native CPU startup.

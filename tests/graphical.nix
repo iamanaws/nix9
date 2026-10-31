@@ -6,7 +6,8 @@ let
     session:
     pkgs.mkSystem {
       hostName = "graphical";
-      inherit session;
+      programs.rio = builtins.removeAttrs session [ "acme" ];
+      programs.acme = session.acme or { };
     };
   initial = import <nix9/examples/workstation/configuration.nix>;
   controls = pkgs.mkDerivation {
@@ -25,7 +26,7 @@ let
         initial
         ({ lib, ... }: {
           machines.terminal.configuration.packages = [ controls ];
-          machines.terminal.configuration.session.windows = lib.mkForce [
+          machines.terminal.configuration.programs.rio.windows = lib.mkForce [
             {
               directory = "/n/projects/hello";
               rectangle = [
@@ -38,11 +39,9 @@ let
                 "rc"
                 "-c"
                 (builtins.concatStringsSep "; " [
-                  "echo $nix9GraphicalSession > /tmp/window-system"
+                  "echo $nix9System > /tmp/window-system"
                   "echo $tabstop > /tmp/window-tabs"
                   "pwd > /tmp/window-directory"
-                  "nix9-session > /tmp/nested.log >[2=1]"
-                  "echo $status > /tmp/nested.status"
                   "echo 'Edit hello.c in Acme, then run nix-build default.nix'"
                   "while(! test -e /tmp/build-now) sleep 0.1"
                   "nix-build default.nix --no-out-link > /tmp/graph-build.log >[2=1]"
@@ -63,17 +62,22 @@ in
   first = installation { };
   second = installation (
     { lib, ... }: {
-      session.acme.columns = 3;
-      session.acme.tabStop = 8;
-      session.acme.files = lib.mkForce [ "hello.c" ];
+      programs.acme.columns = 3;
+      programs.acme.tabStop = 8;
+      programs.acme.files = lib.mkForce [ "hello.c" ];
     }
   );
-  disabled = installation { session.enable = pkgs.lib.mkForce false; };
-  malformed = installation { session.plumbingRules = "not a plumbing rule\n"; };
-  missingDirectory = installation {
-    session.acme.directory = pkgs.lib.mkForce "/n/projects/missing";
+  disabled = installation {
+    programs.rio.enable = pkgs.lib.mkForce false;
+    programs.acme.enable = pkgs.lib.mkForce false;
+    programs.acme.start = pkgs.lib.mkForce false;
+    services.plumber.enable = pkgs.lib.mkForce false;
   };
-  missingFont = installation { session.font = "/usr/glenda/missing.font"; };
+  malformed = installation { services.plumber.rules = "not a plumbing rule\n"; };
+  missingDirectory = installation {
+    programs.acme.directory = pkgs.lib.mkForce "/n/projects/missing";
+  };
+  missingFont = installation { programs.rio.font = "/usr/glenda/missing.font"; };
   invalid = {
     relativeFont = make { font = "font"; };
     traversalFont = make { font = "/lib/../other/font"; };

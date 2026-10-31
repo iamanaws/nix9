@@ -21,8 +21,8 @@ let
   );
 in
 {
-  options.session = {
-    enable = lib.mkEnableOption "a graphical user session started with nix9-session";
+  options.programs.rio = {
+    enable = lib.mkEnableOption "Rio and its native startup configuration";
     font = mkOption {
       type = absolute;
       default = "${pkgs.fonts}/share/fonts/dejavu/dejavu.12.font";
@@ -61,61 +61,54 @@ in
         }
       );
     };
-    acme = {
-      rectangle = mkOption {
-        type = types.nullOr rectangle;
-        default = null;
-        description = "Editor window coordinates [ left top right bottom ]; null uses native placement.";
-      };
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Open an Acme window at session startup.";
-      };
-      columns = mkOption {
-        type = types.ints.between 1 16;
-        default = 2;
-        description = "Initial number of Acme columns.";
-      };
-      tabStop = mkOption {
-        type = types.ints.between 1 32;
-        default = 4;
-        description = "Tab width in characters in Rio and Acme.";
-      };
-      fixedFont = mkOption {
-        type = absolute;
-        default = config.session.font;
-        description = "Acme's alternate font.";
-      };
-      directory = mkOption {
-        type = types.nullOr absolute;
-        default = null;
-        description = "Editor working directory; null uses the user's home.";
-      };
-      files = mkOption {
-        type = types.listOf word;
-        default = [ ];
-        description = "Files or directories to open, relative to the editor working directory.";
-      };
+  };
+  options.programs.acme = {
+    rectangle = mkOption {
+      type = types.nullOr rectangle;
+      default = null;
+      description = "Editor window coordinates [ left top right bottom ]; null uses native placement.";
     };
-    plumbingRules = mkOption {
-      type = types.lines;
-      default = ''
-        include ${pkgs.plumber}/share/plumb/fileaddr
-
-        type is text
-        data matches '([^:]+)('$addr')?'
-        arg isfile $1
-        data set $file
-        attr add addr=$3
-        plumb to edit
-
-        type is text
-        arg isdir $data
-        data set $dir
-        plumb to edit
-      '';
-      description = "Native plumbing rules. Defaults route existing files and directories to an open editor.";
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Install Acme and generate its native arguments.";
+    };
+    start = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Open the configured Acme window from Rio riostart.";
+    };
+    columns = mkOption {
+      type = types.ints.between 1 16;
+      default = 2;
+      description = "Initial number of Acme columns.";
+    };
+    tabStop = mkOption {
+      type = types.ints.between 1 32;
+      default = 4;
+      description = "Tab width in characters in Rio and Acme.";
+    };
+    fixedFont = mkOption {
+      type = absolute;
+      default = config.programs.rio.font;
+      description = "Acme's alternate font.";
+    };
+    directory = mkOption {
+      type = types.nullOr absolute;
+      default = null;
+      description = "Editor working directory; null uses the user's home.";
+    };
+    files = mkOption {
+      type = types.listOf word;
+      default = [ ];
+      description = "Files or directories to open, relative to the editor working directory.";
     };
   };
+  config.assertions = [
+    {
+      assertion =
+        !config.programs.acme.start || (config.programs.acme.enable && config.programs.rio.enable);
+      message = "programs.acme.start requires programs.acme.enable and programs.rio.enable";
+    }
+  ];
 }

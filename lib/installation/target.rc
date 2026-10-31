@@ -2,7 +2,7 @@
 rfork ne
 
 fn fail {
-  echo nix9-deploy: $* >[1=2]
+  echo nix9: $* >[1=2]
   exit 'deployment target failed'
 }
 if(! ~ $#* 6) fail 'invalid target request'
@@ -82,11 +82,11 @@ case prepare
   mkdir -p /usr/local/nix/state/gcroots/deployments/$installation
   nix-store --option substitute false --realise $system --add-root $root > /dev/null ||
     fail 'cannot retain the imported system'
-  nix9-rebuild check $system || fail 'system preflight failed'
+  nix9 check $system || fail 'system preflight failed'
 case ready select
   if(! test -r $root || ! ~ `{cat $root} $system) fail $name 'has not prepared the intended system'
-  nix9-rebuild check $system || fail 'system preflight failed'
-  if(~ $action select) nix9-rebuild select $system || fail 'system selection failed'
+  nix9 check $system || fail 'system preflight failed'
+  if(~ $action select) nix9 select $system || fail 'system selection failed'
 case prepare-root prepare-boot root-ready select-root
   . $helperDirectory/root-target.rc || fail 'root deployment failed'
 }

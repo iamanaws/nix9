@@ -112,8 +112,9 @@ with ExitStack() as stack:
         guest.child.timeout = 900
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("deploy=$nix9/bin/nix9; @{ rfork e; nix9=(); $deploy help }")
         # Catch rc syntax errors before provisioning the multi-machine fixture.
-        guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9-deploy $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
+        guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9 $nix9/bin/nix9-rebuild $nix9/packages/system/output.rc $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
         guest.command("rc -b /tmp/deployment-syntax.rc")
         guest.command("nix-build '<nix9>' -A auth -A rcpu -A ndb -A listen --out-link " + ROOTS + "/deployment-tools")
     for name in ("files", "cpu", "terminal"):
@@ -125,7 +126,7 @@ with ExitStack() as stack:
         disks[name] = disk
         with boot(qemu, disk, snapshot=False) as guest:
             guest.child.timeout = 900
-            guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init " + name)
+            guest.command(". /usr/local/pkg/nix9/activate; nix9 init " + name)
             download(guest, "deployment.nix")
             download(guest, name + ".nvram", "/tmp/boot.nvram", private=True)
             guest.command("dd -if /tmp/boot.nvram -of /dev/sdF0/nvram -bs 126 -count 1")
@@ -150,13 +151,24 @@ with ExitStack() as stack:
                 guest.command(f"mkdir -p /cfg/{name}/service")
             guest.command("nix-build /tmp/deployment.nix -A one.systems." + name + " --out-link " + ROOTS + "/initial")
             systems[name] = store_path(guest, ROOTS + "/initial")
-            guest.command("nix9-rebuild select " + systems[name])
+            guest.command("nix9 select " + systems[name])
             if name == "files":
                 for revision in ("one", "two", "wrong", "unreachable"):
                     guest.command(f"nix-build /tmp/deployment.nix -A {revision}.build --out-link {ROOTS}/{revision}")
                     bundles[revision] = store_path(guest, ROOTS + "/" + revision)
                 intended = {machine: store_path(guest, bundles["two"] + "/systems/" + machine)
                             for machine in ("files", "cpu", "terminal")}
+                # The overview needs neither a reachable peer nor a deployment lock.
+                guest.command("@{ status='' } > '#s/nix9-deploy-client-lab'")
+                overview = guest.command(f"nix9 show --from {ROOTS}/two cpu terminal")
+                for text in ("Installation lab", "\ncpu\n", "\nterminal\n",
+                             "mount projects: files export projects at /n/projects, tls, required"):
+                    if text not in overview:
+                        raise RuntimeError(f"missing installation description: {text}: {overview}")
+                if "\nfiles\n" in overview:
+                    raise RuntimeError("overview ignored the requested machine names")
+                rejected(guest, f"nix9 show --from {ROOTS}/two unknown", "unknown machine")
+                guest.command("test -e '#s/nix9-deploy-client-lab'; rm '#s/nix9-deploy-client-lab'")
                 guest.command("echo shared-data > /usr/glenda/projects/data")
             else:
                 guest.command("rm /tmp/deployment.nix")
@@ -184,30 +196,33 @@ with ExitStack() as stack:
     terminal = stack.enter_context(start("terminal"))
     two = bundles["two"]
     before = {"files": selected(provider, "files"), "cpu": selected(cpu, "cpu")}
-    status = provider.command(f"rc -ex $nix9/bin/nix9-deploy status {two} files cpu")
+    status = provider.command(f"rc -ex $nix9/bin/nix9 status --from {two} files cpu")
     for name in before:
         for field, path in (("intended", intended[name]), ("selected", before[name]), ("booted", before[name])):
             if f"{name} {field} {path}\n" not in status:
                 raise RuntimeError(f"incorrect deployment status: {status}")
-    rejected(provider, f"nix9-deploy prepare {bundles['wrong']} cpu", "identity differs")
-    rejected(provider, f"nix9-deploy status {bundles['unreachable']} cpu files", "could not be queried")
-    rejected(provider, f"nix9-deploy prepare {two} terminal", "needs local deployment")
-    local_only = rejected(provider, f"nix9-deploy status {two} terminal files", "could not be queried")
+    rejected(provider, f"nix9 deploy --prepare --from {bundles['wrong']} cpu", "identity differs")
+    rejected(provider, f"nix9 status --from {bundles['unreachable']} cpu files", "could not be queried")
+    rejected(provider, f"nix9 deploy --prepare --from {two} terminal", "needs local deployment")
+    local_only = rejected(provider, f"nix9 status --from {two} terminal files", "could not be queried")
     if f"files selected {before['files']}\n" not in local_only:
         raise RuntimeError("a local-only machine prevented querying the remaining machines")
     print("PASS: live intended/selected/booted status, identity checks and unavailable nodes", flush=True)
 
-    provider.command(f"nix9-deploy prepare {two} files")
-    rejected(provider, f"nix9-deploy select {two} files", "has not prepared")
-    if selected(provider, "files") != before["files"]:
-        raise RuntimeError("scheduler changed before its job target was prepared")
     rejected(provider, f"rc /tmp/deployment-truncate.rc {two} cpu", "closure import failed")
     cpu.command("test ! -e " + ROOTS + "/deployments/lab/cpu")
     if selected(cpu, "cpu") != before["cpu"]:
         raise RuntimeError("truncated transfer changed the target generation")
-    retry = provider.command(f"nix9-deploy prepare {two} cpu")
+    retry = provider.command(f"nix9 deploy --prepare --from {two} files")
+    if "Preparing required job target cpu" not in retry:
+        raise RuntimeError("scheduler preparation did not include its job target")
     if re.search(r"(?m)^Exporting ", retry):
         raise RuntimeError("retry exported objects that the interrupted import had registered")
+    cpu.command("rm " + ROOTS + "/deployments/lab/cpu")
+    rejected(provider, f"nix9 deploy --select --from {two} files", "has not prepared")
+    if selected(provider, "files") != before["files"]:
+        raise RuntimeError("scheduler changed before its job target was prepared")
+    provider.command(f"nix9 deploy --prepare --from {two} cpu")
     for guest, name in ((provider, "files"), (cpu, "cpu")):
         if selected(guest, name) != before[name]:
             raise RuntimeError("preparation changed a selection")
@@ -217,23 +232,23 @@ with ExitStack() as stack:
 
     # Fail a later target's preflight. No earlier requested selection may change.
     cpu.command("cp /rc/bin/cpurc.local /tmp/saved-cpurc; echo '# manual edit' >> /rc/bin/cpurc.local")
-    rejected(provider, f"nix9-deploy select {two} files cpu", "startup hook was edited")
+    rejected(provider, f"nix9 deploy --select --from {two} files cpu", "startup hook was edited")
     if selected(provider, "files") != before["files"]:
         raise RuntimeError("selection started before all machine checks passed")
     cpu.command("cp /tmp/saved-cpurc /rc/bin/cpurc.local")
     rejected(provider, f"rc /tmp/deployment-stop.rc {two} files cpu", "selection stopped at cpu")
     if selected(provider, "files") != intended["files"] or selected(cpu, "cpu") != before["cpu"]:
         raise RuntimeError("interrupted selection did not preserve the completed machine")
-    mixed = provider.command(f"nix9-deploy status {two} files cpu")
+    mixed = provider.command(f"nix9 status --from {two} files cpu")
     if f"files selected {intended['files']}\n" not in mixed or f"cpu selected {before['cpu']}\n" not in mixed:
         raise RuntimeError("status did not report the interrupted deployment accurately")
-    provider.command(f"nix9-deploy select {two} files cpu")
+    provider.command(f"nix9 deploy --from {ROOTS}/two cpu files")
     histories = {name: guest.command("nix9-rebuild list") for guest, name in ((provider, "files"), (cpu, "cpu"))}
-    provider.command(f"nix9-deploy select {two} files cpu")
+    provider.command(f"nix9 deploy --select --from {two} files cpu")
     for guest, name in ((provider, "files"), (cpu, "cpu")):
         if selected(guest, name) != intended[name] or guest.command("nix9-rebuild list") != histories[name]:
             raise RuntimeError("repeated deployment changed generation history")
-    status = provider.command(f"nix9-deploy status {two} files cpu")
+    status = provider.command(f"nix9 status --from {ROOTS}/two files cpu")
     if not all(f"{name} reboot required\n" in status for name in ("files", "cpu")):
         raise RuntimeError("selection was reported as already booted")
     print("PASS: all-machine preflight, job target readiness, selection, generation reuse and pending reboot", flush=True)
@@ -245,21 +260,21 @@ with ExitStack() as stack:
         raise RuntimeError("installation bundle was not uploaded")
     download(terminal, "bundle.export")
     terminal.command("nix-store --import < /tmp/bundle.export > /dev/null")
-    terminal.command(f"nix9-deploy prepare {two} terminal; nix9-deploy select {two} terminal")
+    terminal.command(f"nix9 deploy --prepare --from {two} terminal; nix9 deploy --select --from {two} terminal")
     if selected(terminal, "terminal") != intended["terminal"]:
         raise RuntimeError("local terminal deployment selected the wrong system")
     print("PASS: terminal deploys locally from an imported bundle without configuration or builds", flush=True)
 
     stop(cpu)
     cpu = stack.enter_context(start("cpu"))
-    provider.command(f"nix9-deploy status {two} cpu", "cpu reboot no")
+    provider.command(f"nix9 status --from {two} cpu", "cpu reboot no")
     cpu.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/deployment", "two")
     cpu.command("cat /n/projects/data", "shared-data")
     cpu.command("nix9-rebuild rollback")
-    provider.command(f"nix9-deploy status {two} cpu", "cpu reboot required")
+    provider.command(f"nix9 status --from {two} cpu", "cpu reboot required")
     stop(cpu)
     cpu = stack.enter_context(start("cpu"))
-    provider.command(f"nix9-deploy status {two} cpu", "cpu reboot no")
+    provider.command(f"nix9 status --from {two} cpu", "cpu reboot no")
     if selected(cpu, "cpu") != before["cpu"]:
         raise RuntimeError("rollback did not restore the original generation")
     cpu.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/deployment", "one")
@@ -270,7 +285,7 @@ with ExitStack() as stack:
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({
         "status": "passed", "machines": 3, "cpuReboots": 2, "bundles": bundles,
-        "checks": ["authenticated-rcpu", "live-status", "wrong-identity", "unavailable-nodes",
+        "checks": ["offline-overview", "root-file-inputs", "authenticated-rcpu", "live-status", "wrong-identity", "unavailable-nodes",
                    "local-terminal", "scheduler-target-readiness", "truncated-transfer",
                    "retry-reuses-objects", "prepare-without-selection", "prepared-gc-roots",
                    "all-machine-preflight", "interrupted-selection-recovery", "selection", "generation-reuse", "pending-reboot",

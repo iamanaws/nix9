@@ -36,6 +36,6 @@ for(hook in rc/bin/cpurc.local rc/bin/termrc.local rc/lib/rcmain.local) {
   bind -c $node/usr/local/nix /usr/local/nix &&
   bind -c $node/usr/local/pkg /usr/local/pkg &&
   . /usr/local/pkg/nix9/activate &&
-  nix9-rebuild init $machineId
+  nix9 init $machineId
 } || fail 'cannot initialize machine identity'
 echo 'Prepared network-root machine:' $machineId

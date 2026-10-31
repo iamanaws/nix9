@@ -20,8 +20,9 @@ pkgs.mkSystem {
 With Nix active:
 
 ```sh
-nix9-rebuild init cpu1
+nix9 init cpu1
 nix9-rebuild switch configuration.nix
+nix9-rebuild status
 . /usr/local/pkg/nix9/system
 fortune
 cat /cfg/nix9/files/motd
@@ -40,11 +41,12 @@ It can also select [remote Nix builders](builders.md) by CPU machine name.
 
 | Command | Effect |
 | --- | --- |
-| `nix9-rebuild init MACHINE` | Set this machine's stable identity. Required before managing system generations. |
+| `nix9 init MACHINE` | Set this machine's stable identity. Required before managing system generations. |
 | `nix9-rebuild build [CONFIGURATION]` | Build and retain at `system-build` beside this machine's selected root. |
 | `nix9-rebuild switch [CONFIGURATION]` | Build, check activation in a private namespace, then select. |
-| `nix9-rebuild check PATH` | Verify a local system closure and run selection preflight without selecting it. |
-| `nix9-rebuild select PATH` | Check and select a local system closure without evaluating a configuration. |
+| `nix9 check OUTPUT` | Verify a local system closure and run selection preflight without selecting it. |
+| `nix9 select OUTPUT` | Check and select a local system closure without evaluating a configuration. |
+| `nix9 status` or `nix9-rebuild status` | Show identity, selected, booted and current session systems, and whether refresh or reboot is pending. |
 | `nix9-rebuild list` | List retained system generations. |
 | `nix9-rebuild rollback` | Select the preceding generation. |
 | `nix9-rebuild delete NUMBER` | Release an inactive generation for GC. |
@@ -56,10 +58,19 @@ be deleted. Reboot into the selection before deleting an older booted generation
 Refresh sessions before deleting generations they use; runtime roots are not
 discovered automatically.
 
-`check` and `select` require a complete, registered system at a canonical
-`/usr/local/nix/store/...` output path. [Import or realise its closure](transport.md#binary-caches)
-first. These commands do not evaluate configurations, build outputs or fetch
-missing paths. Selection checks the contents of the system and every dependency.
+`check` and `select` accept a canonical `/usr/local/nix/store/...` output path
+or a file containing exactly one such path. Use a retained build root or an
+installation's `systems/MACHINE` file directly. The system and its closure must
+already be registered locally; [import or realise them](transport.md#binary-caches)
+first. These commands do not build or fetch missing paths. Selection checks the
+contents of the system and every dependency. Use `nix9 help` for these primitives
+and `nix9-rebuild help` for builds and generations.
+
+`status` reads local system records without taking the selection lock. `session`
+is the system inherited from the calling shell; `refresh required` means that
+shell has not activated the selected system. `reboot required` compares selected
+and booted system paths. It does not inspect service health or shared OS-root
+selection; use [deployment status](deployment.md#status-and-recovery) for OS roots.
 
 Both commands check the machine identity guard, activation, service settings,
 runtime prerequisites and startup hooks. `check` leaves the selected generation,
@@ -75,7 +86,7 @@ Selection and rollback apply settings at different times:
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
 | Nix builders and build settings | Next Nix invocation after login or session refresh. |
-| Rio, Acme and plumbing settings | Next `nix9-session` invocation. |
+| Rio, Acme and plumbing settings | Next native program start after sourcing the generated program defaults. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |

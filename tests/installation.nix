@@ -50,6 +50,18 @@ in
   optional = make {
     machines.terminal.mounts.projects.required = false;
   };
+  view = make {
+    machines.cpu.configuration = {
+      directories."/usr/glenda/work" = { };
+      namespace.binds = [
+        {
+          source = "/n/projects";
+          target = "/usr/glenda/work";
+          create = true;
+        }
+      ];
+    };
+  };
   noConsumerMounts = make ({ lib, ... }: { machines.terminal.mounts = lib.mkForce { }; });
   minimal = pkgs.mkInstallation { machines.one.ip = "10.1.0.1"; };
   mutualMounts = pkgs.mkInstallation {

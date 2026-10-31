@@ -7,6 +7,9 @@ let
 in
 assert builtins.all (value: value) (builtins.attrValues rejected);
 assert builtins.isString fixtures.first.build.drvPath;
+assert
+  builtins.match ".*boot: files attach main, root stable.*state: /machines/build.*" fixtures.first.overview
+  != null;
 assert builtins.isString fixtures.first.boot.build.drvPath;
 assert builtins.isString fixtures.first.boot.batch.drvPath;
 assert builtins.isString fixtures.first.roots.stable.drvPath;

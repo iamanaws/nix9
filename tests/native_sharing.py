@@ -199,7 +199,7 @@ with ExitStack() as stack:
         with boot(qemu, disk, snapshot=False) as guest:
             guest.child.timeout = 900
             guest.command(". /usr/local/pkg/nix9/activate")
-            guest.command("nix9-rebuild init " + name)
+            guest.command("nix9 init " + name)
             download(guest, base, "sharing.nix")
             for configuration in ("files", "readOnly", "disabled", "cpu", "terminal", "moved",
                                   "optional", "unavailable", "empty", "reordered", "bindingUnavailable"):
@@ -230,9 +230,9 @@ with ExitStack() as stack:
             if name == "files":
                 guest.command("nix9-rebuild build /tmp/files.nix")
                 candidate = store_path(guest, "/usr/local/nix/state/gcroots/machines/files/system-build")
-                guest.command("nix9-rebuild check " + candidate)
+                guest.command("nix9 check " + candidate)
                 guest.command("chmod 400 /adm/files.keys /adm/scheduler.keys")
-                guest.command("nix9-rebuild check " + candidate)
+                guest.command("nix9 check " + candidate)
                 guest.command("chmod 600 /adm/files.keys /adm/scheduler.keys")
                 guest.command("test ! -e /usr/glenda/projects")
             guest.command(f"nix9-rebuild switch /tmp/{name}.nix")

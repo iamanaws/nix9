@@ -2,20 +2,21 @@
 rfork ne
 
 fn fail {
-  echo nix9-deploy: $* >[1=2]
-  exit 'nix9-deploy failed'
+  echo nix9: $* >[1=2]
+  exit 'nix9 failed'
 }
-if(test $#* -lt 2)
-  fail 'usage: nix9-deploy {prepare | select | select-root | status} BUNDLE [MACHINE ...]'
+# Internal coordinator; the public interface validates source and target scope.
+if(test $#* -lt 2) fail 'invalid coordinator request'
 action=$1
 bundle=$2
 shift 2
-if(! ~ $action prepare select select-root status) fail 'unknown action:' $action
+if(! ~ $action show prepare select apply select-root status) fail 'unknown coordinator action:' $action
 if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
 path=($nix9/bin /$cputype/bin /rc/bin)
 . $nix9/packages/system/machine.rc || fail 'machine setup failed'
-if(! echo $bundle | awk 'NR == 1 && /^\/usr\/local\/nix\/store\/[a-zA-Z0-9+._?=-]+$/ {ok=1} END {exit !(ok && NR == 1)}')
-  fail 'expected an installation store path'
+. $nix9/packages/system/output.rc
+bundle=`{resolveOutput installation $bundle}
+if(! ~ $#bundle 1) exit 'nix9 failed'
 nix-store --check-validity $bundle || fail 'installation is not registered locally'
 if(! test -f $bundle/deployment.rc) fail 'installation has no deployment configuration'
 . $bundle/deployment.rc
@@ -30,6 +31,12 @@ if(~ $action select-root) {
   if(~ $#requested 0) fail 'no network-root CPUs requested'
   for(name in $requested)
     if(! ~ $name $bootMachineNames) fail 'not a network-root CPU:' $name
+}
+if(~ $action show) {
+  if(! test -f $bundle/overview-header) fail 'installation has no overview; rebuild the bundle'
+  cat $bundle/overview-header
+  for(name in $requested) cat $bundle/overview/$name
+  exit ''
 }
 
 # Serialize this installation on the coordinator. Target operations also lock
@@ -66,18 +73,18 @@ fn target {
   if(~ $#* 2) targetObject=$2
   cat $bundle/deployment/$name.rc > $work/request.rc || fail 'cannot stage target request'
   if(~ $#nix9MachineId 1 && ~ $nix9MachineId $identity) {
-    /$cputype/bin/rc $helper $operation $installationName $name $identity $targetObject $work || status=$status
+    /$cputype/bin/rc -e $helper $operation $installationName $name $identity $targetObject $work || status=$status
   }
   if not {
     if(~ $remote 0) {
-      echo nix9-deploy: $name 'needs local deployment; run this command on that machine' >[1=2]
+      echo nix9: $name 'needs local deployment; run this command on that machine' >[1=2]
       status='local deployment required'
     }
     if not {
       login=()
       if(~ $#loginUser 1) login=(-u $loginUser)
       alarm $timeout $cpuClient -h $host $login -k $keyPattern -c \
-        /bin/rc /mnt/term^$helper $operation $installationName $name $identity $targetObject /mnt/term^$work || status=$status
+        /bin/rc -e /mnt/term^$helper $operation $installationName $name $identity $targetObject /mnt/term^$work || status=$status
     }
   }
 }
@@ -107,8 +114,25 @@ fn transfer {
   target $transferAction $transferObject || fail 'preparation failed for' $name
 }
 
-switch($action) {
-case status
+fn preparationTargets {
+  preparing=$requested
+  expanded=1
+  while(~ $expanded 1) {
+    expanded=0
+    for(name in $preparing) {
+      machine $name
+      for(provider in $jobTargets) {
+        if(! ~ $provider $preparing) {
+          echo Preparing required job target $provider
+          preparing=($preparing $provider)
+          expanded=1
+        }
+      }
+    }
+  }
+  status=''
+}
+fn deploymentStatus {
   failed=0
   for(name in $requested) {
     machine $name
@@ -123,9 +147,12 @@ case status
     }
   }
   if(~ $failed 1) fail 'some machines could not be queried'
-case prepare
+  status=''
+}
+fn prepareSystems {
+  preparationTargets
   published=()
-  for(consumer in $requested) {
+  for(consumer in $preparing) {
     machine $consumer
     if(~ $#bootArtifact 1) {
       provider=$rootProvider
@@ -140,14 +167,15 @@ case prepare
       }
     }
   }
-  for(name in $requested) {
+  for(name in $preparing) {
     machine $name
     echo Preparing $name
     transfer $system prepare
     if(~ $#bootArtifact 1) transfer $bootArtifact prepare-boot
     echo $name prepared $system
   }
-case select
+}
+fn selectSystems {
   # Check every requested machine and every remote job target before changing
   # any selection. Runtime session mounts may be cyclic and impose no boot order.
   checking=$requested
@@ -165,6 +193,29 @@ case select
     target select || fail 'selection stopped at' $name '; use status before retrying'
     echo $name selected $system
   }
+}
+fn selectedSummary {
+  for(name in $requested) {
+    machine $name
+    if(target status > $work/status) {
+      echo -n $name^' '
+      awk '$2 == "selected" {selected=$3} $2 == "reboot" {reboot=$3}
+        END {print "selected " selected "; reboot " reboot}' $work/status
+    }
+    if not fail 'selected systems; cannot query status on' $name
+  }
+}
+switch($action) {
+case status
+  deploymentStatus
+case prepare
+  prepareSystems
+case select
+  selectSystems
+case apply
+  prepareSystems
+  selectSystems
+  selectedSummary
 case select-root
   for(name in $requested) {
     machine $name

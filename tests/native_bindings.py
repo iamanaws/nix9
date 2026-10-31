@@ -36,14 +36,14 @@ with tempfile.TemporaryDirectory() as directory:
     with files_guest(qemu, disk, files, snapshot=False) as guest:
         guest.child.timeout = 900
         guest.command("cd / && tar xf /tmp/bootstrap.tar")
-        guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init test")
+        guest.command(". /usr/local/pkg/nix9/activate; nix9 init test")
         guest.command("nix-instantiate --eval --strict --json /tmp/binding-checks.nix")
         for name in ("one", "two", "removed", "unavailable", "optional", "chain", "merged"):
             guest.command(f"echo '(import ./bindings.nix {{}}).{name}' > /tmp/{name}.nix")
         guest.command("nix9-rebuild build /tmp/one.nix")
-        guest.command("candidate=`{cat " + ROOT + "-build}; nix9-rebuild check $candidate")
+        guest.command("candidate=`{cat " + ROOT + "-build}; nix9 check $candidate")
         guest.command("test ! -e " + DATA + "-view")
-        guest.command("nix9-rebuild select $candidate")
+        guest.command("nix9 select $candidate")
         guest.command("echo original > " + DATA + "-view/original")
         for name in ("one", "two"):
             guest.command(f"echo {name} > {DATA}-{name}/collision; echo {name} > {DATA}-{name}/{name}")

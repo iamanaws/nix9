@@ -129,7 +129,7 @@ with ExitStack() as stack:
         guest.child.timeout = 900
         guest.command(f"cd / && hget {http_url}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
-        guest.command("nix9-rebuild init test")
+        guest.command("nix9 init test")
         for name in ("services.nix", "services-retained.rc", "service-pins.nix",
                      "terminal-profile.rc", "login-profile.rc"):
             guest.command(f"hget -o /tmp/{name} {http_url}/{name}")

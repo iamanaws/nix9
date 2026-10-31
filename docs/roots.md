@@ -31,7 +31,7 @@ one CPU does not rebuild another CPU's root. Changing a machine's state location
 or boot hooks does create new root artifacts.
 
 For running CPUs, [deployment](deployment.md#shared-os-roots) publishes roots,
-transfers boot artifacts and selects the next boot through `nix9-deploy`.
+transfers boot artifacts and selects the next boot through `nix9 select-root`.
 The commands below also work for initial publication and manual administration.
 
 Build and retain the updated installation on the file server. With its `main`

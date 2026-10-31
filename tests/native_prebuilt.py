@@ -98,16 +98,16 @@ with ExitStack() as stack:
             with boot(qemu, disks["builder"], snapshot=False) as builder:
                 builder.child.timeout = 900
                 builder.command(f"cd / && hget {base}/bootstrap.tar | tar x")
-                builder.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init builder")
+                builder.command(". /usr/local/pkg/nix9/activate; nix9 init builder")
                 builder.command(f"hget -o /tmp/prebuilt.nix {base}/prebuilt.nix")
                 builder.command("nix-build /tmp/prebuilt.nix -A bundle --out-link " + ROOTS + "/prebuilt-fixtures")
                 bundle = store_path(builder, ROOTS + "/prebuilt-fixtures")
                 paths = {name: store_path(builder, bundle + "/" + name) for name in (
                     "one", "two", "wrong", "data", "notSystem", "unsupported",
                     "incomplete", "failedActivation", "needsRuntime")}
-                builder.command("nix9-rebuild select " + paths["wrong"])
+                builder.command("nix9 select " + paths["wrong"])
                 builder.command(". /usr/local/pkg/nix9/system")
-                rejected(builder, "nix9-rebuild select " + paths["one"], "another machine")
+                rejected(builder, "nix9 select " + paths["one"], "another machine")
                 builder.command("cat $nix9SystemRoot", paths["wrong"])
                 builder.command("nix-store --export `{nix-store -qR " + bundle + "} > /tmp/closure.export")
                 builder.command("size=`{ls -l /tmp/closure.export | awk '{print $6}'}")
@@ -122,19 +122,19 @@ with ExitStack() as stack:
                 guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
                 guest.command(". /usr/local/pkg/nix9/activate")
                 for action in ("check", "select"):
-                    rejected(guest, f"nix9-rebuild {action} {paths['one']}", "initialize this machine")
-                guest.command("nix9-rebuild init target")
+                    rejected(guest, f"nix9 {action} {paths['one']}", "initialize this machine")
+                guest.command("nix9 init target")
                 disable_builds(guest)
                 guest.command("test ! -e /tmp/prebuilt.nix")
                 for action in ("check", "select"):
-                    rejected(guest, "nix9-rebuild " + action, "expected a system store path")
-                    rejected(guest, f"nix9-rebuild {action} /tmp/outside", "canonical system store path")
-                    rejected(guest, f"nix9-rebuild {action} {paths['one']}/files", "canonical system store path")
-                    rejected(guest, f"nix9-rebuild {action} {paths['one']}", "not registered locally")
+                    rejected(guest, "nix9 " + action, "expected a system store path")
+                    rejected(guest, f"nix9 {action} /tmp/outside", "canonical system store path")
+                    rejected(guest, f"nix9 {action} {paths['one']}/files", "canonical system store path")
+                    rejected(guest, f"nix9 {action} {paths['one']}", "not registered locally")
                 guest.command(f"hget -o /tmp/truncated.export {base}/truncated.export")
                 rejected(guest, "nix-store --import < /tmp/truncated.export")
                 for action in ("check", "select"):
-                    rejected(guest, f"nix9-rebuild {action} {paths['one']}", "not registered locally")
+                    rejected(guest, f"nix9 {action} {paths['one']}", "not registered locally")
                 guest.command("test ! -e " + ROOT)
                 guest.command("test ! -d " + ROOT + ".generations")
                 clean(guest)
@@ -146,21 +146,21 @@ with ExitStack() as stack:
                 for index, hook in enumerate(HOOKS):
                     guest.command("echo '# prebuilt hook fixture' >> " + hook)
                     guest.command(f"cp {hook} /tmp/original-hook-{index}")
-                guest.command("nix9-rebuild check " + paths["one"], "System check passed: " + paths["one"])
+                guest.command("nix9 check " + paths["one"], "System check passed: " + paths["one"])
                 guest.command("test ! -e " + ROOT + " && test ! -d " + ROOT + ".generations")
                 guest.command("test ! -e /sys/log/prebuilt && test ! -e /usr/local/pkg/nix9/system")
                 for index, hook in enumerate(HOOKS):
                     guest.command(f"cmp {hook} /tmp/original-hook-{index} && test ! -e {hook}.nix9-original")
                 clean(guest)
                 guest.command("echo persistent-user-data > /usr/glenda/prebuilt-user-data")
-                guest.command("nix9-rebuild select " + paths["one"])
+                guest.command("nix9 select " + paths["one"])
                 current(guest, "one", paths["one"])
                 history = guest.command("nix9-rebuild list")
-                guest.command("nix9-rebuild select " + paths["one"])
+                guest.command("nix9 select " + paths["one"])
                 if guest.command("nix9-rebuild list") != history:
                     raise RuntimeError("repeated selection created a duplicate generation")
                 before = snapshot(guest)
-                guest.command("nix9-rebuild check " + paths["two"])
+                guest.command("nix9 check " + paths["two"])
                 unchanged(guest, before)
                 guest.command("ls -ld /sys/log/prebuilt | awk '{print $1}'", "a-rw-r-----")
                 for name, reason in (
@@ -169,42 +169,42 @@ with ExitStack() as stack:
                     ("failedActivation", "activation check failed"), ("needsRuntime", "activation check failed"),
                 ):
                     for action in ("check", "select"):
-                        rejected(guest, f"nix9-rebuild {action} {paths[name]}", reason)
+                        rejected(guest, f"nix9 {action} {paths[name]}", reason)
                         unchanged(guest, before)
                 guest.command("echo -n > /tmp/prebuilt-site.ndb")
-                guest.command("nix9-rebuild check " + paths["needsRuntime"])
+                guest.command("nix9 check " + paths["needsRuntime"])
                 unchanged(guest, before)
                 guest.command("rm /tmp/prebuilt-site.ndb")
 
                 guest.command("mv " + paths["data"] + " /tmp/prebuilt-saved-data")
                 for action in ("check", "select"):
-                    rejected(guest, f"nix9-rebuild {action} {paths['two']}", "closure verification failed")
+                    rejected(guest, f"nix9 {action} {paths['two']}", "closure verification failed")
                     unchanged(guest, before)
                 guest.command("mv /tmp/prebuilt-saved-data " + paths["data"])
                 guest.command("cp " + paths["data"] + " /tmp/prebuilt-saved-data")
                 guest.command("chmod u+w " + paths["data"] + "; echo changed > " + paths["data"])
                 for action in ("check", "select"):
-                    rejected(guest, f"nix9-rebuild {action} {paths['two']}", "closure verification failed")
+                    rejected(guest, f"nix9 {action} {paths['two']}", "closure verification failed")
                     unchanged(guest, before)
                 guest.command("cp /tmp/prebuilt-saved-data " + paths["data"])
                 guest.command("nix-store --verify-path " + paths["data"])
                 guest.command("cp /rc/bin/termrc.local /tmp/managed-hook")
                 guest.command("echo '# edited hook' >> /rc/bin/termrc.local")
                 for action in ("check", "select"):
-                    rejected(guest, f"nix9-rebuild {action} {paths['two']}", "startup hook was edited")
+                    rejected(guest, f"nix9 {action} {paths['two']}", "startup hook was edited")
                     unchanged(guest, before)
                 guest.command("cp /tmp/managed-hook /rc/bin/termrc.local")
                 guest.command("@{ status='' } > '#s/nix9-system-target'")
                 for action in ("check", "select"):
-                    rejected(guest, f"nix9-rebuild {action} {paths['two']}", "system changes are locked")
+                    rejected(guest, f"nix9 {action} {paths['two']}", "system changes are locked")
                     guest.command("test -e '#s/nix9-system-target'")
                 guest.command("rm '#s/nix9-system-target'")
                 guest.command("@{ status='' } > '#s/nix9-profile'")
-                rejected(guest, "nix9-rebuild select " + paths["two"], "profiles are locked")
+                rejected(guest, "nix9 select " + paths["two"], "profiles are locked")
                 guest.command("rm '#s/nix9-profile'")
                 unchanged(guest, before)
 
-                guest.command("nix9-rebuild select " + paths["two"])
+                guest.command("nix9 select " + paths["two"])
                 guest.command("prebuilt-version", "one")
                 current(guest, "two", paths["two"])
                 guest.command("ls -ld /sys/log/prebuilt | awk '{print $1}'", "a-rw-------")
@@ -234,7 +234,7 @@ with ExitStack() as stack:
             else:
                 guest.command("nix9-rebuild delete 2; nix-store --gc")
                 guest.command("test ! -e " + paths["two"])
-                guest.command("nix9-rebuild check " + paths["one"])
+                guest.command("nix9 check " + paths["one"])
                 records = guest.command("cat /sys/log/nix9")
                 actions = re.findall(r"(?m)^target-(?:one|two) .{15} nix9 (switch|boot|rollback) (\S+)$", records)
                 expected = [("switch", paths["one"]), ("switch", paths["one"]),

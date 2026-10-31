@@ -108,7 +108,7 @@ with ExitStack() as stack:
         original = process(guest, None)
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
-        guest.command("nix9-rebuild init test")
+        guest.command("nix9 init test")
         for name in ("timesync.nix", "timesync-server.nix", "terminal-profile.rc"):
             guest.command(f"hget -o /tmp/{name} {base}/{name}")
         for name in ("utc", "ntp", "local", "disabled", *INVALID):

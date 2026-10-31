@@ -1,0 +1,244 @@
+#!/bin/rc -e
+
+fn fail {
+  echo $commandName^':' $* >[1=2]
+  exit $commandName^' failed'
+}
+if(test $#* -lt 2) exit 'invalid local request'
+commandName=$1
+shift
+if(! ~ $#* 1 2) fail 'unexpected arguments; see' $commandName help
+action=$1
+switch($action) {
+case build switch
+  configuration=./configuration.nix
+  if(~ $#* 2) configuration=$2
+case check select
+  if(! ~ $#* 2) fail 'expected a system store path or a file containing one'
+  target=$2
+case rollback list status
+  if(! ~ $#* 1) fail 'unexpected argument for' $action
+case delete
+  if(! ~ $#* 2) fail 'expected a generation number'
+case init
+  if(! ~ $#* 2) fail 'expected a machine identity'
+case *
+  fail 'unknown action:' $action '; see' $commandName help
+}
+if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
+path=($nix9/bin /$cputype/bin /rc/bin)
+. $nix9/packages/system/machine.rc || fail 'machine setup failed'
+. $nix9/packages/system/output.rc
+if(~ $action status) {
+  identity=-
+  selected=-
+  booted=-
+  session=-
+  if(~ $#nix9MachineId 1) {
+    identity=$nix9MachineId
+    if(test -f $nix9SystemRoot) selected=`{resolveOutput system $nix9SystemRoot}
+    if(test -f $nix9SystemRoot^-boot) booted=`{resolveOutput system $nix9SystemRoot^-boot}
+    if(! ~ $#selected 1 || ! ~ $#booted 1) exit $commandName^' failed'
+  }
+  if(~ $#nix9System 1) session=$nix9System
+  echo machine $identity
+  echo selected $selected
+  echo booted $booted
+  echo session $session
+  if(! ~ $selected -) {
+    reboot=no
+    refresh=no
+    if(! ~ $selected $booted) reboot=required
+    if(! ~ $selected $session) refresh=required
+    echo reboot $reboot
+    echo refresh $refresh
+  }
+  exit ''
+}
+if(~ $action init) {
+  machine=$2
+  if(! echo $machine | awk 'length($0)<=63 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ {ok=1} END {exit !ok}')
+    fail 'invalid machine identity'
+  if(! ~ $#nix9MachineId 0 && ! ~ $nix9MachineId $machine)
+    fail 'machine identity is already fixed:' $nix9MachineId
+  if(~ $#nix9machine 1 && ! ~ $machine $nix9machine)
+    fail 'machine identity differs from the boot setting:' $nix9machine
+  lock='#s/nix9-machine'
+  @{ status='' } > $lock || fail 'machine initialization is locked:' $lock
+  fn sigexit { result=$status; rm $lock; status=$result }
+  if(test -f /usr/local/nix/state/machine-id) {
+    if(! ~ `{cat /usr/local/nix/state/machine-id} $machine)
+      fail 'machine identity is already fixed:' `{cat /usr/local/nix/state/machine-id}
+  }
+  if not {
+    mkdir -p /usr/local/nix/state/gcroots/machines/$machine
+    echo $machine > /usr/local/nix/state/machine-id.new
+    mv /usr/local/nix/state/machine-id.new /usr/local/nix/state/machine-id
+  }
+  echo 'Machine identity:' $machine
+  exit ''
+}
+if(! ~ $#nix9MachineId 1) fail 'initialize this machine with nix9 init MACHINE first'
+root=$nix9SystemRoot
+candidate=$root^-candidate-^$pid
+lock='#s/nix9-system-'^$nix9MachineId
+@{ status='' } > $lock || fail 'system changes are locked; remove this file if interrupted:' $lock
+changing=0
+retained=0
+previous=()
+previousName=()
+fn sigexit {
+  result=$status
+  if(~ $changing 1) {
+    if(~ $#previous 1) nix-store --realise $previous --add-root $root > /dev/null
+    if not if(test -e $root) rm $root
+    echo -n $previousName > /dev/sysname
+  }
+  if(~ $retained 1 && test -f $candidate) rm $candidate
+  rm $lock
+  status=$result
+}
+switch($action) {
+case list
+  nix-profile $root list
+  exit ''
+case delete
+  if(test -r $root^-boot && test -r $root^.generations/$2) {
+    if(~ `{cat $root^-boot} `{cat $root^.generations/$2})
+      fail 'cannot delete the booted generation; reboot into the selected system first'
+  }
+  nix-profile $root delete $2
+  exit ''
+case build
+  nix-build $configuration --out-link $root^-build
+  exit ''
+case switch
+  retained=1
+  nix-build $configuration --out-link $candidate
+  target=`{cat $candidate}
+case rollback
+  target=`{nix-profile $root list | awk '
+    { paths[$1]=$NF; if($2 == "*") current=$1 }
+    END {
+      for(id in paths) if(id < current && id > previous) previous=id;
+      if(previous) print paths[previous]
+    }'}
+  if(! ~ $#target 1) fail 'no previous generation'
+}
+if(! ~ $#target 1) fail 'invalid system output'
+target=`{resolveOutput system $target}
+if(! ~ $#target 1) exit $commandName^' failed'
+nix-store --check-validity $target || fail 'system is not registered locally'
+if(! test -f $target/system) fail 'expected a built nix9 system'
+if(~ $retained 0) {
+  retained=1
+  nix-store --option substitute false --realise $target --add-root $candidate > /dev/null ||
+    fail 'cannot retain the local system'
+}
+# Querying and verifying opaque output paths must not realise missing dependencies.
+closure=`{nix-store --query --requisites $target && echo nix9-closure-ready}
+if(~ $#closure 0) fail 'cannot query system closure'
+if(! ~ $closure($#closure) nix9-closure-ready) fail 'cannot query system closure'
+for(item in $closure) {
+  if(! ~ $item nix9-closure-ready)
+    nix-store --verify-path $item || fail 'system closure verification failed:' $item
+}
+format=`{cat $target/system}
+if(! ~ $#format 1 || ! ~ $format nix9-system-2) fail 'unsupported system format'
+if(test -f $target/machine-id) {
+  identity=`{cat $target/machine-id}
+  if(! ~ $#identity 1 || ! ~ $identity $nix9MachineId) fail 'system belongs to another machine'
+}
+for(file in activate boot hostName environment services/ndb.rc services/webfs.rc services/reset.rc)
+  if(! test -f $target/$file) fail 'incomplete system:' $file
+if(test -f $target/services/cwfs/check)
+  /$cputype/bin/rc $target/services/cwfs/check || fail 'filesystem configuration check failed'
+if(test -f $target/directories)
+  /$cputype/bin/rc $target/directories check || fail 'directory configuration check failed'
+# Activation runs in a private namespace before any boot selection changes.
+@{ fn sigexit; nix9SystemCheck=1; . $target/activate } || fail 'activation check failed'
+if(test -f $target/services/listen-check)
+  /$cputype/bin/rc $target/services/listen-check || fail 'TCP service configuration check failed'
+if(test -f $target/services/access-check)
+  /$cputype/bin/rc $target/services/access-check --planned-directories || fail 'access configuration check failed'
+if(test -f $target/services/namespace-check)
+  /$cputype/bin/rc $target/services/namespace-check || fail 'namespace configuration check failed'
+if(test -f $target/logging) {
+  @{ fn sigexit; nix9LogCheck=1; . $target/logging } || fail 'log configuration check failed'
+}
+
+# Adopt local startup scripts once, and refuse to overwrite later manual edits.
+fn hookTemplate {
+  template=$nix9/packages/system/`{basename $1}
+  echo $template
+}
+for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
+  template=`{hookTemplate $hook}
+  if(! test -f $template) fail 'startup template is missing:' $hook
+  if(test -e $hook && ! test -f $hook) fail 'startup hook is not a file:' $hook
+  if(test -e $hook^.nix9-original) {
+    if(! test -f $hook^.nix9-original) fail 'startup backup is not a file:' $hook
+    if(! test -f $hook) fail 'startup hook was removed:' $hook
+    if(! cmp -s $hook $template) fail 'startup hook was edited:' $hook
+  }
+  if not if(test -f $hook && cmp -s $hook $template)
+    fail 'startup backup is missing:' $hook
+}
+if(test -e /usr/local/pkg/nix9/system) {
+  if(! cmp -s /usr/local/pkg/nix9/system $nix9/packages/system/session.rc)
+    fail 'system session activation was edited: /usr/local/pkg/nix9/system'
+}
+if(~ $action check) {
+  echo 'System check passed:' $target
+  exit ''
+}
+if(test -f $target/directories)
+  /$cputype/bin/rc $target/directories prepare || fail 'directory preparation failed'
+if(test -f $target/services/access-check)
+  /$cputype/bin/rc $target/services/access-check || fail 'access configuration check failed'
+if(test -f $target/logging) {
+  @{ fn sigexit; nix9LogCheck=(); . $target/logging } || fail 'log preparation failed'
+}
+for(hook in /rc/bin/termrc.local /rc/bin/cpurc.local /rc/lib/rcmain.local) {
+  if(! test -e $hook^.nix9-original) {
+    if(test -f $hook) mv $hook $hook^.nix9-original
+    if not {
+      echo '# No previous startup hook.' > $hook^.nix9-original
+      chmod 644 $hook^.nix9-original
+    }
+  }
+  if(! test -f $hook || ! cmp -s $hook `{hookTemplate $hook}) {
+    cp `{hookTemplate $hook} $hook
+    chmod u+w $hook
+  }
+}
+if(! test -f /usr/local/pkg/nix9/system || ! cmp -s /usr/local/pkg/nix9/system $nix9/packages/system/session.rc) {
+  cp $nix9/packages/system/session.rc /usr/local/pkg/nix9/system
+  chmod u+w /usr/local/pkg/nix9/system
+}
+if(test -r $root) previous=`{cat $root}
+previousName=`{cat /dev/sysname}
+changing=1
+echo -n `{cat $target/hostName} > /dev/sysname
+nix-profile $root set $target
+changing=0
+eventSystem=$target
+event=$action
+if(~ $action select) event=switch
+if(! test -f $eventSystem/log-event && ~ $#previous 1) eventSystem=$previous
+if(test -f $eventSystem/log-event)
+  if(! /$cputype/bin/rc $eventSystem/log-event $event $target)
+    echo $commandName^': system selected, but its event could not be recorded' >[1=2]
+echo 'Selected system:' $target
+echo 'Refresh this session with: . /usr/local/pkg/nix9/system'
+if(test -f $target/services/cwfs/start || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/cwfs/start })
+  echo 'Filesystem service and snapshot policy changes take effect after CPU-server reboot.'
+if(test -f $target/services/cron/start)
+  echo 'Schedule changes take effect within a minute; enabling the scheduler requires CPU-server reboot.'
+if(test -f $target/network || { test -r $root^-boot && test -f `{cat $root^-boot}^/network })
+  echo 'Network changes take effect after reboot.'
+if(test -f $target/services/timesync.rc || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/timesync.rc })
+  echo 'Clock synchronization changes take effect after reboot.'
+if(test -f $target/services/listen-boot.rc || { test -r $root^-boot && test -f `{cat $root^-boot}^/services/listen-boot.rc })
+  echo 'TCP service changes take effect after CPU-server reboot.'
+exit ''

@@ -23,7 +23,7 @@
   networking ? { },
   logging ? { },
   services ? { },
-  session,
+  programs,
   namespace ? {
     mounts = { };
     binds = [ ];
@@ -78,7 +78,7 @@ let
       ++ (if ndb == null then [ ] else [ ndb.package ])
       ++ (if access == null then [ ] else access.packages)
       ++ sharing.packages
-      ++ lib.optionals (graphical != null) graphical.packages
+      ++ graphical.packages
       ++ lib.optional (storage != null) storage.selected
       ++ lib.optional (backups != { }) archivePackage;
   };
@@ -86,9 +86,9 @@ let
     inherit lib hostName;
     configuration = networking;
   };
-  graphical = import ./session.nix {
-    inherit lib mkDerivation;
-    configuration = session;
+  graphical = import ./programs.nix {
+    inherit lib programs;
+    plumber = services.plumber;
     packages = graphicalPackages;
   };
   serviceConfiguration =
@@ -104,6 +104,7 @@ let
         cron,
         cwfs,
         backups,
+        plumber,
       }:
       {
         cron = import ./cron.nix {
@@ -262,17 +263,10 @@ else
           '') backups
         )}
         echo ${quote hostName} > $out/hostName
-        ${
-          if graphical == null then
-            ""
-          else
-            ''
-              ${write "session/start" graphical.start}
-              ${write "session/init" graphical.init}
-              ${write "session/plumbing" graphical.rules}
-              chmod 755 $out/session/init
-            ''
-        }
+        ${write "programs/profile" graphical.profile}
+        ${lib.optionalString programs.rio.enable (write "programs/rio/riostart" graphical.riostart)}
+        ${lib.optionalString programs.rio.enable "chmod 755 $out/programs/rio/riostart"}
+        ${lib.optionalString services.plumber.enable (write "services/plumber/plumbing" graphical.rules)}
         echo ${environment} > $out/environment
         ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}
         ${builtins.concatStringsSep "\n" (
