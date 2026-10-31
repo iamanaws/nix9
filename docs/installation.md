@@ -7,6 +7,9 @@ Native boot, accounts and keys remain provisioning prerequisites. The example
 declares its shared project directory. See [authentication](access.md) and
 [sharing](sharing.md).
 
+For CPUs using a shared OS root, [network-root boot](netroot.md) generates native
+boot settings and per-machine namespace files from the inventory.
+
 ## Try the example
 
 With native Nix active, copy the example into a writable directory:
@@ -49,6 +52,7 @@ like `mkSystem`. Its main settings are:
 | `machines.NAME.machineId` | Stable provisioned identity, default `NAME`. |
 | `machines.NAME.hostName` | Mutable hostname, default `NAME`. |
 | `machines.NAME.configuration` | Ordinary `mkSystem` module declaring packages, services and machine settings. |
+| `machines.NAME.boot` | Optional [network-root CPU](netroot.md) provider and root/state directories. |
 | `machines.NAME.deployment` | Optional CPU connection settings for [deployment](deployment.md). |
 | `defaults.auth`, `defaults.fs`, `defaults.cpu` | Discovery providers, referenced by inventory key. Each defaults to `null`. |
 | `defaults.authdom` | Public authentication domain, default `null`. |
@@ -90,13 +94,15 @@ controls runtime availability.
 | `discovery` | Generated `services.ndb` host records and discovery defaults. |
 | `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts, jobs and dependencies. |
 | `build` | An output containing `manifest.json`, `ndb`, deployment settings and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
+| `boot.NAME` | Native boot artifacts for each network-root CPU, also copied under `build/boot/NAME`. |
 
 Roles come from enabled authentication, CPU and export services. Manifest
 dependencies describe authentication and named mounts needed by sessions, plus
 remote CPU targets needed when jobs run.
 Discovery defaults for CPU and file servers are locations, not boot dependencies.
-Machines may mount each other's exports because their boot namespaces start
-independently of user sessions.
+Ordinary machines may mount each other's exports because their boot namespaces
+start independently of user sessions. Network-root CPUs add required `boot`
+dependencies on storage and authentication; those providers must boot independently.
 
 The flake exposes the constructor as `lib.mkInstallation` for callers supplying
 `lib`, `packages`, `mkDerivation` and `buildEnv`. The native package set binds

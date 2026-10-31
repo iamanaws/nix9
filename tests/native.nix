@@ -19,6 +19,21 @@
   vmTest,
 }:
 {
+  native-netroot-tests = vmTest "native-netroot-tests" {
+    nativeBuildInputs = [
+      pkgs.netcat-openbsd
+      pkgs.mtools
+    ];
+    script = ./native_netroot.py;
+    files = [
+      ./netroot.nix
+      ./netroot-project.nix
+      ./machine-newns.c
+      ./boot_medium.py
+    ];
+    env.NIX9_NETROOT_TEST_STATE = "netroot-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-graphical-tests = vmTest "native-graphical-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_graphical.py;

@@ -27,6 +27,7 @@ let
           backup-tests = import ./backup-host.nix { inherit pkgs nativePackageSet testSupport; };
           builder-tests = import ./builder-host.nix { inherit pkgs nativePackageSet testSupport; };
           graphical-tests = import ./graphical-host.nix { inherit pkgs nativePackageSet testSupport; };
+          netroot-tests = import ./netroot-host.nix { inherit pkgs nativePackageSet testSupport; };
         }
       )
       ./native.nix
@@ -59,4 +60,5 @@ in
   checks.backups = tests.backup-tests;
   checks.builders = tests.builder-tests;
   checks.graphical = tests.graphical-tests;
+  checks.netroot = tests.netroot-tests;
 }

@@ -34,6 +34,18 @@ let
     ) (lib.filterAttrs (_: job: job.scheduler == machine) jobs);
   targetJobs = machine: lib.filterAttrs (_: job: job.target == machine) jobs;
   names = builtins.attrNames machines;
+  bootNames = builtins.filter (name: machines.${name}.boot != null) names;
+  networkRoots = lib.genAttrs bootNames (
+    machineName:
+    import ./netroot.nix {
+      inherit lib mkDerivation;
+      machine = machines.${machineName};
+      provider = machines.${machines.${machineName}.boot.provider};
+      authentication = machines.${defaults.auth};
+      networking = configs.${machineName}.networking;
+    }
+  );
+  boot = builtins.mapAttrs (_: root: root.build) networkRoots;
   error = message: throw "mkInstallation: ${message}";
   unique = items: builtins.length items == builtins.length (lib.unique items);
   label =
@@ -232,9 +244,30 @@ let
         required = false;
       }) (builtins.attrNames machines.${consumer}.builders)
     ) names;
+  bootDependencies = lib.concatMap (
+    consumer:
+    map
+      (relationship: {
+        inherit consumer;
+        inherit (relationship) provider kind;
+        phase = "boot";
+        required = true;
+      })
+      [
+        {
+          provider = machines.${consumer}.boot.provider;
+          kind = "root";
+        }
+        {
+          provider = defaults.auth;
+          kind = "authentication";
+        }
+      ]
+  ) bootNames;
   manifest = {
     version = 1;
-    inherit name defaults dependencies;
+    inherit name defaults;
+    dependencies = dependencies ++ bootDependencies;
     jobs = lib.mapAttrs (jobName: job: {
       inherit (job)
         scheduler
@@ -250,6 +283,17 @@ let
       inherit (machine) hostName machineId ip;
       deployment = deployment.${machineName};
       builders = configs.${machineName}.nix.builders;
+      boot =
+        if machine.boot == null then
+          null
+        else
+          machine.boot
+          // {
+            files = toString boot.${machineName};
+            address = "tcp!${machines.${machine.boot.provider}.ip}!564";
+            auth = machines.${defaults.auth}.ip;
+            attach = "main";
+          };
       system = toString systems.${machineName};
       roles =
         (lib.optional (serves machineName "auth") "auth")
@@ -416,20 +460,86 @@ else if
   ) mounts
 then
   error "a mount refers to an unknown export or disabled filesystem provider"
+else if
+  !builtins.all (name: builtins.hasAttr machines.${name}.boot.provider machines) bootNames
+then
+  error "a boot root refers to an unknown provider"
+else if
+  !builtins.all (
+    name:
+    let
+      provider = machines.${name}.boot.provider;
+    in
+    provider != name
+    && configs.${provider}.services.cwfs.enable
+    && configs.${provider}.services.cwfs.port == 564
+    && machines.${provider}.boot == null
+  ) bootNames
+then
+  error "boot roots require an independently booted CWFS provider on port 564"
+else if bootNames != [ ] && (defaults.auth == null || machines.${defaults.auth}.boot != null) then
+  error "network-root boot requires an independently booted authentication default"
+else if !builtins.all (name: serves name "cpu") bootNames then
+  error "network-root machines must enable CPU access"
+else if
+  !builtins.all (
+    name:
+    let
+      network = configs.${name}.networking;
+      primary = network.interfaces.${network.primaryInterface} or null;
+    in
+    network.enable
+    && primary != null
+    && !primary.useDHCP
+    && primary.address == machines.${name}.ip
+    && primary.prefixLength != null
+  ) bootNames
+then
+  error "network-root boot requires a static primary interface matching the inventory IP"
+else if
+  !builtins.all (
+    name:
+    let
+      current = machines.${name}.boot;
+      overlaps = a: b: a == b || lib.hasPrefix (a + "/") b || lib.hasPrefix (b + "/") a;
+    in
+    builtins.all (
+      other:
+      let
+        peer = machines.${other}.boot;
+      in
+      current.provider != peer.provider
+      || (
+        !overlaps current.stateDirectory peer.rootDirectory
+        && (name == other || !overlaps current.stateDirectory peer.stateDirectory)
+      )
+    ) bootNames
+  ) bootNames
+then
+  error "network-root machine state must not overlap a root tree or another machine's state"
 else
   builtins.deepSeq [ ndb deployment ] (
     builtins.deepSeq (map (machineName: systems.${machineName}.drvPath) names) {
-      inherit systems discovery manifest;
+      inherit
+        systems
+        discovery
+        manifest
+        boot
+        ;
       build = mkDerivation {
         name = "nix9-installation-${name}";
         buildCommand = ''
-          mkdir -p $out/systems
+          mkdir -p $out/systems $out/boot
           echo -n ${quote (builtins.toJSON manifest + "\n")} > $out/manifest.json
           echo -n ${quote ndb.database} > $out/ndb
           echo -n ${quote deploymentScript} > $out/deployment.rc
           ${lib.concatMapStringsSep "\n" (machineName: ''
             echo ${quote (toString systems.${machineName})} > $out/systems/${machineName}
           '') names}
+          ${lib.concatMapStringsSep "\n" (machineName: ''
+            mkdir -p $out/boot/${machineName}
+            cp ${boot.${machineName}}/* $out/boot/${machineName}/
+          '') bootNames}
         '';
       };
     }

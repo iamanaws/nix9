@@ -73,7 +73,8 @@ in
       description = "Machines, their advertised addresses and system modules.";
       type = types.attrsOf (
         types.submodule (
-          { name, ... }: {
+          { name, ... }@machineModule:
+          {
             options = {
               machineId = mkOption {
                 type = label;
@@ -88,6 +89,30 @@ in
               ip = mkOption {
                 type = types.str;
                 description = "IPv4 address advertised in NDB; native networking must make it reachable.";
+              };
+              boot = mkOption {
+                default = null;
+                description = "Network-root CPU boot; null keeps native boot provisioning.";
+                type = types.nullOr (
+                  types.submodule {
+                    options = {
+                      provider = mkOption {
+                        type = label;
+                        description = "Independently booted CWFS provider serving the root tree.";
+                      };
+                      rootDirectory = mkOption {
+                        type = runtimeFile;
+                        default = "/systems/9front";
+                        description = "Provisioned 9front root tree within the provider's main filesystem.";
+                      };
+                      stateDirectory = mkOption {
+                        type = runtimeFile;
+                        default = "/machines/${machineModule.config.machineId}";
+                        description = "Separate persistent machine tree within the provider's main filesystem.";
+                      };
+                    };
+                  }
+                );
               };
               configuration = mkOption {
                 type = types.deferredModule;

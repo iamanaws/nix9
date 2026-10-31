@@ -1,0 +1,82 @@
+{
+  pkgs ? import <nix9>,
+}:
+let
+  base = import <nix9/examples/netroot/configuration.nix>;
+  make =
+    extra:
+    pkgs.mkInstallation {
+      imports = [
+        base
+        ({ lib, ... }: {
+          machines.batch = {
+            ip = "10.0.2.103";
+            boot.provider = "files";
+            configuration = {
+              imports = [ base.machines.build.configuration ];
+              networking.interfaces.ether0.address = lib.mkForce "10.0.2.103";
+              services.cpu.keyPattern = lib.mkForce "dom=nix9.netroot user=batch";
+            };
+          };
+          machines.build.configuration.files.version = "one\n";
+          machines.build.configuration.services.listen = {
+            enable = true;
+            tcp."17024" =
+              "echo $user; test ! -r /adm/cpu.keys && echo keys-protected; cat /cfg/nix9/files/version\n";
+          };
+          machines.batch.configuration.files.version = "batch\n";
+          machines.auth.configuration.services.ndb.dns.enable = false;
+          machines.auth.configuration.services.auth.speaksFor.batch = [ "glenda" ];
+          machines.files.configuration.services.ndb.dns.enable = false;
+          machines.build.configuration.services.ndb.dns.enable = false;
+          machines.batch.configuration.services.ndb.dns.enable = false;
+        })
+        extra
+      ];
+    };
+  first = make { };
+in
+{
+  inherit first;
+  second = make (
+    { lib, ... }: {
+      machines.build.configuration.files.version = lib.mkForce "two\n";
+      machines.build.hostName = "worker";
+    }
+  );
+  renamed = make {
+    machines.build.machineId = "builder-id";
+    machines.build.hostName = "worker";
+  };
+  invalid = {
+    unknownProvider = make { machines.build.boot.provider = "missing"; };
+    selfProvider = make { machines.build.boot.provider = "build"; };
+    disabledProvider = make (
+      { lib, ... }: { machines.files.configuration.services.cwfs = lib.mkForce { enable = false; }; }
+    );
+    wrongPort = make { machines.files.configuration.services.cwfs.port = 565; };
+    missingAuth = make ({ lib, ... }: { defaults.auth = lib.mkForce null; });
+    bootedAuth = make { machines.auth.boot.provider = "files"; };
+    bootedProvider = make { machines.files.boot.provider = "auth"; };
+    noCpu = make (
+      { lib, ... }: { machines.build.configuration.services.cpu = lib.mkForce { enable = false; }; }
+    );
+    dhcp = make (
+      { lib, ... }: {
+        machines.build.configuration.networking.interfaces.ether0 = lib.mkForce { useDHCP = true; };
+      }
+    );
+    addressMismatch = make (
+      { lib, ... }: {
+        machines.build.configuration.networking.interfaces.ether0.address = lib.mkForce "10.0.2.104";
+      }
+    );
+    relativeRoot = make { machines.build.boot.rootDirectory = "root"; };
+    traversalRoot = make { machines.build.boot.rootDirectory = "/systems/../root"; };
+    storeRoot = make { machines.build.boot.rootDirectory = "${pkgs.rc}/root"; };
+    rootState = make { machines.build.boot.stateDirectory = "/systems/9front/state"; };
+    sharedState = make { machines.batch.boot.stateDirectory = "/machines/build"; };
+    nestedState = make { machines.batch.boot.stateDirectory = "/machines/build/batch"; };
+    unknownOption = make { machines.build.boot.reboot = true; };
+  };
+}

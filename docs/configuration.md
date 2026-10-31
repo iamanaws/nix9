@@ -99,7 +99,9 @@ Plain Nix builds and package environments do not require a machine identity.
 Set `machineId = "cpu1";` in a configuration to reject selection on another
 machine. Configurations without this guard can be selected on any initialized machine.
 
-For shared roots, keep writable Nix data on a machine-local filesystem. Set
+For shared roots, give each machine its own writable Nix data. The
+[network-root inventory](netroot.md) prepares separate persistent directories on
+CWFS. For a manually composed namespace, set
 `nix9local` to a kernel service name whose root contains `store`, `state` and
 `log`. Native startup must post that service before Nix activation. The loader
 mounts it before selecting Nix itself and restores those bindings after `newns`.

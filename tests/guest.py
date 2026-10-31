@@ -56,7 +56,7 @@ class SerialLog:
 def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
          memory="2G", prompt=r"(?m)^term% ", configure_network=True, cpu=False,
          forward_ports=(), guest_forwards=(), network_options=(), extra_nics=(), network_backend="user",
-         qemu_options=()):
+         qemu_options=(), boot_prompt=True):
     network = network_backend
     for option in network_options:
         network += "," + option
@@ -87,8 +87,9 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
     )
     child.logfile_read = SerialLog()
     try:
-        child.expect("bootargs is")
-        child.sendline("")
+        if boot_prompt:
+            child.expect("bootargs is")
+            child.sendline("")
         if not cpu:
             child.expect(r"user\[[^\]]*\]:")
             child.sendline("")
