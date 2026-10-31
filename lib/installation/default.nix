@@ -79,6 +79,12 @@ let
       attach = if mount.fileSystem == null then "" else mount.fileSystem;
     }) machine.mounts
   ) machines;
+  builderConfigurations = lib.mapAttrs (
+    _: machine:
+    lib.mapAttrs (
+      provider: builder: builder // { host = machines.${provider}.hostName; }
+    ) machine.builders
+  ) machines;
   configs = lib.mapAttrs (
     machineName: machine:
     (import ../system/eval.nix
@@ -91,6 +97,7 @@ let
         inherit (machine) hostName machineId;
         services.ndb = discovery;
         namespace.mounts = mountConfigurations.${machineName};
+        nix.builders = builderConfigurations.${machineName};
         services.cron = lib.mkIf (scheduledJobs machineName != { }) {
           enable = true;
           jobs = scheduledJobs machineName;
@@ -105,6 +112,13 @@ let
           }) (targetJobs machineName)
         );
         assertions = [
+          {
+            assertion = builtins.all (
+              provider:
+              configs.${machineName}.nix.builders.${provider} == builderConfigurations.${machineName}.${provider}
+            ) (builtins.attrNames machine.builders);
+            message = "installation inventory owns named builders for ${machineName}";
+          }
           {
             assertion = builtins.all (
               name: configs.${machineName}.services.cron.jobs.${name} == (scheduledJobs machineName).${name}
@@ -168,14 +182,19 @@ let
       let
         clientMounts = builtins.attrValues configs.${consumer}.namespace.mounts;
         servesUsers = serves consumer "cpu" || serves consumer "fs";
+        hasBuilders = configs.${consumer}.nix.builders != { };
       in
       lib.optional
-        (defaults.auth != null && defaults.auth != consumer && (servesUsers || clientMounts != [ ]))
+        (
+          defaults.auth != null
+          && defaults.auth != consumer
+          && (servesUsers || clientMounts != [ ] || hasBuilders)
+        )
         {
           inherit consumer;
           provider = defaults.auth;
           kind = "authentication";
-          phase = "session";
+          phase = if servesUsers || clientMounts != [ ] then "session" else "build";
           required = servesUsers || builtins.any (mount: mount.required) clientMounts;
         }
     ) names)
@@ -203,7 +222,16 @@ let
       phase = "run";
       required = true;
       job = jobName;
-    }) (lib.filterAttrs (_: job: job.scheduler != job.target) jobs);
+    }) (lib.filterAttrs (_: job: job.scheduler != job.target) jobs)
+    ++ lib.concatMap (
+      consumer:
+      map (provider: {
+        inherit consumer provider;
+        kind = "builder";
+        phase = "build";
+        required = false;
+      }) (builtins.attrNames machines.${consumer}.builders)
+    ) names;
   manifest = {
     version = 1;
     inherit name defaults dependencies;
@@ -221,6 +249,7 @@ let
     machines = lib.mapAttrs (machineName: machine: {
       inherit (machine) hostName machineId ip;
       deployment = deployment.${machineName};
+      builders = configs.${machineName}.nix.builders;
       system = toString systems.${machineName};
       roles =
         (lib.optional (serves machineName "auth") "auth")
@@ -331,6 +360,27 @@ then
   error "deployment user must be allowed by the machine's CPU service"
 else if !builtins.all (provider: builtins.hasAttr provider machines) providerNames then
   error "discovery defaults refer to an unknown machine"
+else if
+  !builtins.all (
+    machine:
+    builtins.all (provider: builtins.hasAttr provider machines) (builtins.attrNames machine.builders)
+  ) (builtins.attrValues machines)
+then
+  error "a builder refers to an unknown machine"
+else if
+  !builtins.all (
+    machine:
+    builtins.all (
+      provider:
+      serves provider "cpu"
+      && (
+        machine.builders.${provider}.user == null
+        || builtins.elem machine.builders.${provider}.user configs.${provider}.services.cpu.allowedUsers
+      )
+    ) (builtins.attrNames machine.builders)
+  ) (builtins.attrValues machines)
+then
+  error "builders require CPU access for their user"
 else if !builtins.all label (builtins.attrNames jobs) then
   error "job names must be lowercase labels of at most 63 characters"
 else if

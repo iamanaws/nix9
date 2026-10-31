@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 from guest import files_guest
-from nix_store import check_nix_store
+from nix_store import check_nix_store, serve_fixtures
 from nix_eval import eval_fixtures, check_nix_eval
 from nix_build import build_fixtures, check_nix_build
 from nix_build_cli import build_cli_fixtures, check_nix_build_cli
@@ -55,6 +55,7 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run([sys.executable, elf2aout, source, str(target)], check=True)
         files[name] = target
     files.update(key_fixtures(root))
+    files.update(serve_fixtures(root))
     files.update(eval_fixtures(root))
     files.update(concurrency_fixtures())
     files.update(build_cli_fixtures())

@@ -83,6 +83,8 @@ int main(int argc, char ** argv)
 #else
         nix::RegisterLegacyCommand::commands().at("nix-instantiate")(argc, argv);
 #endif
+#elif defined(NIX_BUILD_REMOTE)
+        nix::RegisterLegacyCommand::commands().at("build-remote")(argc, argv);
 #else
         nix::RegisterLegacyCommand::commands().at("nix-store")(argc, argv);
 #endif

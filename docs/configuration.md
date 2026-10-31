@@ -34,6 +34,7 @@ flakes or network access.
 
 Use [an installation inventory](installation.md) to describe several machines,
 generate their discovery records and connect session mounts to declared exports.
+It can also select [remote Nix builders](builders.md) by CPU machine name.
 
 ## Generations
 
@@ -73,6 +74,7 @@ Selection and rollback apply settings at different times:
 | --- | --- |
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
+| Nix builders and build settings | Next Nix invocation after login or session refresh. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |

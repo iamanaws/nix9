@@ -29,6 +29,7 @@ let
     "examples/network-server" = ../../examples/network-server;
     "examples/storage" = ../../examples/storage;
     "examples/backup" = ../../examples/backup;
+    "examples/builders" = ../../examples/builders;
   }
   // (lib.optionalAttrs (goBootstrap != null) {
     "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";

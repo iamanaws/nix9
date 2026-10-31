@@ -19,6 +19,17 @@
   vmTest,
 }:
 {
+  native-builder-tests = vmTest "native-builder-tests" {
+    nativeBuildInputs = [ pkgs.netcat-openbsd ];
+    script = ./native_builders.py;
+    files = [
+      ./builders.nix
+      ./remote-project.nix
+      ./remote-delay.c
+    ];
+    env.NIX9_BUILDER_TEST_STATE = "builder-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-backup-tests = vmTest "native-backup-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_storage.py;

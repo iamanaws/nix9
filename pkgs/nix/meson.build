@@ -7,12 +7,19 @@ foreach part : ['util', 'store', 'fetchers', 'expr', 'main']
 endforeach
 command_deps = [nix_libraries['main']]
 
-foreach command : ['store', 'instantiate', 'build']
-  sources = ['main.cc', 'src/nix/nix-' + command + '/nix-' + command + '.cc']
+foreach command : ['store', 'instantiate', 'build', 'build-remote']
+  sources = ['main.cc']
+  if command == 'build-remote'
+    sources += ['src/nix/build-remote/build-remote.cc']
+  else
+    sources += ['src/nix/nix-' + command + '/nix-' + command + '.cc']
+  endif
   args = []
   libraries = ['util', 'store', 'main']
   if command == 'store'
     sources += ['src/nix/nix-store/dotgraph.cc', 'src/nix/nix-store/graphml.cc']
+  elif command == 'build-remote'
+    args += '-DNIX_BUILD_REMOTE'
   else
     sources += ['src/libcmd/common-eval-args.cc']
     if command == 'build'

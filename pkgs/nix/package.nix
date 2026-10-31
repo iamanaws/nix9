@@ -13,7 +13,7 @@ runCommand "nix-${nixUtil.version}-9front"
   }
   ''
     mkdir -p "$out/bin"
-    for command in nix-store nix-instantiate nix-build; do
+    for command in nix-store nix-instantiate nix-build nix-build-remote; do
       # Keep symbols in nix-util's ELF files, outside the installed guest package.
       ${llvmPackages.llvm}/bin/llvm-strip --strip-all -o "$command.elf" ${nixUtil}/$command.elf
       ${python3}/bin/python ${nixUtil.cc9.elf2aout} "$command.elf" "$out/bin/$command"

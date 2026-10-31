@@ -10,7 +10,10 @@ let
     };
 in
 {
-  imports = [ ./modules/directories.nix ];
+  imports = [
+    ./modules/directories.nix
+    ./modules/builders.nix
+  ];
   config.logging = lib.mkMerge [
     (lib.mkIf config.services.cron.enable {
       enable = lib.mkDefault true;

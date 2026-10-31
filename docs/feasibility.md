@@ -9,7 +9,7 @@ using [cc9](../pkgs/cc9). Native C and Go development work inside 9front.
 
 | Area | Constraints |
 | --- | --- |
-| Builds | Upstream Nix scheduling with a 9front process backend. Input-addressed and flat or recursive fixed outputs work. No full sandbox or diverted store; undeclared host files remain accessible. |
+| Builds | Upstream Nix scheduling with a 9front process backend and authenticated [remote CPU builders](builders.md). Input-addressed and flat or recursive fixed outputs work. Remote slots are counted on each submitting machine. No full sandbox or diverted store; undeclared host files remain accessible. |
 | Evaluator | Upstream no-GC mode for short runs. The modern `nix` CLI, flakes and `builtins.fetchGit` are unported. |
 | C++ and ABI | cc9 uses the SysV ABI, requiring separate dependencies from Plan 9 and APE archives. The build omits libarchive disk APIs. Coroutine stacks and libsodium allocations lack guard pages. |
 | Filesystem | NARs preserve links and unsupported names, but extraction rejects them before writing. Native symlink resolution is missing. |

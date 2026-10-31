@@ -3,6 +3,25 @@
 import hashlib
 import re
 import subprocess
+import struct
+
+
+def serve_fixtures(root):
+    def words(*values):
+        return b"".join(struct.pack("<Q", value) for value in values)
+    greeting = words(0x390C9DEB, 0x207)
+    files = {}
+    for name, data in {
+        "query": greeting + words(1, 0, 0, 0),
+        "reply": words(0x5452EECB, 0x207, 0),
+        "readonly": greeting + words(4),
+        "bad-magic": words(0, 0x207),
+        "truncated": greeting[:8],
+    }.items():
+        path = root / ("serve-" + name)
+        path.write_bytes(data)
+        files[path.name] = path
+    return files
 
 
 def check_nix_store(guest, fixtures):
@@ -49,12 +68,19 @@ def check_nix_store(guest, fixtures):
         ("--query --bogus", "unknown flag"),
         ("--add /tmp/missing-cli-input", "does not exist"),
         ("--query --hash /nix/store/00000000000000000000000000000000-missing", "not valid"),
-        ("--serve", "not supported"),
         ("--log-format bar --init", "not supported"),
     ):
         output = guest.command(f"{cli} {args}; echo CLI-STATUS:$status")
         if not re.search(r"(?m)^CLI-STATUS:.*cc9exit=1$", output) or message not in output:
             raise RuntimeError(f"expected CLI failure ({message}): {args}\n{output}")
+
+    guest.command(f"{cli} --serve < /tmp/serve-query > /tmp/serve.out")
+    guest.command("cmp /tmp/serve.out /tmp/serve-reply")
+    for fixture, message in (("readonly", "importing paths is not allowed"),
+                             ("bad-magic", "protocol mismatch"), ("truncated", "end-of-file")):
+        result = guest.command(f"{cli} --serve < /tmp/serve-{fixture} > /tmp/serve.out; echo CLI-STATUS:$status")
+        if not re.search(r"(?m)^CLI-STATUS:.*cc9exit=1$", result) or message not in result:
+            raise RuntimeError(f"invalid serve request was accepted: {fixture}: {result}")
 
     guest.command("ls /tmp/nix9-cli/nix/var/nix/temproots > /tmp/roots && test ! -s /tmp/roots")
     guest.command(f"{cli} --check-validity {' '.join(paths)}")
@@ -77,4 +103,4 @@ def check_nix_store(guest, fixtures):
         raise RuntimeError(f"verification left a missing path registered: {output}")
     guest.command(f"{cli} --verify-path {paths[1]}")
     return ["version without store", "add", "query", "host store paths", "NAR round-trip", "reopen",
-            "environment", "stdin", "error status", "temporary-root cleanup", "whole-store verification"]
+            "environment", "stdin", "error status", "temporary-root cleanup", "whole-store verification", "serve protocol"]

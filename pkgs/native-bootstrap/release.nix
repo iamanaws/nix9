@@ -38,6 +38,7 @@ pkgs.stdenv.mkDerivation {
         "nix-store"
         "nix-instantiate"
         "nix-build"
+        "nix-build-remote"
         "nix-shell"
         "nix-profile"
         "nix9-rebuild"
@@ -49,5 +50,6 @@ pkgs.stdenv.mkDerivation {
     cat $out/activate.rc >> $out/activate
     echo 'substituters = file://'$out'/cache?store=/usr/local/nix/store' > $out/nix.conf
     echo 'trusted-public-keys = '^`{cat $out/cache.pub} >> $out/nix.conf
+    echo '!include /cfg/nix9/files/nix.conf' >> $out/nix.conf
   '';
 }

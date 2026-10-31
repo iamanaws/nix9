@@ -20,14 +20,28 @@ fn nix9KeepPath {
 		if not if(! ~ $directory $nix9/bin) echo $directory
 	}
 }
+fn nix9MakePATH {
+	@{
+		rfork e
+		ifs=: { nix9PathParts=`{echo -n $1} }
+		if(~ $#nix9PathParts 0) nix9PathParts=/bin
+		echo -n $nix9Next/bin
+		for(nix9Directory in `{nix9KeepPath $nix9PathParts}) echo -n :^$nix9Directory
+		echo
+	}
+}
 nix9Path=`{nix9KeepPath $path}
-if(! ~ $#nix9EnvironmentActive 0)
+if(! ~ $#nix9EnvironmentActive 0) {
 	nix9BasePath=($nix9Next/bin `{nix9KeepPath $nix9BasePath})
+	nix9BasePATH=`{nix9MakePATH $nix9BasePATH}
+}
 path=($nix9Next/bin $nix9Path)
+PATH=`{nix9MakePATH $PATH}
 nix9=$nix9Next
 nix9Next=()
 nix9Path=()
 fn nix9KeepPath
+fn nix9MakePATH
 NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'
 NIX_PATH='nix9='^$nix9/packages
 NIX_CONF_DIR=$nix9

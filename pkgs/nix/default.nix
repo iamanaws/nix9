@@ -59,5 +59,5 @@ runCommand "nix-${version}"
       --wrap-mode=nofallback -Dbuildtype=plain -Doptimization=2
     ninja -C build -j "$NIX_BUILD_CORES"
     mkdir -p "$out"
-    cp build/nix-{store,instantiate,build}.elf "$out/"
+    cp build/nix-{store,instantiate,build,build-remote}.elf "$out/"
   ''

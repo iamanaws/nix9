@@ -94,6 +94,21 @@ in
                 default = { };
                 description = "Ordinary mkSystem module for this machine.";
               };
+              builders = mkOption {
+                default = { };
+                description = "Remote Nix builders indexed by CPU machine inventory key.";
+                type = types.attrsOf (
+                  types.submodule {
+                    options = (import ../system/modules/builder.nix { inherit lib; }) // {
+                      keyPattern = mkOption {
+                        type = publicKeyPattern;
+                        default = if config.defaults.authdom == null then "" else "dom=${config.defaults.authdom}";
+                        description = "Public factotum attributes for build connections.";
+                      };
+                    };
+                  }
+                );
+              };
               deployment = {
                 host = mkOption {
                   type = types.nullOr (types.strMatching "[a-zA-Z0-9][a-zA-Z0-9_.-]*");

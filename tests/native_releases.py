@@ -24,7 +24,10 @@ def selected(guest, release, version, previous=None):
     guest.command("nix-instantiate --eval --expr '(import <nix9>).releaseTest or \"one\"'", f'"{version}"')
     guest.command("whatis nix-instantiate", release + "/bin/nix-instantiate")
     guest.command("whatis webfs", release + "/bin/webfs")
-    if previous and previous + "/bin" in guest.command("echo $path"):
+    upper_path = guest.command("echo $PATH")
+    if not re.search(r"(?m)(?:^|:)" + re.escape(release + "/bin") + r"(?=:|$)", upper_path):
+        raise RuntimeError("selected release is absent from PATH")
+    if previous and (previous + "/bin" in guest.command("echo $path") or previous + "/bin" in upper_path):
         raise RuntimeError("previous release remains in the command path")
 
 

@@ -89,6 +89,7 @@ with tempfile.TemporaryDirectory() as directory:
             (payload / "nix.conf").write_text(
                 f"substituters = file://{prefix}/cache?store=/usr/local/nix/store\n"
                 f"trusted-public-keys = {key}\n"
+                "!include /cfg/nix9/files/nix.conf\n"
             )
             archive(work / "bootstrap.tar")
             shutil.copyfile(work / "bootstrap.tar", output)

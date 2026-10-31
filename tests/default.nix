@@ -25,6 +25,7 @@ let
           network-tests = import ./network-host.nix { inherit pkgs nativePackageSet testSupport; };
           storage-tests = import ./storage-host.nix { inherit pkgs nativePackageSet testSupport; };
           backup-tests = import ./backup-host.nix { inherit pkgs nativePackageSet testSupport; };
+          builder-tests = import ./builder-host.nix { inherit pkgs nativePackageSet testSupport; };
         }
       )
       ./native.nix
@@ -55,4 +56,5 @@ in
   checks.networking = tests.network-tests;
   checks.storage = tests.storage-tests;
   checks.backups = tests.backup-tests;
+  checks.builders = tests.builder-tests;
 }
