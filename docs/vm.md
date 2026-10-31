@@ -3,6 +3,8 @@
 The flake pins a 9front image from
 [9front-in-a-box](https://github.com/majiru/9front-in-a-box).
 The launcher uses two CPUs, 2 GiB RAM and a serial console.
+Use `nix run .#run-vm -- --graphics` for a graphical display too; see
+[graphical sessions](workstation.md) for guest setup.
 
 Follow the [README quick start](../README.md#quick-start) to install native Nix.
 

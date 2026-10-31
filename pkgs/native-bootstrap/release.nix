@@ -43,6 +43,7 @@ pkgs.stdenv.mkDerivation {
         "nix-profile"
         "nix9-rebuild"
         "nix9-deploy"
+        "nix9-session"
         "webfs"
       ]
     )}

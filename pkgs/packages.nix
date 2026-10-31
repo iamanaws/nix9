@@ -51,6 +51,14 @@ in
   libc = package ./libc { src = sources.apeSource + "/sys/src/libc"; };
   mpc = package ./mpc { src = sources.secSource; };
   libthread = package ./libthread { src = sources.ramfsSource + "/sys/src/libthread"; };
+  libdraw = package ./libdraw { src = sources.graphicalSource + "/sys/src/libdraw"; };
+  libframe = package ./libframe { src = sources.graphicalSource + "/sys/src/libframe"; };
+  libplumb = package ./libplumb { src = sources.graphicalSource + "/sys/src/libplumb"; };
+  libcomplete = package ./libcomplete { src = sources.graphicalSource + "/sys/src/libcomplete"; };
+  fonts = package ./fonts { src = sources.graphicalSource + "/lib/font/bit/dejavu"; };
+  rio = package ./rio { src = sources.graphicalSource; };
+  plumber = package ./plumber { src = sources.graphicalSource; };
+  acme = package ./acme { src = sources.graphicalSource; };
   clone = package ./clone { upstream = import ./clone/source.nix; };
   libmp = package ./libmp { src = sources.secSource; };
   libsec = package ./libsec { src = sources.secSource; };

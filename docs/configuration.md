@@ -75,6 +75,7 @@ Selection and rollback apply settings at different times:
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
 | Nix builders and build settings | Next Nix invocation after login or session refresh. |
+| Rio, Acme and plumbing settings | Next `nix9-session` invocation. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |
@@ -147,6 +148,7 @@ optional.
 
 Use [session bindings](namespaces.md) to compose local directories, package
 outputs and shares into ordered filesystem views.
+For Rio, Acme and plumbing startup, see [graphical sessions](workstation.md).
 
 ## Persistent directories
 

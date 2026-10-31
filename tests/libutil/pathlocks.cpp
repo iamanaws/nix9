@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
+extern "C" long n9_create(const char *, int, unsigned long);
+
 static void require(bool condition, const char *what) {
     if (!condition) throw std::runtime_error(what);
 }
@@ -32,6 +34,12 @@ int pathLockChild(std::string_view mode) {
         nix::writeFull(1, "a");
         return 0;
     }
+    if (mode == "lock-gate-wait") {
+        nix::writeFull(1, "r");
+        require(lock.lockPaths({path}, "", false), "creation gate was mistaken for path contention");
+        nix::writeFull(1, "a");
+        return 0;
+    }
     return 2;
 }
 
@@ -55,6 +63,29 @@ void checkPathLocks(const char *executable) {
         require(!available(), "constructor did not lock");
     }
     require(available(), "destructor did not release lock");
+
+    // An unrelated creator can briefly hold the global gate while our target
+    // remains free. A nonblocking request must still check the target itself.
+    AutoCloseFD gate(n9_create("#s/nix9-lock-create", 1 | 32 | 64 | 0x1000, 0600));
+    require(static_cast<bool>(gate), "cannot hold creation gate");
+    Pipe gatedOutput;
+    gatedOutput.create();
+    Pid gated = startProcess([&] {
+        gatedOutput.readSide.close();
+        require(::dup2(gatedOutput.writeSide.get(), 1) == 1, "redirecting gated waiter failed");
+        execChild(executable, "lock-gate-wait");
+    });
+    gatedOutput.writeSide.close();
+    char gatedByte;
+    readFull(gatedOutput.readSide.get(), &gatedByte, 1);
+    require(gatedByte == 'r', "gated waiter did not start");
+    ::usleep(250000);
+    int gatedStatus;
+    require(::waitpid(static_cast<pid_t>(gated), &gatedStatus, WNOHANG) == 0,
+            "nonblocking request rejected a busy creation gate");
+    gate.close();
+    readFull(gatedOutput.readSide.get(), &gatedByte, 1);
+    require(gatedByte == 'a' && statusOk(gated.wait()), "gated waiter did not acquire free path");
 
     // A failed multi-path acquisition must release earlier paths, including
     // when a constructor throws before its destructor can run.

@@ -19,6 +19,13 @@
   vmTest,
 }:
 {
+  native-graphical-tests = vmTest "native-graphical-tests" {
+    nativeBuildInputs = [ pkgs.netcat-openbsd ];
+    script = ./native_graphical.py;
+    files = [ ./graphical.nix ];
+    env.NIX9_GRAPHICAL_TEST_STATE = "graphical-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-builder-tests = vmTest "native-builder-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_builders.py;

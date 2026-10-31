@@ -24,6 +24,7 @@ def selected(guest, release, version, previous=None):
     guest.command("nix-instantiate --eval --expr '(import <nix9>).releaseTest or \"one\"'", f'"{version}"')
     guest.command("whatis nix-instantiate", release + "/bin/nix-instantiate")
     guest.command("whatis webfs", release + "/bin/webfs")
+    guest.command("whatis nix9-session", release + "/bin/nix9-session")
     upper_path = guest.command("echo $PATH")
     if not re.search(r"(?m)(?:^|:)" + re.escape(release + "/bin") + r"(?=:|$)", upper_path):
         raise RuntimeError("selected release is absent from PATH")
@@ -39,7 +40,7 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2",
                     "-F", "qcow2", "-b", str(Path(image).resolve()), str(disk)], check=True)
     fixtures = {"bootstrap.tar": archive, "releases.nix": Path(__file__).with_name("releases.nix")}
-    with files_guest(qemu, disk, fixtures, snapshot=False) as guest:
+    with files_guest(qemu, disk, fixtures, snapshot=False, compress=True, transfer_timeout=900) as guest:
         guest.child.timeout = 600
         guest.command("cd / && tar xf /tmp/bootstrap.tar")
         guest.command(". /usr/local/pkg/nix9/activate; bootstrap=$nix9")

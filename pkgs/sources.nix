@@ -101,6 +101,13 @@ in
   storageSource = selectSource "9front-storage-source" {
     paths = "sys/src/cmd/cwfs sys/src/libdisk sys/src/cmd/disk/mkfs.c sys/src/cmd/disk/mkext.c";
   };
+  graphicalSource = selectSource "9front-graphical-source" {
+    paths =
+      "sys/src/libdraw sys/src/libframe sys/src/libplumb sys/src/libcomplete "
+      + "sys/src/cmd/rio sys/src/cmd/plumb sys/src/cmd/acme "
+      + "rc/bin/window rc/bin/label rc/bin/wloc acme/bin/win acme/bin/source/win "
+      + "lib/font/bit/dejavu sys/lib/plumb/fileaddr";
+  };
   machSource = selectSource "9front-libmach-source" {
     paths = ''
       sys/src/libmach \

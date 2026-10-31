@@ -20,6 +20,14 @@ let
     cwfsPackage = packages.cwfs;
     archivePackage = packages.diskArchive;
     dialPackage = packages.dial;
+    graphicalPackages = {
+      inherit (packages)
+        rio
+        plumber
+        acme
+        rc
+        ;
+    };
   };
 in
 if failures != [ ] then

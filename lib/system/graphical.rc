@@ -1,0 +1,17 @@
+#!/bin/rc
+# Start a graphical session from the selected machine generation.
+rfork ne
+if(! ~ $#* 0) {
+  echo 'usage: nix9-session' >[1=2]
+  exit usage
+}
+if(! ~ $#nix9GraphicalSession 0) {
+  echo 'nix9-session: a managed session is already running; exit Rio before starting another' >[1=2]
+  exit 'session already running'
+}
+. /usr/local/pkg/nix9/system || exit 'cannot activate system'
+if(~ $#nix9System 0 || ! test -r $nix9System/session/start) {
+  echo 'nix9-session: enable session.enable in the machine configuration' >[1=2]
+  exit 'session disabled'
+}
+exec /$cputype/bin/rc $nix9System/session/start

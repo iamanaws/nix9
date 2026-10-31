@@ -23,6 +23,7 @@ let
     "bin/nix-profile" = ../../lib/nix-profile.rc;
     "bin/nix9-rebuild" = ../../lib/system/rebuild.rc;
     "bin/nix9-deploy" = ../../lib/installation/deploy.rc;
+    "bin/nix9-session" = ../../lib/system/graphical.rc;
     "system" = ../../lib/system;
     "installation" = ../../lib/installation;
     "examples/installation" = ../../examples/installation;
@@ -30,6 +31,7 @@ let
     "examples/storage" = ../../examples/storage;
     "examples/backup" = ../../examples/backup;
     "examples/builders" = ../../examples/builders;
+    "examples/workstation" = ../../examples/workstation;
   }
   // (lib.optionalAttrs (goBootstrap != null) {
     "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";
@@ -59,5 +61,5 @@ runCommand "native-packages" { } ''
     "mk-shell.nix"
     "build-env.nix"
   ]}
-  chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild" "$out/bin/nix9-deploy"
+  chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild" "$out/bin/nix9-deploy" "$out/bin/nix9-session"
 ''

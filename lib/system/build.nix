@@ -11,6 +11,7 @@
   cwfsPackage,
   archivePackage,
   dialPackage,
+  graphicalPackages,
 }:
 {
   hostName,
@@ -22,6 +23,7 @@
   networking ? { },
   logging ? { },
   services ? { },
+  session,
   namespace ? {
     mounts = { };
     binds = [ ];
@@ -76,12 +78,18 @@ let
       ++ (if ndb == null then [ ] else [ ndb.package ])
       ++ (if access == null then [ ] else access.packages)
       ++ sharing.packages
+      ++ lib.optionals (graphical != null) graphical.packages
       ++ lib.optional (storage != null) storage.selected
       ++ lib.optional (backups != { }) archivePackage;
   };
   network = import ./network.nix {
     inherit lib hostName;
     configuration = networking;
+  };
+  graphical = import ./session.nix {
+    inherit lib mkDerivation;
+    configuration = session;
+    packages = graphicalPackages;
   };
   serviceConfiguration =
     (
@@ -236,6 +244,7 @@ else
       cron
       storage
       backups
+      graphical
     ]
     (mkDerivation {
       name = "nix9-system-${hostName}";
@@ -253,6 +262,17 @@ else
           '') backups
         )}
         echo ${quote hostName} > $out/hostName
+        ${
+          if graphical == null then
+            ""
+          else
+            ''
+              ${write "session/start" graphical.start}
+              ${write "session/init" graphical.init}
+              ${write "session/plumbing" graphical.rules}
+              chmod 755 $out/session/init
+            ''
+        }
         echo ${environment} > $out/environment
         ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}
         ${builtins.concatStringsSep "\n" (

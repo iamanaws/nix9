@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory() as directory:
     for name in ("default.nix", "shell.nix"):
         path = payload / "hello" / name
         path.write_text(path.read_text().replace("/usr/local/pkg/native-packages", "<nix9>"))
-    for command in ("nix-profile", "nix9-rebuild", "nix9-deploy"):
+    for command in ("nix-profile", "nix9-rebuild", "nix9-deploy", "nix9-session"):
         shutil.copy(payload / "packages" / "bin" / command, payload / "bin" / command)
     activate = f"nix9Next={prefix}\n" + (payload / "activate.rc").read_text()
     (payload / "activate").write_text(activate)

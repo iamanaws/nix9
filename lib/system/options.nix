@@ -13,6 +13,7 @@ in
   imports = [
     ./modules/directories.nix
     ./modules/builders.nix
+    ./modules/session.nix
   ];
   config.logging = lib.mkMerge [
     (lib.mkIf config.services.cron.enable {

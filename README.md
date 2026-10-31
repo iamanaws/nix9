@@ -59,6 +59,7 @@ and a C development example.
 | [Storage and recovery](docs/storage.md) | Dedicated CWFS storage, shared workspaces and recovery from dump history. |
 | [Backups](docs/backups.md) | Scheduled archives on a separate server and recovery onto replacement storage. |
 | [Remote builders](docs/builders.md) | Schedule Nix builds on CPU servers and return results to the terminal. |
+| [Graphical sessions](docs/workstation.md) | Rio, Acme and plumbing, with shared projects and remote builds. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |
 | [Limitations](docs/feasibility.md) | Port constraints and missing features. |

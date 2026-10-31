@@ -55,7 +55,8 @@ class SerialLog:
 @contextlib.contextmanager
 def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
          memory="2G", prompt=r"(?m)^term% ", configure_network=True, cpu=False,
-         forward_ports=(), guest_forwards=(), network_options=(), extra_nics=(), network_backend="user"):
+         forward_ports=(), guest_forwards=(), network_options=(), extra_nics=(), network_backend="user",
+         qemu_options=()):
     network = network_backend
     for option in network_options:
         network += "," + option
@@ -78,6 +79,7 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
             "-drive", f"file={disk},format=qcow2,if=virtio",
             "-nic", network,
         ] + [argument for nic in extra_nics for argument in ("-nic", nic)]
+        + list(qemu_options)
         + (["-snapshot"] if snapshot else []),
         encoding="utf-8",
         codec_errors="replace",
@@ -106,7 +108,7 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
 
 
 @contextlib.contextmanager
-def files_guest(qemu, disk, files, *, snapshot=True, compress=False, **boot_options):
+def files_guest(qemu, disk, files, *, snapshot=True, compress=False, transfer_timeout=300, **boot_options):
     """Boot a guest and copy host fixtures into /tmp."""
     with tempfile.TemporaryDirectory() as directory:
         transfers = {}
@@ -127,7 +129,7 @@ def files_guest(qemu, disk, files, *, snapshot=True, compress=False, **boot_opti
             thread.start()
             try:
                 with boot(qemu, disk, snapshot=snapshot, **boot_options) as guest:
-                    guest.child.timeout = 300
+                    guest.child.timeout = transfer_timeout
                     for name, (transfer, packed) in transfers.items():
                         guest.command(f"hget -o /tmp/{transfer} http://10.0.2.2:{server.server_port}/{transfer}")
                         if packed:

@@ -159,7 +159,7 @@
  
  namespace nix {
  
-@@ -73,6 +79,54 @@
+@@ -73,6 +79,57 @@
  bool PathLocks::lockPaths(const std::set<std::filesystem::path> & paths, const std::string & waitMsg, bool wait)
  {
      assert(fds.empty());
@@ -177,7 +177,8 @@
 +                checkInterrupt();
 +                // ORDWR | OCEXEC | ORCLOSE | OEXCL (native 9front flags).
 +                AutoCloseFD gate(n9_create("#s/nix9-lock-create", 1 | 32 | 64 | 0x1000, 0600));
-+                AutoCloseFD fd(gate ? n9_create(lockPath.c_str(), 1 | 32 | 64 | 0x1000, 0600) : -1);
++                bool gateHeld = static_cast<bool>(gate);
++                AutoCloseFD fd(gateHeld ? n9_create(lockPath.c_str(), 1 | 32 | 64 | 0x1000, 0600) : -1);
 +                if (fd) {
 +                    fds.emplace_back(fd.get(), lockPath);
 +                    fd.release();
@@ -193,7 +194,9 @@
 +                    error = EIO;
 +                if (error != EEXIST)
 +                    throw SysError(error, "creating path lock %1%: %2%", PathFmt(lockPath), message);
-+                if (!wait) {
++                // A busy creation gate says nothing about the requested path.
++                // Finish that internal serialization even for a nonblocking lock.
++                if (!wait && gateHeld) {
 +                    unlock();
 +                    return false;
 +                }
@@ -214,7 +217,7 @@
  
      /* Note that `fds' is built incrementally so that the destructor
         will only release those locks that we have already acquired. */
-@@ -128,13 +182,16 @@
+@@ -128,13 +185,16 @@
      }
  
      return true;
