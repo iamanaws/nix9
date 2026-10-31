@@ -1,0 +1,10 @@
+# Sourced by prepare and select after their argument checks.
+. $bundle/configuration.rc || fail 'cannot read boot configuration'
+base=$rootMount^$rootDirectory
+node=$rootMount^$stateDirectory
+for(file in amd64/init amd64/bin/rc lib/namespace cfg/nix9/root cfg/nix9/boot/$machineId/init cfg/nix9/boot/$machineId/namespace)
+  test -f $base/$file || fail 'incomplete published root:' $file
+version=`{cat $base/cfg/nix9/root}
+~ $#version 1 && ~ $version $rootVersion || fail 'published root version mismatch'
+for(file in namespace init)
+  cmp -s $base/cfg/nix9/boot/$machineId/$file $bundle/$file || fail 'published boot hook differs:' $file

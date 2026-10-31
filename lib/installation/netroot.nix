@@ -5,9 +5,10 @@
   provider,
   authentication,
   networking,
+  rootDirectory,
 }:
 let
-  inherit (machine.boot) rootDirectory stateDirectory;
+  inherit (machine.boot) stateDirectory;
   interface = networking.interfaces.${networking.primaryInterface};
   quote = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
   state = "/root${stateDirectory}";
@@ -27,8 +28,9 @@ let
     init=/cfg/nix9/boot/${machine.machineId}/init
   '';
   namespace = ''
-    bind -c ${state}/usr/local/nix /usr/local/nix
-    bind -c ${state}/usr/local/pkg /usr/local/pkg
+    bind -c ${state}/usr /usr
+    bind -bc ${state}/cfg/nix9 /cfg/nix9
+    bind -c ${state}/sys/lib/tls/webfs /sys/lib/tls/webfs
     bind -bc ${state}/rc/bin /rc/bin
     bind -bc ${state}/rc/lib /rc/lib
     bind -a /rc/bin /bin
@@ -58,6 +60,7 @@ let
   configuration = ''
     machineId=${quote machine.machineId}
     rootDirectory=${quote rootDirectory}
+    rootVersion=${quote (builtins.baseNameOf rootDirectory)}
     stateDirectory=${quote stateDirectory}
   '';
 in
@@ -72,7 +75,10 @@ in
       echo -n ${quote init} > $out/init
       echo -n ${quote configuration} > $out/configuration.rc
       cp ${./netroot-prepare.rc} $out/prepare
-      chmod 755 $out/init $out/prepare
+      cp ${./netroot-select.rc} $out/select
+      cp ${./netroot-check.rc} $out/check-root.rc
+      cp ${./copy-tree.rc} $out/copy-tree.rc
+      chmod 755 $out/init $out/prepare $out/select
     '';
   };
 }

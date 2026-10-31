@@ -384,9 +384,6 @@ else
               echo '#!/bin/rc' > $out/services/listen-bin/aux/listen
               echo 'exec /$cputype/bin/rc '$out'/services/listen-start $*' >> $out/services/listen-bin/aux/listen
               chmod 755 $out/services/listen-bin/aux/listen
-              echo 'mount -C #s$srvspec/boot /root $rootspec' > $out/services/listen.namespace
-              echo '. $rootdir/lib/namespace' >> $out/services/listen.namespace
-              echo 'bind -b '$out'/services/listen $nix9ListenDirectory' >> $out/services/listen.namespace
               echo 'nix9ListenRuntime=$nix9' > $out/services/listen-boot.rc
               echo 'path=('$out'/services/listen-bin $path)' >> $out/services/listen-boot.rc
             ''

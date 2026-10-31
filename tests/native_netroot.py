@@ -1,4 +1,4 @@
-"""Boot two CPUs from one authenticated root, with separate persistent Nix state."""
+"""Publish, upgrade and roll back shared CPU roots while retaining machine state."""
 
 from contextlib import ExitStack, contextmanager, nullcontext
 import functools
@@ -115,12 +115,20 @@ with ExitStack() as stack:
         guest.command(". /usr/local/pkg/nix9/activate")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb --out-link " + ROOTS + "/netroot-tools")
 
-    disks, systems, bundles = {}, {}, {}
+    disks, systems, bundles, boot_artifacts = {}, {}, {}, {}
+    root_bundles, root_directories = {}, {}
+    selected_roots = dict.fromkeys(CPUS, "stable")
+    storage_drives = []
+    for name, size in (("cache", 3), ("worm", 8)):
+        volume = work / (name + ".raw")
+        with volume.open("xb") as file:
+            file.truncate(size * 1024 ** 3)
+        storage_drives.extend(("-drive", f"file={volume},format=raw,if=virtio"))
     project_drv = project_output = None
     for name in ("auth", "files"):
         disks[name] = work / (name + ".qcow2")
         disk(disks[name], foundation)
-        with boot(qemu, disks[name], snapshot=False) as guest:
+        with boot(qemu, disks[name], snapshot=False, qemu_options=storage_drives if name == "files" else ()) as guest:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/activate; nix9-rebuild init " + name)
             download(guest, "server.nvram", "/tmp/server.nvram", private=True)
@@ -134,16 +142,16 @@ with ExitStack() as stack:
             else:
                 download(guest, "files.keys", "/adm/files.keys", private=True)
                 guest.command("mkdir /adm/storage; chmod 700 /adm/storage")
-                for volume, blocks in (("config", 1), ("cache", 65536), ("worm", 131072)):
+                for volume, blocks in (("config", 1),):
                     guest.command(f"dd -if /dev/zero -of /adm/storage/{volume} -bs 16384 -count 1 -oseek {blocks-1}")
                     guest.command("chmod 600 /adm/storage/" + volume)
                 download(guest, "cwfs.setup")
-                guest.command("echo 'w0 /adm/storage/cache' > /tmp/devices; echo 'w1 /adm/storage/worm' >> /tmp/devices")
+                guest.command("echo 'w0 /dev/sdG0/data' > /tmp/devices; echo 'w1 /dev/sdH0/data' >> /tmp/devices")
                 guest.command(f"cwfs=`{{cat {ROOTS}/netroot-tools}}; fsmempercent=5 $cwfs/bin/cwfs64x "
                               "-c -f /adm/storage/config -m /tmp/devices -n provision -a tcp!*!564 < /tmp/cwfs.setup")
                 for command in ("users default", "create /adm adm adm 775 d", "create /adm/users adm adm 664",
                                 "create /usr adm adm 775 d", "newuser glenda", "create /systems glenda glenda 775 d",
-                                "create /systems/9front glenda glenda 775 d", "create /machines glenda glenda 775 d"):
+                                "create /machines glenda glenda 775 d"):
                     guest.command("echo " + quote(command) + " >> /srv/provision.cmd")
                 guest.command("echo halt >> /srv/provision.cmd; while(test -e /srv/provision.cmd) sleep 1; status=''")
                 for version in ("first", "second"):
@@ -152,7 +160,18 @@ with ExitStack() as stack:
                 for cpu in CPUS:
                     systems[cpu] = {version: paths(guest.command(f"cat {bundle}/systems/{cpu}"))[0]
                                     for version, bundle in bundles.items()}
-                guest.command("nix-store --export `{nix-store -qR " + " ".join(bundles.values()) + "} > /tmp/systems.export")
+                    boot_artifacts[cpu] = {version: paths(guest.command(f"cat {bundle}/boot/{cpu}/path"))[0]
+                                           for version, bundle in bundles.items()}
+                for root, version in (("stable", "first"), ("next", "second")):
+                    root_bundles[root] = paths(guest.command(f"cat {bundles[version]}/roots/{root}"))[0]
+                    root_directories[root] = "/systems/" + root_bundles[root].rsplit("/", 1)[1]
+                guest.command("nix-build /tmp/netroot.nix -A first.roots.stable --check --no-out-link")
+                targets = [path for machine in (systems, boot_artifacts) for versions in machine.values() for path in versions.values()]
+                guest.command("echo -n > /tmp/targets")
+                for target in sorted(set(targets)):
+                    guest.command(f"echo {target} >> /tmp/targets")
+                guest.command("nix-store -qR `{cat /tmp/targets} > /tmp/closure-paths")
+                guest.command("nix-store --export `{cat /tmp/closure-paths} > /tmp/systems.export")
                 download(guest, "netroot-project.nix")
                 project_drv = paths(guest.command("nix-instantiate /tmp/netroot-project.nix"))[0]
                 project_output = paths(guest.command("nix-store -q --outputs " + project_drv))[0]
@@ -167,7 +186,8 @@ with ExitStack() as stack:
         address, port, host = peers[0 if name == "auth" else 1]
         reservations[host].close()
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False, prompt=PROMPT,
-                  forward_ports=[(host, port)], guest_forwards=peers, network_options=("restrict=on",)) as guest:
+                  forward_ports=[(host, port)], guest_forwards=peers, network_options=("restrict=on",),
+                  qemu_options=storage_drives if name == "files" else ()) as guest:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/system")
             until(guest, f"netstat -n | grep 'Listen *{port} '")
@@ -180,17 +200,26 @@ with ExitStack() as stack:
     files.command("webfs")
     download(files, "glenda.keys", "/tmp/client.keys", private=True)
     files.command("cat /tmp/client.keys > /mnt/factotum/ctl; mount -c /srv/cwfs-nix9 /n/site main")
-    files.command("disk/mkfs -d /n/site/systems/9front -s /root $nix9/packages/examples/netroot/root.proto")
-    files.command("echo shared-os-tree > /n/site/systems/9front/network-root-marker")
+    files.command(f"rc {root_bundles['stable']}/publish /n/site")
+    for root_part in ("bin", "cfg", "dev", "env", "fd", "mnt", "net", "n", "proc", "root", "srv", "tmp",
+                      "usr/local/nix/store", "usr/local/nix/state", "usr/local/pkg"):
+        files.command(f"test -d /n/site{root_directories['stable']}/{root_part}")
+    rejected(files, f"rc {root_bundles['stable']}/publish /n/site", "root version already exists")
+    files.command(f"mkdir /n/site{root_directories['next']}.partial")
+    rejected(files, f"rc {root_bundles['next']}/publish /n/site", "partial publication already exists")
+    files.command(f"rm /n/site{root_directories['next']}.partial; test ! -e /n/site{root_directories['next']}")
     download(files, "machine-newns.c")
-    files.command("cd /tmp && 6c machine-newns.c && 6l -o /n/site/systems/9front/usr/glenda/check-newns machine-newns.6")
+    files.command("cd /tmp && 6c machine-newns.c && 6l -o /tmp/check-newns machine-newns.6")
     download(files, "bootstrap.tar", "/tmp/node-bootstrap.tar")
     sizes = {}
     for cpu in CPUS:
-        artifact = bundles["first"] + "/boot/" + cpu
+        artifact = boot_artifacts[cpu]["first"]
         files.command(f"rc {artifact}/prepare /n/site /tmp/node-bootstrap.tar")
         rejected(files, f"rc {artifact}/prepare /n/site /tmp/node-bootstrap.tar", "machine state already exists")
         directory = "/n/site/machines/" + cpu
+        files.command(f"echo {cpu} > {directory}/usr/glenda/home-marker")
+        files.command(f"echo '# writable home' >> {directory}/usr/glenda/lib/profile")
+        files.command(f"cp /tmp/check-newns {directory}/tmp/check-newns")
         download(files, cpu + ".keys", directory + "/adm/cpu.keys", private=True)
         for fixture in ("systems.export", "project.export"):
             files.command(f"cp /tmp/{fixture} {directory}/tmp/{fixture}")
@@ -219,7 +248,12 @@ with ExitStack() as stack:
             if failure:
                 guest.crash()
             else:
-                guest.command("cat /network-root-marker", "shared-os-tree")
+                root = selected_roots[name]
+                guest.command("cat /network-root-marker", "root-one" if root == "stable" else "root-two")
+                guest.command("cat /cfg/nix9/root", root_directories[root].rsplit("/", 1)[1])
+                guest.command("cat /usr/glenda/home-marker", name)
+                guest.command("test ! -w /network-root-marker")
+                guest.command("echo -n >> /sys/lib/tls/webfs/revoked")
                 guest.command("echo `{ls -p /dev/sdF0}")
                 guest.command("test ! -e /dev/sdF0/fs && test ! -e /dev/sdF0/fscache")
                 guest.command(". /usr/local/pkg/nix9/activate; echo $nix9MachineId", name)
@@ -239,6 +273,10 @@ with ExitStack() as stack:
         with cpu(name) as guest:
             guest.command("nix-store --import < /tmp/systems.export")
             guest.command("nix-store --import < /tmp/project.export")
+            for version, artifact in boot_artifacts[name].items():
+                guest.command(f"nix-store --realise {artifact} --add-root {ROOTS}/boot-{version}")
+            for root in root_bundles.values():
+                rejected(guest, "nix-store --check-validity " + root, "not valid")
             guest.command("nix9-rebuild select " + systems[name]["first"])
             guest.command(". /usr/local/pkg/nix9/system")
             guest.command("nix-store --realise " + project_drv + " --add-root " + ROOTS + "/project", ROOTS + "/project")
@@ -246,7 +284,7 @@ with ExitStack() as stack:
             guest.command(project_output + "/bin/hello", "hello from a network-root CPU")
             guest.command("cat " + project_output + "/compiled-on; echo", name)
             guest.command("nix-store --verify-path " + project_output)
-            guest.command("/usr/glenda/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
+            guest.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
         files.command("test -e /srv/cwfs-nix9; cat /usr/local/nix/state/machine-id", "files")
     rejected(files, "nix-store --check-validity " + project_output, "not valid")
     print("PASS: CPUs boot without a local OS, build natively, and retain separate stores through newns", flush=True)
@@ -260,21 +298,46 @@ with ExitStack() as stack:
                 files.command("rcpu -u glenda -h " + name + " -k 'dom=nix9.netroot' -c "
                               + quote("echo `{cat /dev/sysname}; nix-store --verify-path " + project_output), name)
             untrusted_service("one")
+            files.command(f"rc {root_bundles['next']}/publish /n/site")
+            build.command("cat /network-root-marker", "root-one")
+            batch.command("cat /network-root-marker", "root-one")
+            first_boot = boot_artifacts["build"]["first"]
+            next_boot = boot_artifacts["build"]["second"]
+            rejected(files, f"rc {next_boot}/select /n/site /tmp", "machine identity mismatch")
+            build.command("9fs 9fat; cp /n/9fat/plan9.ini /tmp/original.ini")
+            build.command("mkdir /tmp/wrong-medium; echo 'nix9machine=batch' > /tmp/wrong-medium/plan9.ini")
+            rejected(build, f"rc {next_boot}/select /root /tmp/wrong-medium", "boot medium belongs to another machine")
+            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            build.command(f"rc {next_boot}/select /root /n/9fat")
+            build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
+            build.command("cat /network-root-marker", "root-one")
+            build.command("cat $nix9SystemRoot^-boot", systems["build"]["first"])
             build.command("nix9-rebuild select " + systems["build"]["second"])
             build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "two")
-            build.command("/usr/glenda/check-newns '. /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version'", "two")
+            build.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version'", "two")
             batch.command("cat /cfg/nix9/files/version", "batch")
             build.command("nix-store --gc; nix-store --verify-path " + systems["build"]["first"])
-    with cpu("build") as build:
+    selected_roots["build"] = "next"
+    with cpu("batch") as batch, cpu("build") as build:
+        batch.command("cat /network-root-marker", "root-one")
+        build.command("cat /network-root-marker", "root-two")
         build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "two")
         build.command("echo `{cat /dev/sysname}", "worker")
         untrusted_service("two")
-        build.command("/usr/glenda/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", "build")
+        build.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", "build")
+        build.command("/tmp/check-newns 'cat /network-root-marker'", "root-two")
+        build.command("nix-store --verify-path " + project_output)
+        build.command(project_output + "/bin/hello", "hello from a network-root CPU")
         build.command("nix9-rebuild rollback; . /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "one")
+        build.command("cat /network-root-marker", "root-two")
+        build.command("9fs 9fat")
+        build.command(f"rc {first_boot}/select /root /n/9fat")
+    selected_roots["build"] = "stable"
     with cpu("build") as build:
         build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "one")
         build.command("cat $nix9SystemRoot^-boot", systems["build"]["first"])
     print("PASS: authenticated CPU login, independent generations, reboot, GC retention and rollback", flush=True)
+    print("PASS: versioned root publication, independent CPU upgrades, retained state and OS root rollback", flush=True)
 
     with cpu("build", medium=bad_medium, failure=r"mount: auth_proxy:"):
         pass
@@ -300,7 +363,9 @@ with ExitStack() as stack:
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "results.json").write_text(json.dumps({"status": "passed", "machines": 4,
-        "bootMediaBytes": sizes, "systems": systems, "nativeOutput": project_output,
+        "bootMediaBytes": sizes, "systems": systems, "nativeOutput": project_output, "roots": root_directories,
         "checks": ["authenticated-network-root", "no-local-os", "separate-state", "native-c-build",
                    "newns", "remote-login", "untrusted-service", "hostname-change", "reboot", "gc-retention", "rollback", "bad-key",
-                   "missing-state", "wrong-identity", "root-provider-offline"]}, indent=2) + "\n")
+                   "missing-state", "wrong-identity", "root-provider-offline", "reproducible-root", "publish-once",
+                   "partial-publication", "wrong-boot-medium", "root-upgrade", "mixed-root-versions", "root-rollback",
+                   "no-private-root-copies"]}, indent=2) + "\n")

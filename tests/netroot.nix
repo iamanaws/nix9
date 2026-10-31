@@ -12,6 +12,7 @@ let
           machines.batch = {
             ip = "10.0.2.103";
             boot.provider = "files";
+            boot.root = "stable";
             configuration = {
               imports = [ base.machines.build.configuration ];
               networking.interfaces.ether0.address = lib.mkForce "10.0.2.103";
@@ -19,6 +20,8 @@ let
             };
           };
           machines.build.configuration.files.version = "one\n";
+          roots.stable.files."network-root-marker" = "root-one\n";
+          roots.stable.files."sys/lib/tls/webfs/revoked" = "";
           machines.build.configuration.services.listen = {
             enable = true;
             tcp."17024" =
@@ -28,6 +31,10 @@ let
           machines.auth.configuration.services.ndb.dns.enable = false;
           machines.auth.configuration.services.auth.speaksFor.batch = [ "glenda" ];
           machines.files.configuration.services.ndb.dns.enable = false;
+          machines.files.configuration.services.cwfs.deviceMap = lib.mkForce {
+            w0 = "/dev/sdG0/data";
+            w1 = "/dev/sdH0/data";
+          };
           machines.build.configuration.services.ndb.dns.enable = false;
           machines.batch.configuration.services.ndb.dns.enable = false;
         })
@@ -42,6 +49,8 @@ in
     { lib, ... }: {
       machines.build.configuration.files.version = lib.mkForce "two\n";
       machines.build.hostName = "worker";
+      roots.next.files."network-root-marker" = "root-two\n";
+      machines.build.boot.root = lib.mkForce "next";
     }
   );
   renamed = make {
@@ -56,6 +65,7 @@ in
     );
     wrongPort = make { machines.files.configuration.services.cwfs.port = 565; };
     missingAuth = make ({ lib, ... }: { defaults.auth = lib.mkForce null; });
+    missingDomain = make ({ lib, ... }: { defaults.authdom = lib.mkForce null; });
     bootedAuth = make { machines.auth.boot.provider = "files"; };
     bootedProvider = make { machines.files.boot.provider = "auth"; };
     noCpu = make (
@@ -71,10 +81,19 @@ in
         machines.build.configuration.networking.interfaces.ether0.address = lib.mkForce "10.0.2.104";
       }
     );
-    relativeRoot = make { machines.build.boot.rootDirectory = "root"; };
-    traversalRoot = make { machines.build.boot.rootDirectory = "/systems/../root"; };
-    storeRoot = make { machines.build.boot.rootDirectory = "${pkgs.rc}/root"; };
-    rootState = make { machines.build.boot.stateDirectory = "/systems/9front/state"; };
+    unknownRoot = make { machines.build.boot.root = "missing"; };
+    longIdentity = make { machines.build.machineId = "builder-with-a-long-machine-id"; };
+    relativeFile = make { roots.stable.files."../root" = "invalid"; };
+    absoluteFile = make { roots.stable.files."/root" = "invalid"; };
+    nestedFiles = make {
+      roots.stable.files = {
+        probe = "invalid";
+        "probe/child" = "invalid";
+      };
+    };
+    managedNamespace = make { roots.stable.files."lib/namespace.local" = "invalid"; };
+    managedBoot = make { roots.stable.files."cfg/nix9/boot/build/init" = "invalid"; };
+    rootState = make { machines.build.boot.stateDirectory = "/systems"; };
     sharedState = make { machines.batch.boot.stateDirectory = "/machines/build"; };
     nestedState = make { machines.batch.boot.stateDirectory = "/machines/build/batch"; };
     unknownOption = make { machines.build.boot.reboot = true; };

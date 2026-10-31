@@ -11,19 +11,30 @@ if(~ $#directory 1 && ! ~ $directory /cfg/`{/$cputype/bin/cat $nix9ListenStartSy
   directory=()
 if(~ $#directory 1) {
   if(/$cputype/bin/rc $nix9ListenStartSystem/services/listen-check $directory) {
-    nix9ListenDirectory=$directory
+    # Render long paths in rc; native newns truncates environment values to 27 bytes.
+    if(! ~ $#rootdir 1 || ! test -r $rootdir/lib/namespace)
+      exit 'native root namespace is unavailable'
+    nix9ListenNamespaceRoot=/usr/local/nix/state/listeners
+    mkdir -p $nix9ListenNamespaceRoot || exit 'cannot create listener namespace directory'
+    nix9ListenNamespace=$nix9ListenNamespaceRoot/`{basename $nix9ListenStartSystem}^-$pid
+    {
+      echo 'mount -C #s$srvspec/boot /root $rootspec'
+      echo '. '^$rootdir^'/lib/namespace'
+      echo 'bind -b '^$nix9ListenStartSystem^'/services/listen '^$directory
+    } > $nix9ListenNamespace^.new || exit 'cannot render listener namespace'
+    chmod 444 $nix9ListenNamespace^.new &&
+    mv $nix9ListenNamespace^.new $nix9ListenNamespace || exit 'cannot publish listener namespace'
     if(test -f $nix9ListenStartSystem/services/access-start) {
       rfork ne
       . $nix9ListenStartSystem/services/access-start
       arguments=(-q -d $directory)
       if(~ $#trust 1) arguments=(-q -t $trust -d $directory)
-      $nix9ListenBinary -n $nix9ListenStartSystem/services/listen.namespace $arguments tcp || exit 'listener startup failed'
+      $nix9ListenBinary -n $nix9ListenNamespace $arguments tcp || exit 'listener startup failed'
       fn sigexit
       exit ''
     }
-    # newns expands this environment variable after loading /lib/namespace.
     # The native listener still starts the manual services and trusted auth set.
-    exec $nix9ListenBinary -n $nix9ListenStartSystem/services/listen.namespace $*
+    exec $nix9ListenBinary -n $nix9ListenNamespace $*
   }
   if(test -f $nix9ListenStartSystem/services/access-start) exit 'access listener check failed'
   echo 'nix9: managed TCP services skipped; starting the native services' >[1=2]

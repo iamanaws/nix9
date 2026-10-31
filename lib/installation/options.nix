@@ -1,4 +1,9 @@
-{ lib, config, ... }:
+{
+  lib,
+  config,
+  pkgs,
+  ...
+}:
 let
   inherit (lib) mkOption types;
   label = types.addCheck types.str (
@@ -13,6 +18,26 @@ in
       type = label;
       default = "installation";
       description = "Installation name used for the manifest and build output.";
+    };
+    roots = mkOption {
+      default = { };
+      description = "Versioned CPU root trees, published independently of machine state.";
+      type = types.attrsOf (
+        types.submodule {
+          options = {
+            base = mkOption {
+              type = types.path;
+              default = "${pkgs.netrootBase}";
+              description = "Pinned seed directory containing root.tar.gz and base.json.";
+            };
+            files = mkOption {
+              type = types.attrsOf types.lines;
+              default = { };
+              description = "Public text files to add or replace, relative to the OS root.";
+            };
+          };
+        }
+      );
     };
     defaults = mkOption {
       default = { };
@@ -100,10 +125,9 @@ in
                         type = label;
                         description = "Independently booted CWFS provider serving the root tree.";
                       };
-                      rootDirectory = mkOption {
-                        type = runtimeFile;
-                        default = "/systems/9front";
-                        description = "Provisioned 9front root tree within the provider's main filesystem.";
+                      root = mkOption {
+                        type = label;
+                        description = "Root declared in this installation's roots.";
                       };
                       stateDirectory = mkOption {
                         type = runtimeFile;

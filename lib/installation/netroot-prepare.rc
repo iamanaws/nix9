@@ -6,23 +6,22 @@ fn fail {
 }
 if(! ~ $#* 2) fail 'usage: prepare ROOT-MOUNT BOOTSTRAP-TAR'
 bundle=`{basename -d $0}
-. $bundle/configuration.rc || fail 'cannot read boot configuration'
-base=$1^$rootDirectory
-node=$1^$stateDirectory
+rootMount=$1
+. $bundle/check-root.rc || fail 'cannot check published root'
 test -r $2 || fail 'cannot read bootstrap archive'
-for(file in amd64/init amd64/bin/rc lib/namespace)
-  test -f $base/$file || fail 'incomplete 9front root:' $file
-grep -s '^\. /lib/namespace.local$' $base/lib/namespace || fail 'root namespace must include /lib/namespace.local'
 if(test -e $node) fail 'machine state already exists:' $node
-bootDirectory=$base/cfg/nix9/boot/$machineId
-for(file in namespace init)
-  if(test -e $bootDirectory/$file) fail 'boot file already exists:' $file
 mkdir -p $node || fail 'cannot create machine directory'
 chmod 755 $node || fail 'cannot set machine directory permissions'
 @{ cd $node && tar x } < $2 || fail 'cannot unpack bootstrap'
-for(directory in rc/bin rc/lib adm service sys/log tmp usr/local/nix/store usr/local/nix/state usr/local/nix/log)
+for(directory in rc/bin rc/lib adm service sys/log sys/lib/tls/webfs cfg/nix9 tmp usr/glenda usr/local/nix/store usr/local/nix/state usr/local/nix/log)
   mkdir -p $node/$directory || fail 'cannot create machine directory:' $directory
 chmod 700 $node/adm || fail 'cannot protect runtime keys'
+. $bundle/copy-tree.rc || fail 'cannot read tree copier'
+copyTree $base/usr/glenda $node/usr/glenda 755 || fail 'cannot seed the initial home directory'
+if(test -f $base/sys/lib/tls/webfs/revoked) {
+  cp $base/sys/lib/tls/webfs/revoked $node/sys/lib/tls/webfs/revoked &&
+  chmod u+w $node/sys/lib/tls/webfs/revoked || fail 'cannot seed TLS revocations'
+}
 for(hook in rc/bin/cpurc.local rc/bin/termrc.local rc/lib/rcmain.local) {
   for(file in $hook $hook^.nix9-original) {
     if(test -f $base/$file)
@@ -39,12 +38,4 @@ for(hook in rc/bin/cpurc.local rc/bin/termrc.local rc/lib/rcmain.local) {
   . /usr/local/pkg/nix9/activate &&
   nix9-rebuild init $machineId
 } || fail 'cannot initialize machine identity'
-mkdir -p $bootDirectory $base/cfg/default/service || fail 'cannot create boot directories'
-cp $bundle/namespace $bootDirectory/namespace &&
-cp $bundle/init $bootDirectory/init &&
-chmod 755 $bootDirectory/init || fail 'cannot install boot files'
-if(! test -f $base/lib/namespace.local ||
-   ! grep -s '^\. /cfg/nix9/boot/\$nix9machine/namespace$' $base/lib/namespace.local) {
-  { echo; echo '. /cfg/nix9/boot/$nix9machine/namespace' } >> $base/lib/namespace.local || fail 'cannot install root namespace include'
-}
 echo 'Prepared network-root machine:' $machineId

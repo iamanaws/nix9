@@ -60,6 +60,7 @@ pkgs.lib.makeScope pkgs.newScope (
     inherit (stdenv) mkDerivation mkShell;
     buildTools = cross.build-tools;
     nativeTools = callPackage ./native-packages/tools.nix { };
+    netrootBase = callPackage ./netroot-base { };
     moduleLibrary = pkgs.callPackage ./native-packages/module-library.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
     nativeGoBootstrap = nativeBootstrap.override { nativePackageSet = nativeGoPackageSet; };
@@ -139,6 +140,7 @@ pkgs.lib.makeScope pkgs.newScope (
       nix-package = nixPackage;
       native-packages = nativePackagesArchive;
       native-package-source = nativePackageSource;
+      netroot-base = netrootBase;
       native-bootstrap = nativeBootstrap;
       native-go-bootstrap = nativeGoBootstrap;
       goken9cc = cTools;

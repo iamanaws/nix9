@@ -84,6 +84,7 @@ let
       mkShell = pkgs.callPackage ./mk-shell.nix { };
       mkSystem = pkgs.callPackage ./system { packages = pkgs; };
       mkInstallation = pkgs.callPackage ./installation { packages = pkgs; };
+      netrootBase = ./netroot-base;
     }
     // (
       if builtins.pathExists ./go-bootstrap.tar.gz then

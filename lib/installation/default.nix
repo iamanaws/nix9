@@ -20,6 +20,7 @@ let
     defaults
     machines
     jobs
+    roots
     ;
   makeJob = import ../system/job.nix { inherit mkDerivation buildEnv; };
   tasks = lib.mapAttrs (name: job: makeJob (job // { inherit name; })) jobs;
@@ -43,9 +44,28 @@ let
       provider = machines.${machines.${machineName}.boot.provider};
       authentication = machines.${defaults.auth};
       networking = configs.${machineName}.networking;
+      # The CPU uses a published CWFS path; it does not need the root bundle in its store.
+      rootDirectory =
+        builtins.unsafeDiscardStringContext
+          rootDirectories.${machines.${machineName}.boot.root};
     }
   );
   boot = builtins.mapAttrs (_: root: root.build) networkRoots;
+  rootTrees = lib.mapAttrs (
+    rootName: configuration:
+    import ./root.nix {
+      inherit lib mkDerivation machines;
+      name = rootName;
+      inherit configuration;
+      bootFiles = networkRoots;
+      bootstrapNdb = lib.optionalString (defaults.auth != null && defaults.authdom != null) (
+        "authdom=${defaults.authdom} auth=${machines.${defaults.auth}.ip}\n\n"
+      );
+    }
+  ) roots;
+  rootDirectories = builtins.mapAttrs (
+    _: root: "/systems/${builtins.baseNameOf (toString root)}"
+  ) rootTrees;
   error = message: throw "mkInstallation: ${message}";
   unique = items: builtins.length items == builtins.length (lib.unique items);
   label =
@@ -267,6 +287,11 @@ let
   manifest = {
     version = 1;
     inherit name defaults;
+    roots = lib.mapAttrs (rootName: root: {
+      directory = rootDirectories.${rootName};
+      bundle = toString root;
+      base = toString roots.${rootName}.base;
+    }) rootTrees;
     dependencies = dependencies ++ bootDependencies;
     jobs = lib.mapAttrs (jobName: job: {
       inherit (job)
@@ -289,6 +314,7 @@ let
         else
           machine.boot
           // {
+            rootDirectory = rootDirectories.${machine.boot.root};
             files = toString boot.${machineName};
             address = "tcp!${machines.${machine.boot.provider}.ip}!564";
             auth = machines.${defaults.auth}.ip;
@@ -460,6 +486,30 @@ else if
   ) mounts
 then
   error "a mount refers to an unknown export or disabled filesystem provider"
+else if !builtins.all label (builtins.attrNames roots) then
+  error "root names must be lowercase labels of at most 63 characters"
+else if
+  !builtins.all (
+    root:
+    let
+      paths = builtins.attrNames root.files;
+      valid =
+        path:
+        builtins.match "[a-zA-Z0-9_+.-]+(/[a-zA-Z0-9_+.-]+)*" path != null
+        && builtins.all (part: part != "." && part != "..") (lib.splitString "/" path)
+        && !(path == "lib/namespace" || path == "lib/namespace.local" || lib.hasPrefix "cfg/nix9" path);
+    in
+    builtins.all valid paths
+    && builtins.all (
+      path: builtins.all (other: path == other || !lib.hasPrefix (path + "/") other) paths
+    ) paths
+  ) (builtins.attrValues roots)
+then
+  error "root files require non-overlapping relative paths outside managed boot hooks"
+else if !builtins.all (name: builtins.hasAttr machines.${name}.boot.root roots) bootNames then
+  error "a boot root refers to an unknown root tree"
+else if !builtins.all (name: builtins.stringLength machines.${name}.machineId <= 27) bootNames then
+  error "network-root machine identities must fit native namespace expansion (27 characters)"
 else if
   !builtins.all (name: builtins.hasAttr machines.${name}.boot.provider machines) bootNames
 then
@@ -477,8 +527,11 @@ else if
   ) bootNames
 then
   error "boot roots require an independently booted CWFS provider on port 564"
-else if bootNames != [ ] && (defaults.auth == null || machines.${defaults.auth}.boot != null) then
-  error "network-root boot requires an independently booted authentication default"
+else if
+  bootNames != [ ]
+  && (defaults.auth == null || defaults.authdom == null || machines.${defaults.auth}.boot != null)
+then
+  error "network-root boot requires an authentication domain and an independently booted authentication default"
 else if !builtins.all (name: serves name "cpu") bootNames then
   error "network-root machines must enable CPU access"
 else if
@@ -510,7 +563,7 @@ else if
       in
       current.provider != peer.provider
       || (
-        !overlaps current.stateDirectory peer.rootDirectory
+        !overlaps current.stateDirectory rootDirectories.${peer.root}
         && (name == other || !overlaps current.stateDirectory peer.stateDirectory)
       )
     ) bootNames
@@ -526,10 +579,11 @@ else
         manifest
         boot
         ;
+      roots = rootTrees;
       build = mkDerivation {
         name = "nix9-installation-${name}";
         buildCommand = ''
-          mkdir -p $out/systems $out/boot
+          mkdir -p $out/systems $out/boot $out/roots
           echo -n ${quote (builtins.toJSON manifest + "\n")} > $out/manifest.json
           echo -n ${quote ndb.database} > $out/ndb
           echo -n ${quote deploymentScript} > $out/deployment.rc
@@ -539,7 +593,11 @@ else
           ${lib.concatMapStringsSep "\n" (machineName: ''
             mkdir -p $out/boot/${machineName}
             cp ${boot.${machineName}}/* $out/boot/${machineName}/
+            echo ${quote (toString boot.${machineName})} > $out/boot/${machineName}/path
           '') bootNames}
+          ${lib.concatMapStringsSep "\n" (rootName: ''
+            echo ${quote (toString rootTrees.${rootName})} > $out/roots/${rootName}
+          '') (builtins.attrNames roots)}
         '';
       };
     }

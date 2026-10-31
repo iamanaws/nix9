@@ -1,5 +1,6 @@
 {
   name = "netroot";
+  roots.stable = { };
   defaults = {
     auth = "auth";
     fs = "files";
@@ -35,6 +36,7 @@
     build = {
       ip = "10.0.2.102";
       boot.provider = "files";
+      boot.root = "stable";
       configuration = {
         networking = {
           enable = true;

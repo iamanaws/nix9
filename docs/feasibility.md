@@ -15,14 +15,14 @@ using [cc9](../pkgs/cc9). Native C and Go development work inside 9front.
 | Filesystem | NARs preserve links and unsupported names, but extraction rejects them before writing. Native symlink resolution is missing. |
 | Store | Clients must share the canonical store path and kernel service namespace, with one connection per store per process. GC, verification, repair and schema changes require exclusive client access. Permanent roots work; automatic GC, runtime root discovery, indirect roots, `nix-env`, WAL and multiuser mode do not. |
 | Processes and locks | Pipes, PATH, environments, wait, kill, exclusive path locks and cancellation notes work. Generic file locks, Unix credential APIs, process groups, signal threads and PTYs are unported. Server crashes may leave lock markers. |
-| Machine configuration | [System modules](configuration.md) and [installation inventories](installation.md) manage independent writable stores and generation state. [Network-root CPUs](netroot.md) share a provisioned OS tree with separate persistent machine directories. [Deployment](deployment.md) prepares and selects systems over CPU connections or locally; reboots and recovery across machines are explicit. Directory declarations apply metadata within native file-server permissions. [Session bindings](namespaces.md) compose directories and shared providers; [graphical sessions](workstation.md) configure Rio, Acme and plumbing. Native tools manage accounts, keys, file-server ownership policy, kernels and disks. [Scheduled jobs](jobs.md) run locally or through authenticated CPU sessions. [Backups](backups.md) archive declared CWFS trees; full machine recovery and daemon supervision lack declarative workflows. |
+| Machine configuration | [System modules](configuration.md) and [installation inventories](installation.md) manage independent writable stores and generation state. [Network-root CPUs](netroot.md) share versioned OS trees built from a pinned seed, with separate persistent machine directories and explicit per-CPU boot selection. [Deployment](deployment.md) prepares and selects systems over CPU connections or locally; reboots and recovery across machines are explicit. Directory declarations apply metadata within native file-server permissions. [Session bindings](namespaces.md) compose directories and shared providers; [graphical sessions](workstation.md) configure Rio, Acme and plumbing. Native tools manage accounts, keys, file-server ownership policy, kernels and disks. [Scheduled jobs](jobs.md) run locally or through authenticated CPU sessions. [Backups](backups.md) archive declared CWFS trees; full machine recovery and daemon supervision lack declarative workflows. |
 
 ## Verification limits
 
 [Tests](validation.md) cover native builds, NAR round trips, concurrent clients,
 offline recovery and system generations. They do not cover torn writes, abrupt
 power loss during initial hook installation or generation selection, external IPv6,
-or DHCP renewal through lease expiration.
+DHCP renewal through lease expiration, or power loss while updating FAT boot settings.
 
 For download trust restrictions, see [HTTPS policy](transport.md#https-trust).
 For local changes and their upstream owners, see [patches](upstream.md).

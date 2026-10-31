@@ -5,6 +5,7 @@
   moduleLibrary,
   sources,
   packageDefinitions,
+  netrootBase,
   goBootstrap ? null,
   goSource ? null,
 }:
@@ -26,6 +27,7 @@ let
     "bin/nix9-session" = ../../lib/system/graphical.rc;
     "system" = ../../lib/system;
     "installation" = ../../lib/installation;
+    "netroot-base" = netrootBase;
     "examples/installation" = ../../examples/installation;
     "examples/network-server" = ../../examples/network-server;
     "examples/storage" = ../../examples/storage;

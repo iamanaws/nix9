@@ -1,0 +1,17 @@
+# The destination already exists; native cp copies files but does not recurse.
+fn copyTree {
+  @{
+    cd $1 || fail 'cannot read directory:' $1
+    for(file in ./* ./.[~.]* ./..?*) {
+      if(test -d $file) {
+        mkdir $2/$file || fail 'cannot create directory:' $file
+        copyTree $1/$file $2/$file $3 || fail 'cannot copy directory:' $file
+      }
+      if not if(test -e $file) {
+        cp $file $2/$file || fail 'cannot copy file:' $file
+        if(~ $3 755) chmod u+w $2/$file || fail 'cannot make home file writable:' $file
+      }
+    }
+    chmod $3 $2 || fail 'cannot set directory permissions:' $2
+  }
+}

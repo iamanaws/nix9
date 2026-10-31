@@ -1,0 +1,18 @@
+#!/bin/rc
+rfork ne
+fn fail {
+  echo 'nix9: publish root:' $* >[1=2]
+  exit 'root publication failed'
+}
+if(! ~ $#* 1) fail 'usage: publish ROOT-MOUNT'
+bundle=`{basename -d $0}
+version=`{basename $bundle}
+destination=$1/systems/$version
+partial=$destination^.partial
+test -d $1/systems || fail 'provision a writable /systems directory on the root provider'
+if(test -e $destination) fail 'root version already exists:' $destination
+mkdir $partial || fail 'partial publication already exists or cannot be created:' $partial
+. $bundle/copy-tree.rc || fail 'cannot read tree copier'
+copyTree $bundle/tree $partial 555 || fail 'incomplete root left at:' $partial
+mv $partial $destination || fail 'cannot publish root; partial copy left at:' $partial
+echo 'Published root:' /systems/$version
