@@ -1,0 +1,11 @@
+# Read-only preflight shared by local selection and coordinated deployment.
+. $bundle/check-root.rc || fail 'cannot check published root'
+for(identityFile in /usr/local/nix/state/machine-id $node/usr/local/nix/state/machine-id) {
+  identity=`{cat $identityFile}
+  ~ $#identity 1 && ~ $identity $machineId || fail 'machine identity mismatch:' $identityFile
+}
+ini=$medium/plan9.ini
+awk '-F=' -v 'id='^$machineId '$1 == "nix9machine" {count++; if($0 != "nix9machine=" id) bad=1}
+  END {exit !(count == 1 && !bad)}' $ini || fail 'boot medium belongs to another machine or is not initialized'
+if(test -e $medium/nix9lock) fail 'boot medium is locked'
+status=''

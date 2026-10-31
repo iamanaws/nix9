@@ -6,11 +6,11 @@ fn fail {
   exit 'nix9-deploy failed'
 }
 if(test $#* -lt 2)
-  fail 'usage: nix9-deploy {prepare | select | status} BUNDLE [MACHINE ...]'
+  fail 'usage: nix9-deploy {prepare | select | select-root | status} BUNDLE [MACHINE ...]'
 action=$1
 bundle=$2
 shift 2
-if(! ~ $action prepare select status) fail 'unknown action:' $action
+if(! ~ $action prepare select select-root status) fail 'unknown action:' $action
 if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
 path=($nix9/bin /$cputype/bin /rc/bin)
 . $nix9/packages/system/machine.rc || fail 'machine setup failed'
@@ -20,9 +20,17 @@ nix-store --check-validity $bundle || fail 'installation is not registered local
 if(! test -f $bundle/deployment.rc) fail 'installation has no deployment configuration'
 . $bundle/deployment.rc
 requested=$*
-if(~ $#requested 0) requested=$machineNames
+if(~ $#requested 0) {
+  requested=$machineNames
+  if(~ $action select-root) requested=$bootMachineNames
+}
 for(name in $requested)
   if(! ~ $name $machineNames) fail 'unknown machine:' $name
+if(~ $action select-root) {
+  if(~ $#requested 0) fail 'no network-root CPUs requested'
+  for(name in $requested)
+    if(! ~ $name $bootMachineNames) fail 'not a network-root CPU:' $name
+}
 
 # Serialize this installation on the coordinator. Target operations also lock
 # independently, so different coordinators cannot import/select simultaneously.
@@ -54,8 +62,11 @@ helper=$nix9/packages/installation/target.rc
 # here so callers can report them or continue querying other machines.
 fn target {
   operation=$1
+  targetObject=$system
+  if(~ $#* 2) targetObject=$2
+  cat $bundle/deployment/$name.rc > $work/request.rc || fail 'cannot stage target request'
   if(~ $#nix9MachineId 1 && ~ $nix9MachineId $identity) {
-    /$cputype/bin/rc $helper $operation $installationName $name $identity $system $work || status=$status
+    /$cputype/bin/rc $helper $operation $installationName $name $identity $targetObject $work || status=$status
   }
   if not {
     if(~ $remote 0) {
@@ -66,9 +77,34 @@ fn target {
       login=()
       if(~ $#loginUser 1) login=(-u $loginUser)
       alarm $timeout $cpuClient -h $host $login -k $keyPattern -c \
-        /bin/rc /mnt/term^$helper $operation $installationName $name $identity $system /mnt/term^$work || status=$status
+        /bin/rc /mnt/term^$helper $operation $installationName $name $identity $targetObject /mnt/term^$work || status=$status
     }
   }
+}
+
+fn transfer {
+  transferObject=$1
+  transferAction=$2
+  closure=`{nix-store --query --requisites $transferObject && echo nix9-closure-ready}
+  if(~ $#closure 0 || ! ~ $closure($#closure) nix9-closure-ready)
+    fail 'cannot query the local closure for' $name
+  {
+    for(item in $closure) {
+      if(! ~ $item nix9-closure-ready) echo $item
+    }
+  } > $work/paths
+  probe=`{target missing $transferObject && echo nix9-probe-ready}
+  if(~ $#probe 0 || ! ~ $probe($#probe) nix9-probe-ready)
+    fail 'cannot inspect' $name
+  missing=`{echo $probe | awk '{for(i=1;i<NF;i++) print $i}'}
+  for(item in $missing)
+    if(! ~ $item $closure) fail 'unexpected missing path from' $name
+  if(! ~ $#missing 0) {
+    echo Exporting $#missing paths for $name
+    nix-store --export $missing > $work/closure.export || fail 'export failed for' $name
+  }
+  if not if(test -f $work/closure.export) rm $work/closure.export
+  target $transferAction $transferObject || fail 'preparation failed for' $name
 }
 
 switch($action) {
@@ -77,6 +113,10 @@ case status
   for(name in $requested) {
     machine $name
     echo $name intended $system
+    if(~ $#bootArtifact 1) {
+      echo $name root-intended $rootDirectory
+      echo $name root-provider $rootProvider
+    }
     if(! target status) {
       echo $name unavailable >[1=2]
       failed=1
@@ -84,31 +124,27 @@ case status
   }
   if(~ $failed 1) fail 'some machines could not be queried'
 case prepare
+  published=()
+  for(consumer in $requested) {
+    machine $consumer
+    if(~ $#bootArtifact 1) {
+      provider=$rootProvider
+      artifact=$rootBundle
+      publication=$provider^':'^$artifact
+      if(! ~ $publication $published) {
+        name=$provider
+        machine $name
+        echo Publishing root on $name
+        transfer $artifact prepare-root
+        published=($published $publication)
+      }
+    }
+  }
   for(name in $requested) {
     machine $name
     echo Preparing $name
-    closure=`{nix-store --query --requisites $system && echo nix9-closure-ready}
-    if(~ $#closure 0 || ! ~ $closure($#closure) nix9-closure-ready)
-      fail 'cannot query the local closure for' $name
-    {
-      for(item in $closure) {
-        if(! ~ $item nix9-closure-ready) echo $item
-      }
-    } > $work/paths
-    probe=`{target missing && echo nix9-probe-ready}
-    if(~ $#probe 0 || ! ~ $probe($#probe) nix9-probe-ready)
-      fail 'cannot inspect' $name
-    missing=`{echo $probe | awk '{for(i=1;i<NF;i++) print $i}'}
-    for(item in $missing)
-      if(! ~ $item $closure) fail 'unexpected missing path from' $name
-    # Export only unregistered paths. A retry reuses complete objects from a
-    # previous import, and recreates the remainder of the stream.
-    if(! ~ $#missing 0) {
-      echo Exporting $#missing paths for $name
-      nix-store --export $missing > $work/closure.export || fail 'export failed for' $name
-    }
-    if not if(test -f $work/closure.export) rm $work/closure.export
-    target prepare || fail 'preparation failed for' $name
+    transfer $system prepare
+    if(~ $#bootArtifact 1) transfer $bootArtifact prepare-boot
     echo $name prepared $system
   }
 case select
@@ -128,6 +164,16 @@ case select
     machine $name
     target select || fail 'selection stopped at' $name '; use status before retrying'
     echo $name selected $system
+  }
+case select-root
+  for(name in $requested) {
+    machine $name
+    target root-ready || fail 'root preflight failed for' $name
+  }
+  for(name in $requested) {
+    machine $name
+    target select-root || fail 'root selection stopped at' $name '; use status before retrying'
+    echo $name root-selected $rootDirectory
   }
 }
 exit ''

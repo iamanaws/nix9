@@ -112,6 +112,9 @@ with ExitStack() as stack:
         guest.child.timeout = 900
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
+        # Catch rc syntax errors before provisioning the multi-machine fixture.
+        guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9-deploy $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
+        guest.command("rc -b /tmp/deployment-syntax.rc")
         guest.command("nix-build '<nix9>' -A auth -A rcpu -A ndb -A listen --out-link " + ROOTS + "/deployment-tools")
     for name in ("files", "cpu", "terminal"):
         disk = work / f"{name}.qcow2"

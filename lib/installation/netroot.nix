@@ -6,6 +6,8 @@
   authentication,
   networking,
   rootDirectory,
+  rootKeyPattern,
+  dial,
 }:
 let
   inherit (machine.boot) stateDirectory;
@@ -22,6 +24,7 @@ let
     bootargs=${bootargs}
     nobootprompt=${bootargs}
     fs=${provider.ip}
+    nix9rootfs=${provider.ip}
     auth=${authentication.ip}
     rootspec=main
     rootdir=/root${rootDirectory}
@@ -62,6 +65,9 @@ let
     rootDirectory=${quote rootDirectory}
     rootVersion=${quote (builtins.baseNameOf rootDirectory)}
     stateDirectory=${quote stateDirectory}
+    rootAddress=${quote "tcp!${provider.ip}!564"}
+    rootKeyPattern=${quote rootKeyPattern}
+    rootDial=${dial}/bin/dial
   '';
 in
 {
@@ -77,6 +83,7 @@ in
       cp ${./netroot-prepare.rc} $out/prepare
       cp ${./netroot-select.rc} $out/select
       cp ${./netroot-check.rc} $out/check-root.rc
+      cp ${./netroot-check-select.rc} $out/check-select.rc
       cp ${./copy-tree.rc} $out/copy-tree.rc
       chmod 755 $out/init $out/prepare $out/select
     '';

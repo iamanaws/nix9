@@ -159,6 +159,11 @@ in
                 );
               };
               deployment = {
+                bootMedium = mkOption {
+                  type = runtimeFile;
+                  default = "/n/9fat";
+                  description = "Mounted boot medium for explicit root selection; /n/9fat uses the single local 9fat partition when needed.";
+                };
                 host = mkOption {
                   type = types.nullOr (types.strMatching "[a-zA-Z0-9][a-zA-Z0-9_.-]*");
                   default = null;

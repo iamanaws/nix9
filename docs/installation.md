@@ -54,7 +54,7 @@ like `mkSystem`. Its main settings are:
 | `machines.NAME.configuration` | Ordinary `mkSystem` module declaring packages, services and machine settings. |
 | `machines.NAME.boot` | Optional [network-root CPU](netroot.md) provider, root name and state directory. |
 | `roots.NAME` | [Versioned shared OS root](roots.md), with a pinned seed and optional text files. |
-| `machines.NAME.deployment` | Optional CPU connection settings for [deployment](deployment.md). |
+| `machines.NAME.deployment` | CPU connection settings and boot-medium mount for [deployment](deployment.md). |
 | `defaults.auth`, `defaults.fs`, `defaults.cpu` | Discovery providers, referenced by inventory key. Each defaults to `null`. |
 | `defaults.authdom` | Public authentication domain, default `null`. |
 | `jobs.NAME` | [Scheduled command](jobs.md) with `scheduler` and `target` inventory keys. |
@@ -96,7 +96,7 @@ controls runtime availability.
 | `systems.NAME` | That machine's system derivation, guarded by its inventory identity. |
 | `discovery` | Generated `services.ndb` host records and discovery defaults. |
 | `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts, jobs and dependencies. |
-| `build` | An output containing `manifest.json`, `ndb`, deployment settings and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
+| `build` | An output containing `manifest.json`, `ndb`, deployment settings under `deployment/` and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |
 | `boot.NAME` | Native boot artifacts for each network-root CPU, also copied under `build/boot/NAME`; its `path` file records the standalone artifact for transfer. |
 | `roots.NAME` | OS root derivation with `tree/`, base metadata and `publish`; `build/roots/NAME` records its store path. |
 

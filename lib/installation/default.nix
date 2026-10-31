@@ -44,6 +44,8 @@ let
       provider = machines.${machines.${machineName}.boot.provider};
       authentication = machines.${defaults.auth};
       networking = configs.${machineName}.networking;
+      rootKeyPattern = "dom=${defaults.authdom}";
+      dial = packages.dial;
       # The CPU uses a published CWFS path; it does not need the root bundle in its store.
       rootDirectory =
         builtins.unsafeDiscardStringContext
@@ -204,7 +206,12 @@ let
   };
   systems = builtins.mapAttrs (_: buildSystem) configs;
   deployment = lib.mapAttrs (machineName: machine: {
-    inherit (machine.deployment) user keyPattern timeout;
+    inherit (machine.deployment)
+      user
+      keyPattern
+      timeout
+      bootMedium
+      ;
     host = if machine.deployment.host == null then machine.ip else machine.deployment.host;
     remote = serves machineName "cpu" || machine.deployment.host != null;
   }) machines;
@@ -369,42 +376,50 @@ let
   deploymentScript = ''
     installationName=${quote name}
     machineNames=(${lib.concatMapStringsSep " " quote names})
+    bootMachineNames=(${lib.concatMapStringsSep " " quote bootNames})
     cpuClient=${packages.rcpu}/bin/rcpu
     fn machine {
-      switch($1) {
-      ${lib.concatMapStringsSep "\n" (
-        machineName:
-        let
-          machine = machines.${machineName};
-          connection = deployment.${machineName};
-        in
-        ''
-          case ${quote machineName}
-            identity=${quote machine.machineId}
-            system=${quote (toString systems.${machineName})}
-            remote=${if connection.remote then "1" else "0"}
-            host=${quote connection.host}
-            loginUser=(${lib.optionalString (connection.user != null) (quote connection.user)})
-            keyPattern=${quote connection.keyPattern}
-            timeout=${toString connection.timeout}
-            jobTargets=(${
-              lib.concatMapStringsSep " " quote (
-                lib.unique (
-                  map (job: job.target) (
-                    builtins.attrValues (
-                      lib.filterAttrs (_: job: job.scheduler == machineName && job.target != machineName) jobs
-                    )
-                  )
-                )
-              )
-            })
-        ''
-      ) names}
-      }
+      . $bundle/deployment/$1.rc || fail 'cannot read deployment settings for' $1
       status='''
     }
     status='''
   '';
+  deploymentConfigurations = lib.mapAttrs (
+    machineName: machine:
+    let
+      connection = deployment.${machineName};
+    in
+    ''
+      identity=${quote machine.machineId}
+      system=${quote (toString systems.${machineName})}
+      remote=${if connection.remote then "1" else "0"}
+      host=${quote connection.host}
+      loginUser=(${lib.optionalString (connection.user != null) (quote connection.user)})
+      keyPattern=${quote connection.keyPattern}
+      timeout=${toString connection.timeout}
+      bootMedium=${quote connection.bootMedium}
+      bootArtifact=(${lib.optionalString (machine.boot != null) (quote (toString boot.${machineName}))})
+      rootProvider=(${lib.optionalString (machine.boot != null) (quote machine.boot.provider)})
+      rootBundle=(${
+        lib.optionalString (machine.boot != null) (quote (toString rootTrees.${machine.boot.root}))
+      })
+      rootDirectory=(${
+        lib.optionalString (machine.boot != null) (quote rootDirectories.${machine.boot.root})
+      })
+      jobTargets=(${
+        lib.concatMapStringsSep " " quote (
+          lib.unique (
+            map (job: job.target) (
+              builtins.attrValues (
+                lib.filterAttrs (_: job: job.scheduler == machineName && job.target != machineName) jobs
+              )
+            )
+          )
+        )
+      })
+      status='''
+    ''
+  ) machines;
 in
 if names == [ ] then
   error "machines must not be empty"
@@ -583,12 +598,13 @@ else
       build = mkDerivation {
         name = "nix9-installation-${name}";
         buildCommand = ''
-          mkdir -p $out/systems $out/boot $out/roots
+          mkdir -p $out/systems $out/boot $out/roots $out/deployment
           echo -n ${quote (builtins.toJSON manifest + "\n")} > $out/manifest.json
           echo -n ${quote ndb.database} > $out/ndb
           echo -n ${quote deploymentScript} > $out/deployment.rc
           ${lib.concatMapStringsSep "\n" (machineName: ''
             echo ${quote (toString systems.${machineName})} > $out/systems/${machineName}
+            echo -n ${quote deploymentConfigurations.${machineName}} > $out/deployment/${machineName}.rc
           '') names}
           ${lib.concatMapStringsSep "\n" (machineName: ''
             mkdir -p $out/boot/${machineName}

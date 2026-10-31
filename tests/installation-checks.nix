@@ -53,6 +53,7 @@ assert valid.manifest.machines.cpu.roles == [ "cpu" ];
 assert valid.manifest.machines.terminal.roles == [ ];
 assert
   valid.manifest.machines.cpu.deployment == {
+    bootMedium = "/n/9fat";
     remote = true;
     host = "10.0.2.101";
     user = null;

@@ -60,7 +60,8 @@ with ExitStack() as stack:
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
-    for file in ("netroot.nix", "netroot-project.nix", "machine-newns.c"):
+    for file in ("netroot.nix", "netroot-project.nix", "machine-newns.c",
+                 "deployment-truncate.rc", "deployment-store.rc"):
         shutil.copyfile(Path(__file__).with_name(file), work / file)
     (work / "cwfs.setup").write_text("service files\nconfig /adm/storage/config\n"
         "filsys main cw0fw1\nfilsys dump o\nream main\nend\n")
@@ -91,7 +92,7 @@ with ExitStack() as stack:
     peers, reservations = [], {}
     for address, port in (("10.0.2.100", 567), ("10.0.2.101", 564),
                           ("10.0.2.102", 17019), ("10.0.2.103", 17019), ("10.0.2.100", 5356),
-                          ("10.0.2.102", 17024)):
+                          ("10.0.2.102", 17024), ("10.0.2.101", 17019)):
         reservation = stack.enter_context(socket.socket())
         reservation.bind(("127.0.0.1", 0))
         host = reservation.getsockname()[1]
@@ -113,6 +114,9 @@ with ExitStack() as stack:
         guest.child.timeout = 1200
         guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
         guest.command(". /usr/local/pkg/nix9/activate")
+        # -b compiles the entire file before executing the initial exit.
+        guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9-deploy $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
+        guest.command("rc -b /tmp/deployment-syntax.rc")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb --out-link " + ROOTS + "/netroot-tools")
 
     disks, systems, bundles, boot_artifacts = {}, {}, {}, {}
@@ -139,6 +143,11 @@ with ExitStack() as stack:
                 for identity in keys:
                     download(guest, identity + ".aes", private=True)
                     guest.command(f"mkdir /mnt/keys/{identity}; cp /tmp/{identity}.aes /mnt/keys/{identity}/aeskey")
+                for version in ("first", "second"):
+                    guest.command(f"nix-build /tmp/netroot.nix -A {version}.build --out-link {ROOTS}/netroot-{version}")
+                for fixture in ("deployment-truncate.rc", "deployment-store.rc"):
+                    download(guest, fixture)
+                guest.command("chmod 755 /tmp/deployment-store.rc")
             else:
                 download(guest, "files.keys", "/adm/files.keys", private=True)
                 guest.command("mkdir /adm/storage; chmod 700 /adm/storage")
@@ -166,7 +175,7 @@ with ExitStack() as stack:
                     root_bundles[root] = paths(guest.command(f"cat {bundles[version]}/roots/{root}"))[0]
                     root_directories[root] = "/systems/" + root_bundles[root].rsplit("/", 1)[1]
                 guest.command("nix-build /tmp/netroot.nix -A first.roots.stable --check --no-out-link")
-                targets = [path for machine in (systems, boot_artifacts) for versions in machine.values() for path in versions.values()]
+                targets = [versions["first"] for machine in (systems, boot_artifacts) for versions in machine.values()]
                 guest.command("echo -n > /tmp/targets")
                 for target in sorted(set(targets)):
                     guest.command(f"echo {target} >> /tmp/targets")
@@ -184,9 +193,11 @@ with ExitStack() as stack:
     @contextmanager
     def server(name):
         address, port, host = peers[0 if name == "auth" else 1]
-        reservations[host].close()
+        forwarded = [(host, port) for peer, port, host in peers if peer == address and port != 5356]
+        for host, _ in forwarded:
+            reservations[host].close()
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False, prompt=PROMPT,
-                  forward_ports=[(host, port)], guest_forwards=peers, network_options=("restrict=on",),
+                  forward_ports=forwarded, guest_forwards=peers, network_options=("restrict=on",),
                   qemu_options=storage_drives if name == "files" else ()) as guest:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/system")
@@ -200,6 +211,9 @@ with ExitStack() as stack:
     files.command("webfs")
     download(files, "glenda.keys", "/tmp/client.keys", private=True)
     files.command("cat /tmp/client.keys > /mnt/factotum/ctl; mount -c /srv/cwfs-nix9 /n/site main")
+    auth.command("webfs")
+    download(auth, "glenda.keys", "/tmp/client.keys", private=True)
+    auth.command("cat /tmp/client.keys > /mnt/factotum/ctl")
     files.command(f"rc {root_bundles['stable']}/publish /n/site")
     for root_part in ("bin", "cfg", "dev", "env", "fd", "mnt", "net", "n", "proc", "root", "srv", "tmp",
                       "usr/local/nix/store", "usr/local/nix/state", "usr/local/pkg"):
@@ -272,22 +286,22 @@ with ExitStack() as stack:
     for name in CPUS:
         with cpu(name) as guest:
             guest.command("nix-store --import < /tmp/systems.export")
-            guest.command("nix-store --import < /tmp/project.export")
-            for version, artifact in boot_artifacts[name].items():
-                guest.command(f"nix-store --realise {artifact} --add-root {ROOTS}/boot-{version}")
+            artifact = boot_artifacts[name]["first"]
+            guest.command(f"nix-store --realise {artifact} --add-root {ROOTS}/boot-first")
             for root in root_bundles.values():
                 rejected(guest, "nix-store --check-validity " + root, "not valid")
             guest.command("nix9-rebuild select " + systems[name]["first"])
             guest.command(". /usr/local/pkg/nix9/system")
-            guest.command("nix-store --realise " + project_drv + " --add-root " + ROOTS + "/project", ROOTS + "/project")
-            guest.command("cat " + ROOTS + "/project", project_output)
-            guest.command(project_output + "/bin/hello", "hello from a network-root CPU")
-            guest.command("cat " + project_output + "/compiled-on; echo", name)
-            guest.command("nix-store --verify-path " + project_output)
             guest.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
         files.command("test -e /srv/cwfs-nix9; cat /usr/local/nix/state/machine-id", "files")
     rejected(files, "nix-store --check-validity " + project_output, "not valid")
-    print("PASS: CPUs boot without a local OS, build natively, and retain separate stores through newns", flush=True)
+    print("PASS: CPUs boot without a local OS and restore their machine namespaces", flush=True)
+
+    # Require an actual root-bundle transfer to the provider during deployment.
+    files.command(f"nix-store --realise {boot_artifacts['build']['second']} --add-root {ROOTS}/fixture-boot-next")
+    files.command("rm " + ROOTS + "/netroot-second")
+    files.command(f"nix-store --delete {bundles['second']} {root_bundles['next']}")
+    rejected(files, "nix-store --check-validity " + root_bundles["next"], "not valid")
 
     with cpu("batch") as batch:
         with cpu("build") as build:
@@ -296,33 +310,96 @@ with ExitStack() as stack:
                 guest.command("cat $nix9SystemRoot^-boot", systems[name]["first"])
                 until(guest, "netstat -n | grep 'Listen *17019 '")
                 files.command("rcpu -u glenda -h " + name + " -k 'dom=nix9.netroot' -c "
-                              + quote("echo `{cat /dev/sysname}; nix-store --verify-path " + project_output), name)
+                              + quote("echo `{cat /dev/sysname}; nix-store --verify-path " + systems[name]["first"]), name)
             untrusted_service("one")
-            files.command(f"rc {root_bundles['next']}/publish /n/site")
+            first, second = bundles["first"], bundles["second"]
+            rejected(auth, f"nix9-deploy select-root {second} build", "prepare the intended boot artifact")
+            prepared = auth.command(f"nix9-deploy prepare {first} build batch")
+            if len(re.findall(r"(?m)^Root already published:", prepared)) != 1:
+                raise RuntimeError("shared root was not prepared once for its provider")
+            status = auth.command(f"nix9-deploy status {second} build batch")
+            for name in CPUS:
+                for field in ("root-running", "root-next"):
+                    if f"{name} {field} {root_directories['stable']}\n" not in status:
+                        raise RuntimeError(f"incorrect initial root deployment status: {status}")
+                if f"{name} root-reboot no\n" not in status:
+                    raise RuntimeError(f"unchanged root reported a pending reboot: {status}")
+            rejected(auth, f"rc /tmp/deployment-truncate.rc {second} build", "closure import failed")
+            files.command(f"test ! -e /n/site{root_directories['next']}")
+            build.command("cat $nix9SystemRoot", systems["build"]["first"])
+            build.command("cat /cfg/nix9/root", root_directories["stable"].rsplit("/", 1)[1])
+            files.command(f"mkdir /n/site{root_directories['next']}.partial")
+            rejected(auth, f"nix9-deploy prepare {second} build", "partial publication already exists")
+            files.command(f"rm /n/site{root_directories['next']}.partial")
+            auth.command(f"nix9-deploy prepare {second} build batch")
+            auth.command(f"nix9-deploy prepare {second} build batch")
+            for name, guest in (("build", build), ("batch", batch)):
+                guest.command("cat " + ROOTS + "/deployments/netroot/" + name + "-boot", boot_artifacts[name]["second"])
+                for root in root_bundles.values():
+                    rejected(guest, "nix-store --check-validity " + root, "not valid")
             build.command("cat /network-root-marker", "root-one")
             batch.command("cat /network-root-marker", "root-one")
-            first_boot = boot_artifacts["build"]["first"]
             next_boot = boot_artifacts["build"]["second"]
             rejected(files, f"rc {next_boot}/select /n/site /tmp", "machine identity mismatch")
             build.command("9fs 9fat; cp /n/9fat/plan9.ini /tmp/original.ini")
             build.command("mkdir /tmp/wrong-medium; echo 'nix9machine=batch' > /tmp/wrong-medium/plan9.ini")
             rejected(build, f"rc {next_boot}/select /root /tmp/wrong-medium", "boot medium belongs to another machine")
             build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
-            build.command(f"rc {next_boot}/select /root /n/9fat")
+            batch.command("9fs 9fat; cp /n/9fat/plan9.ini /tmp/original.ini")
+            batch.command("echo 'nix9machine=build' > /n/9fat/plan9.ini")
+            rejected(auth, f"nix9-deploy select-root {second} build batch", "boot medium belongs to another machine")
+            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            batch.command("cp /tmp/original.ini /n/9fat/plan9.ini")
+            batch.command("mkdir /n/9fat/nix9lock")
+            rejected(auth, f"nix9-deploy select-root {second} build batch", "boot medium is locked")
+            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            batch.command("rm /n/9fat/nix9lock")
+            root_path = "/n/site" + root_directories["next"]
+            files.command(f"mv {root_path} {root_path}.saved")
+            rejected(auth, f"nix9-deploy select-root {second} build", "incomplete published root")
+            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            files.command(f"mv {root_path}.saved {root_path}")
+            # Run the expensive compiler imports after deployment preflight,
+            # so transport and boot-medium failures surface early.
+            for name, guest in (("build", build), ("batch", batch)):
+                guest.command("nix-store --import < /tmp/project.export")
+                guest.command("nix-store --realise " + project_drv + " --add-root " + ROOTS + "/project", ROOTS + "/project")
+                guest.command("cat " + ROOTS + "/project", project_output)
+                guest.command(project_output + "/bin/hello", "hello from a network-root CPU")
+                guest.command("cat " + project_output + "/compiled-on; echo", name)
+                guest.command("nix-store --verify-path " + project_output)
+                guest.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
+            print("PASS: native C builds retain distinct CPU stores through newns", flush=True)
+            auth.command(f"nix9-deploy select {second} build")
+            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            build.command("nix-store --gc; nix-store --verify-path " + next_boot)
+            auth.command(f"nix9-deploy select-root {second} build")
+            build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
+            auth.command(f"nix9-deploy select-root {second} build")
             build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
             build.command("cat /network-root-marker", "root-one")
             build.command("cat $nix9SystemRoot^-boot", systems["build"]["first"])
-            build.command("nix9-rebuild select " + systems["build"]["second"])
+            status = auth.command(f"nix9-deploy status {second} build batch")
+            for line in (f"build root-next {root_directories['next']}",
+                         f"build root-running {root_directories['stable']}",
+                         "build root-reboot required", "batch root-reboot no"):
+                if line + "\n" not in status:
+                    raise RuntimeError(f"incorrect pending root deployment status: {status}")
             build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "two")
             build.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version'", "two")
             batch.command("cat /cfg/nix9/files/version", "batch")
             build.command("nix-store --gc; nix-store --verify-path " + systems["build"]["first"])
+    print("PASS: coordinated root preparation, transfer retry, all-CPU preflight and explicit selection", flush=True)
     selected_roots["build"] = "next"
     with cpu("batch") as batch, cpu("build") as build:
         batch.command("cat /network-root-marker", "root-one")
         build.command("cat /network-root-marker", "root-two")
         build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "two")
         build.command("echo `{cat /dev/sysname}", "worker")
+        status = auth.command(f"nix9-deploy status {bundles['second']} build batch")
+        for line in (f"build root-running {root_directories['next']}", "build root-reboot no", "build reboot no"):
+            if line + "\n" not in status:
+                raise RuntimeError(f"incorrect booted root deployment status: {status}")
         untrusted_service("two")
         build.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", "build")
         build.command("/tmp/check-newns 'cat /network-root-marker'", "root-two")
@@ -330,8 +407,8 @@ with ExitStack() as stack:
         build.command(project_output + "/bin/hello", "hello from a network-root CPU")
         build.command("nix9-rebuild rollback; . /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "one")
         build.command("cat /network-root-marker", "root-two")
-        build.command("9fs 9fat")
-        build.command(f"rc {first_boot}/select /root /n/9fat")
+        auth.command(f"nix9-deploy prepare {bundles['first']} build")
+        auth.command(f"nix9-deploy select-root {bundles['first']} build")
     selected_roots["build"] = "stable"
     with cpu("build") as build:
         build.command(". /usr/local/pkg/nix9/system; cat /cfg/nix9/files/version", "one")
@@ -368,4 +445,6 @@ with ExitStack() as stack:
                    "newns", "remote-login", "untrusted-service", "hostname-change", "reboot", "gc-retention", "rollback", "bad-key",
                    "missing-state", "wrong-identity", "root-provider-offline", "reproducible-root", "publish-once",
                    "partial-publication", "wrong-boot-medium", "root-upgrade", "mixed-root-versions", "root-rollback",
-                   "no-private-root-copies"]}, indent=2) + "\n")
+                   "no-private-root-copies", "remote-root-provider", "shared-publication-once",
+                   "root-deployment-status", "root-transfer-retry", "all-cpu-root-preflight",
+                   "explicit-root-selection", "selection-preserves-backup"]}, indent=2) + "\n")

@@ -126,6 +126,8 @@ in
   deniedDeploymentUser = make { machines.cpu.deployment.user = "nobody"; };
   secretDeploymentPattern = make { machines.cpu.deployment.keyPattern = "!password=bad"; };
   invalidDeploymentTimeout = make { machines.cpu.deployment.timeout = 0; };
+  invalidBootMedium = make { machines.cpu.deployment.bootMedium = "../9fat"; };
+  storeBootMedium = make { machines.cpu.deployment.bootMedium = "/usr/local/nix/store/boot"; };
   optionalUnknownProvider = make {
     machines.terminal.mounts.projects = {
       provider = "missing";

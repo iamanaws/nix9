@@ -31,6 +31,12 @@ let
           machines.auth.configuration.services.ndb.dns.enable = false;
           machines.auth.configuration.services.auth.speaksFor.batch = [ "glenda" ];
           machines.files.configuration.services.ndb.dns.enable = false;
+          machines.files.configuration.services.cpu = {
+            enable = true;
+            allowedUsers = [ "glenda" ];
+            keyFile = "/adm/files.keys";
+            keyPattern = "dom=nix9.netroot user=files";
+          };
           machines.files.configuration.services.cwfs.deviceMap = lib.mkForce {
             w0 = "/dev/sdG0/data";
             w1 = "/dev/sdH0/data";

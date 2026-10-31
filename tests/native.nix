@@ -30,6 +30,8 @@
       ./netroot-project.nix
       ./machine-newns.c
       ./boot_medium.py
+      ./deployment-truncate.rc
+      ./deployment-store.rc
     ];
     env.NIX9_NETROOT_TEST_STATE = "netroot-state";
     args = "${nativeBootstrap} \"$out\"";

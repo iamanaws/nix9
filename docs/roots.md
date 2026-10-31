@@ -30,6 +30,10 @@ Each root contains hooks for the installation's network-root CPUs, so moving
 one CPU does not rebuild another CPU's root. Changing a machine's state location
 or boot hooks does create new root artifacts.
 
+For running CPUs, [deployment](deployment.md#shared-os-roots) publishes roots,
+transfers boot artifacts and selects the next boot through `nix9-deploy`.
+The commands below also work for initial publication and manual administration.
+
 Build and retain the updated installation on the file server. With its `main`
 filesystem mounted at `/n/site`:
 
@@ -57,7 +61,8 @@ remain separately provisioned.
 ## Select one CPU
 
 The CPU needs only its boot instructions. Full root bundles stay on the file
-server. With native Nix active on that CPU, import and retain the instructions:
+server. From the CPU's console, with native Nix active, import and retain the
+instructions:
 
 ```sh
 nix-store --import < /tmp/boot-next.export
@@ -71,6 +76,7 @@ fshalt -r
 `select` checks the published root, persistent identity and boot medium's
 `nix9machine` before writing. It preserves kernel and hardware settings, saves
 the previous `plan9.ini` as `plan9.bak`, and updates the generated boot settings.
+Repeating an unchanged selection preserves that backup.
 It neither initializes state nor selects a Nix system generation. Other CPUs
 continue using their configured roots. After reboot, `/cfg/nix9/root` identifies
 the running root version.
@@ -81,8 +87,9 @@ on the medium; inspect the files before removing it and retrying.
 
 ## Roll back
 
-Run the retained earlier boot artifact's `select` with the same mounts, then
-reboot. If the CPU cannot boot, restore its saved settings from native recovery
+Deploy the retained earlier installation with `prepare` and `select-root`, or
+run its boot artifact's `select` with the same mounts, then reboot.
+If the CPU cannot boot, restore its saved settings from native recovery
 media. Keep both published trees and compatible kernels available.
 
 Root rollback reuses current writable state. Use `nix9-rebuild rollback`

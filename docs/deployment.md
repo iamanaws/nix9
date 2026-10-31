@@ -19,7 +19,8 @@ nix9-deploy prepare $installation files cpu
 nix9-deploy select $installation cpu files
 ```
 
-Machine arguments are inventory keys. Omitting them requests every machine.
+Machine arguments are inventory keys. Omitting them requests every machine,
+except `select-root`, which requests only network-root CPUs.
 Matching the caller's stable identity chooses local execution. Other machines
 require a running CPU service. Run terminal deployment locally after
 [importing the bundle's closure](transport.md#binary-caches). Destinations do
@@ -41,6 +42,40 @@ target's new configuration available to subsequent sessions.
 
 Reboot machines explicitly when ready. Session refresh and service activation
 follow the ordinary [generation rules](configuration.md#generations).
+
+## Shared OS roots
+
+For provisioned [network-root CPUs](netroot.md), `prepare` first publishes each
+required root once on its CWFS provider. The provider must be the coordinator
+or offer administrative CPU access. It needs a running managed CWFS service and
+a writable `/systems` directory. Complete published versions are reused;
+failed copies leave a `.partial` directory to inspect and remove before retrying.
+
+CPUs receive their system closures and small boot artifacts. Full root bundles
+stay on the provider. Preparation checks the published boot hooks and persistent
+machine identity, without initializing state or changing boot settings.
+
+Select the next OS root explicitly:
+
+```sh
+nix9-deploy prepare $installation build batch
+nix9-deploy select-root $installation build
+nix9-deploy status $installation build batch
+```
+
+`select-root` checks every requested CPU's prepared artifact, intended provider,
+published hooks, persistent identity and boot medium before changing any boot
+settings. It then selects machines in argument order. Repeating an unchanged
+selection preserves `plan9.bak`. Reboot each CPU explicitly when ready.
+Ordinary `select` still selects packages and module settings separately.
+
+`machines.NAME.deployment.bootMedium` defaults to `/n/9fat`. When needed, deployment
+mounts the CPU's single local `9fat` partition through the native FAT server.
+The server uses its own namespace and shares its cache with console mounts.
+Deployment rejects ambiguous local disks and avoids devices exported by the
+coordinator. A custom path must already be mounted in the administration
+session's namespace. Boot media and kernels remain provisioned
+through native tools. See [root recovery](roots.md#roll-back) for FAT write limits.
 
 ## Connections
 
@@ -67,21 +102,26 @@ disables CPU access; the currently running listener remains available until rebo
 
 ## Status and recovery
 
-`status` queries machines for their prepared, selected and booted paths alongside
-the intended path in the bundle. `-` means no recorded path. `reboot required`
-means selected and booted paths differ; it does not test service health. A
-machine can be booted into its selected generation while differing from the
-bundle's intended generation.
+`status` shows prepared, selected and booted systems alongside the bundle's
+intended system. Network-root CPUs also show `root-intended`, `root-prepared`
+boot artifacts, `root-running`, `root-next`, and the running and next providers' addresses.
+`-` means no recorded path. `root-reboot` compares running and next-boot roots;
+`reboot required` covers pending system or root changes. These fields do not test
+service health or mean the machine matches the bundle's intended configuration.
 
 A failed initial check prevents selection on all requested machines. A failure
 during selection can leave earlier machines updated. Query status, resolve the
-failure, then repeat `prepare` or `select` for the affected machines. Use each
-machine's `nix9-rebuild rollback` to restore an earlier generation.
+failure, then repeat the affected operation. Use `nix9-rebuild rollback` for a
+system generation. For an OS root, run `prepare` and `select-root` with the
+retained earlier installation, then reboot.
 
 Each destination retains one prepared closure per installation and machine at
 `/usr/local/nix/state/gcroots/deployments/INSTALLATION/MACHINE-ID`. A later
 preparation replaces that root. Remove it manually when abandoning a deployment;
-selected and historical generations have their own roots. Abrupt termination
+selected and historical generations have their own roots. A CPU's prepared boot
+artifact uses the same path with `-boot` appended. Providers retain root bundles
+under `MACHINE-ID-roots/VERSION`; these and their published CWFS copies require
+explicit removal when no longer needed. Abrupt termination
 can leave `#s/nix9-deploy-*` locks or coordinator temporary files under
 `/usr/local/nix/state/deploy-*`. Remove them only after checking that the
 deployment has stopped.

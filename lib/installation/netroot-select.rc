@@ -7,14 +7,8 @@ fn fail {
 if(! ~ $#* 2) fail 'usage: select ROOT-MOUNT BOOT-MEDIUM-MOUNT'
 bundle=`{basename -d $0}
 rootMount=$1
-. $bundle/check-root.rc || fail 'cannot check published root'
-for(identityFile in /usr/local/nix/state/machine-id $node/usr/local/nix/state/machine-id) {
-  identity=`{cat $identityFile}
-  ~ $#identity 1 && ~ $identity $machineId || fail 'machine identity mismatch:' $identityFile
-}
 medium=$2
-ini=$medium/plan9.ini
-grep -s '^nix9machine='^$machineId^'$' $ini || fail 'boot medium belongs to another machine or is not initialized'
+. $bundle/check-select.rc || fail 'root selection preflight failed'
 mkdir $medium/nix9lock || fail 'boot medium is locked'
 fn sigexit {
   rm $medium/nix9lock
@@ -22,6 +16,11 @@ fn sigexit {
 awk 'NR==FNR { split($0, a, "="); keys[a[1]]=1; next }
      { split($0, a, "="); if(!(a[1] in keys)) print }' $bundle/plan9.ini $ini > $medium/plan9.new || fail 'cannot stage boot settings'
 cat $bundle/plan9.ini >> $medium/plan9.new || fail 'cannot append boot settings'
+if(cmp -s $medium/plan9.new $ini) {
+  rm $medium/plan9.new
+  echo 'Root already selected for next boot:' $rootDirectory
+  exit ''
+}
 cp $ini $medium/plan9.bak || fail 'cannot save previous boot settings'
 if(! mv $medium/plan9.new $ini) {
   cp $medium/plan9.bak $ini

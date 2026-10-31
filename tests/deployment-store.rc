@@ -1,8 +1,11 @@
 #!/bin/rc -e
 if(~ $1 --export) {
   /tmp/deploy-real-store $* > /tmp/deploy-full.export
-  bytes=`{ls -l /tmp/deploy-full.export | awk '{print $6 - 8}'}
-  dd -if /tmp/deploy-full.export -bs 1 -count $bytes
+  parts=`{ls -l /tmp/deploy-full.export | awk '{n=$6-8; blocks=int(n/65536); print blocks, blocks*65536, n%65536}'}
+  if(! ~ $parts(1) 0)
+    dd -if /tmp/deploy-full.export -bs 65536 -count $parts(1)
+  if(! ~ $parts(3) 0)
+    dd -if /tmp/deploy-full.export -bs 1 -iseek $parts(2) -count $parts(3)
   exit ''
 }
 exec /tmp/deploy-real-store $*

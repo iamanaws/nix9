@@ -6,15 +6,18 @@ fn fail {
   exit 'deployment target failed'
 }
 if(! ~ $#* 6) fail 'invalid target request'
+input=$6
+. $input/request.rc || fail 'cannot read target request'
 action=$1
 installation=$2
 name=$3
 identity=$4
 system=$5
-input=$6
-if(! ~ $action status missing prepare ready select) fail 'invalid target action'
+if(! ~ $action status missing prepare ready select prepare-root prepare-boot root-ready select-root)
+  fail 'invalid target action'
 . /usr/local/pkg/nix9/activate || fail 'cannot activate target Nix'
 path=($nix9/bin /$cputype/bin /rc/bin)
+helperDirectory=`{basename -d $0}
 if(! ~ $#nix9MachineId 1 || ! ~ $nix9MachineId $identity)
   fail $name 'machine identity differs from the inventory'
 root=/usr/local/nix/state/gcroots/deployments/^$installation^/^$identity
@@ -41,20 +44,41 @@ if(~ $action status) {
   reboot=required
   if(~ $selected -) reboot=unselected
   if not if(~ $selected $booted) reboot=no
+  if(~ $#bootArtifact 1) {
+    . $helperDirectory/root-target.rc || fail 'cannot inspect root deployment'
+    if(! ~ $rootReboot no) reboot=required
+  }
   echo $name reboot $reboot
   exit ''
 }
 
 lock='#s/nix9-deploy-target-'^$identity
 @{ status='' } > $lock || fail 'target deployment is locked:' $lock
-fn sigexit { result=$status; rm $lock; status=$result }
+rootWork=()
+rootMounted=0
+fn sigexit {
+  result=$status
+  if(~ $#rootWork 1) {
+    if(~ $rootMounted 1) {
+      if(unmount $rootWork/main) rootMounted=0
+    }
+    if(~ $rootMounted 0) {
+      if(test -d $rootWork/main) rm $rootWork/main
+      rm $rootWork
+    }
+  }
+  rm $lock
+  status=$result
+}
+if(~ $action prepare prepare-root prepare-boot) {
+  if(test -f $input/closure.export)
+    nix-store --import < $input/closure.export > /dev/null || fail 'closure import failed'
+}
 switch($action) {
 case missing
   # --print-invalid returns only unregistered paths, without trying to build.
   nix-store --check-validity --print-invalid `{cat $input/paths} || fail 'cannot inspect target store'
 case prepare
-  if(test -f $input/closure.export)
-    nix-store --import < $input/closure.export > /dev/null || fail 'closure import failed'
   mkdir -p /usr/local/nix/state/gcroots/deployments/$installation
   nix-store --option substitute false --realise $system --add-root $root > /dev/null ||
     fail 'cannot retain the imported system'
@@ -63,5 +87,7 @@ case ready select
   if(! test -r $root || ! ~ `{cat $root} $system) fail $name 'has not prepared the intended system'
   nix9-rebuild check $system || fail 'system preflight failed'
   if(~ $action select) nix9-rebuild select $system || fail 'system selection failed'
+case prepare-root prepare-boot root-ready select-root
+  . $helperDirectory/root-target.rc || fail 'root deployment failed'
 }
 exit ''

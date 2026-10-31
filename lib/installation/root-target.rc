@@ -1,0 +1,112 @@
+# Sourced by target.rc inside its private namespace and target lock.
+fn bootMediumReady {
+  if(! test -f $bootMedium/plan9.ini && ~ $bootMedium /n/9fat) {
+    # Login profiles may expose the coordinator's /dev. Use this CPU's disks.
+    partitions=('#S'/sd*/9fat)
+    ~ $#partitions 1 && test -f $partitions || fail 'expected one local 9fat partition; mount the intended boot medium explicitly'
+    # Use the native shared FAT server so console mounts see the same cache.
+    # A fresh namespace keeps a new server from retaining the rcpu client's files.
+    if(! test -f /srv/dos) {
+      /$cputype/bin/auth/newns /$cputype/bin/rc -c \
+        'bind -a ''#S'' /dev && exec /$cputype/bin/dossrv' </dev/null >/dev/null >[2]/dev/null ||
+        fail 'cannot start native FAT server'
+    }
+    device=`{echo $partitions | sed 's,^#S/,/dev/,'}
+    mount -nc /srv/dos $bootMedium $device || fail 'cannot mount boot medium'
+  }
+  test -f $bootMedium/plan9.ini || fail 'cannot read boot medium:' $bootMedium
+  awk '-F=' -v 'id='^$identity '$1 == "nix9machine" {count++; if($0 != "nix9machine=" id) bad=1}
+    END {exit !(count == 1 && !bad)}' $bootMedium/plan9.ini ||
+    fail 'boot medium belongs to another machine or is not initialized'
+}
+fn mountRoot {
+  rootWork=/usr/local/nix/state/deploy-root-^$identity^-^$pid
+  if(test -e $rootWork) fail 'temporary root mount already exists:' $rootWork
+  mkdir $rootWork || fail 'cannot create private root mount'
+  chmod 700 $rootWork || fail 'cannot protect private root mount'
+  rootMount=$rootWork/main
+  mkdir $rootMount || fail 'cannot create root mount point'
+  if(~ $action prepare-root) {
+    alarm $timeout mount -c /srv/cwfs-nix9 $rootMount main || fail 'cannot mount local CWFS provider'
+  }
+  if not {
+    alarm $timeout $rootDial $rootAddress /$cputype/bin/mount -c -k $rootKeyPattern /fd/0 $rootMount main ||
+      fail 'cannot mount intended root provider'
+  }
+  rootMounted=1
+}
+if(~ $action status) {
+  readRoot $root^-boot
+  echo $name root-prepared $value
+  running=-
+  if(test -r /cfg/nix9/root) {
+    version=`{cat /cfg/nix9/root}
+    if(! ~ $#version 1 || ! echo $version | awk '/^[a-z0-9]+-nix9-root-[a-z0-9-]+$/ {ok=1} END {exit !ok}')
+      fail 'invalid running root marker'
+    running=/systems/$version
+  }
+  bootMediumReady
+  next=`{awk '-F=' '$1 == "rootdir" {print $2}' $bootMedium/plan9.ini}
+  nextProvider=`{awk '-F=' '$1 == "fs" {print $2}' $bootMedium/plan9.ini}
+  if(! ~ $#next 1 || ! ~ $#nextProvider 1) fail 'ambiguous next-boot root settings'
+  if(! echo $next | awk '/^\/root\/systems\/[a-z0-9]+-nix9-root-[a-z0-9-]+$/ {ok=1} END {exit !ok}')
+    fail 'invalid next-boot root path'
+  next=`{echo $next | sed 's,^/root,,'}
+  echo $name root-running $running
+  runningProvider=-
+  if(~ $#nix9rootfs 1) runningProvider=$nix9rootfs
+  echo $name root-running-provider $runningProvider
+  echo $name root-next $next
+  echo $name root-next-provider $nextProvider
+  rootReboot=required
+  # bootrc removes the short fs environment name; nix9rootfs survives boot.
+  if(~ $next $running && ~ $nextProvider $runningProvider) rootReboot=no
+  echo $name root-reboot $rootReboot
+}
+if not if(~ $action prepare-root) {
+  version=`{basename $system}
+  test -f $system/tree/cfg/nix9/root || fail 'invalid root bundle'
+  marker=`{cat $system/tree/cfg/nix9/root}
+  ~ $#marker 1 && ~ $marker $version || fail 'root bundle version mismatch'
+  mkdir -p $root^-roots || fail 'cannot create root retention directory'
+  nix-store --option substitute false --realise $system --add-root $root^-roots/$version > /dev/null ||
+    fail 'cannot retain the root bundle'
+  mountRoot
+  published=$rootMount/systems/$version
+  if(test -e $published) {
+    test -d $published && test -f $published/cfg/nix9/root || fail 'incomplete published root'
+    marker=`{cat $published/cfg/nix9/root}
+    ~ $#marker 1 && ~ $marker $version || fail 'published root version mismatch'
+    echo 'Root already published:' /systems/$version
+  }
+  if not rc $system/publish $rootMount || fail 'root publication failed'
+}
+if not {
+  ~ $#bootArtifact 1 || fail 'not a network-root CPU:' $name
+  if(~ $action prepare-boot) {
+    ~ $system $bootArtifact || fail 'unexpected boot artifact'
+    mkdir -p /usr/local/nix/state/gcroots/deployments/$installation
+    nix-store --option substitute false --realise $bootArtifact --add-root $root^-boot > /dev/null ||
+      fail 'cannot retain the boot artifact'
+  }
+  readRoot $root^-boot
+  ~ $value $bootArtifact || fail 'prepare the intended boot artifact on' $name
+  nix-store --check-validity $bootArtifact || fail 'boot artifact is not registered'
+  bundle=$bootArtifact
+  . $bundle/configuration.rc || fail 'cannot read boot configuration'
+  ~ $machineId $identity || fail 'boot artifact identity mismatch'
+  mountRoot
+  if(~ $action prepare-boot) {
+    . $bundle/check-root.rc || fail 'published root preflight failed'
+    test -r $node/usr/local/nix/state/machine-id &&
+      ~ `{cat $node/usr/local/nix/state/machine-id} $identity || fail 'persistent machine identity mismatch'
+  }
+  if not {
+    bootMediumReady
+    medium=$bootMedium
+    . $bundle/check-select.rc || fail 'root selection preflight failed'
+    if(~ $action select-root)
+      rc $bundle/select $rootMount $bootMedium || fail 'root selection failed'
+  }
+}
+status=''
