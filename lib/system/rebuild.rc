@@ -4,7 +4,7 @@ fn usage {
 
   build [CONFIGURATION]   Build and retain a system without selecting it.
   switch [CONFIGURATION]  Build, check and select a system.
-  status                  Show selected, booted and session systems.
+  status [--health]       Show systems; optionally probe booted services.
   rollback                Select the preceding generation.
   list                    List retained generations.
   delete NUMBER           Release an inactive generation for garbage collection.

@@ -1,0 +1,37 @@
+# A probe owns its namespace; fresh mounts disappear on success or timeout.
+rfork ne
+healthSystem=$1
+point=$2
+operation=$3
+shift 3
+. $healthSystem/health-config
+switch($operation) {
+case listener
+  netstat -n | awk -v 'port='^$1 '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit !found}' || {
+    echo 'no TCP listener on port' $1 >[1=2]
+    exit 'listener unavailable'
+  }
+case directory
+  test -d $1
+  ls -d $1 > /dev/null
+case ndb
+  answer=`{$healthNdb /net/cs tcp!^$1^!9}
+  echo $answer | awk -v 'expected='^$2^'!9' '{for(i=1;i<=NF;i++) if($i == expected) found=1} END {exit !found}' || {
+    echo 'cs lookup for' $1 'expected' $2 'but returned:' $answer >[1=2]
+    exit 'discovery differs'
+  }
+case mount
+  switch($1) {
+  case tls
+    $healthClient -a -k $3 $2 $healthMount -nc /fd/0 $point
+  case tcp
+    $healthDial $2 $healthMount -c -k $3 /fd/0 $point $4
+  case *
+    exit 'invalid health transport'
+  }
+  ls -d $point > /dev/null
+  shift 4
+  for(relative in $*) ls -d $point^$relative > /dev/null
+case *
+  exit 'invalid health probe'
+}

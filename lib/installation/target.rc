@@ -13,7 +13,7 @@ installation=$2
 name=$3
 identity=$4
 system=$5
-if(! ~ $action status missing prepare ready select prepare-root prepare-boot root-ready select-root)
+if(! ~ $action status status-health missing prepare ready select prepare-root prepare-boot root-ready select-root)
   fail 'invalid target action'
 . /usr/local/pkg/nix9/activate || fail 'cannot activate target Nix'
 path=($nix9/bin /$cputype/bin /rc/bin)
@@ -32,7 +32,7 @@ fn readRoot {
   }
   status=''
 }
-if(~ $action status) {
+if(~ $action status status-health) {
   readRoot $root
   echo $name prepared $value
   readRoot $nix9SystemRoot
@@ -49,6 +49,15 @@ if(~ $action status) {
     if(! ~ $rootReboot no) reboot=required
   }
   echo $name reboot $reboot
+  if(~ $action status-health) {
+    if(~ $booted - || ! test -f $booted/health) {
+      echo $name health-result failed
+      echo '  booted health checks unavailable; rebuild and reboot'
+    }
+    if not {
+      /$cputype/bin/rc -e $booted/health $name || status=''
+    }
+  }
   exit ''
 }
 

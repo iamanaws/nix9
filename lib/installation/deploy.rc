@@ -10,7 +10,7 @@ if(test $#* -lt 2) fail 'invalid coordinator request'
 action=$1
 bundle=$2
 shift 2
-if(! ~ $action show prepare select apply select-root status) fail 'unknown coordinator action:' $action
+if(! ~ $action show prepare select apply select-root status status-health) fail 'unknown coordinator action:' $action
 if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
 path=($nix9/bin /$cputype/bin /rc/bin)
 . $nix9/packages/system/machine.rc || fail 'machine setup failed'
@@ -38,11 +38,20 @@ if(~ $action show) {
   for(name in $requested) cat $bundle/overview/$name
   exit ''
 }
+if(~ $action status-health) {
+  # CPU authentication must use loaded keys without prompting on the console.
+  for(healthConsole in /dev/cons /dev/consctl)
+    if(test -e $healthConsole) bind /dev/null $healthConsole
+}
 
 # Serialize this installation on the coordinator. Target operations also lock
 # independently, so different coordinators cannot import/select simultaneously.
 lock='#s/nix9-deploy-client-'^$installationName
-@{ status='' } > $lock || fail 'deployment is locked:' $lock
+lockOwned=0
+if(! ~ $action status-health) {
+  @{ status='' } > $lock || fail 'deployment is locked:' $lock
+  lockOwned=1
+}
 work=/usr/local/nix/state/deploy-^$installationName^-^$pid
 clientRoot=/usr/local/nix/state/gcroots/deployments/.clients/^$installationName^-^$pid
 workOwned=0
@@ -51,7 +60,7 @@ fn sigexit {
   result=$status
   if(~ $workOwned 1 && test -d $work) rm -r $work
   if(~ $retained 1 && test -f $clientRoot) rm $clientRoot
-  rm $lock
+  if(~ $lockOwned 1) rm $lock
   status=$result
 }
 if(test -e $work) fail 'temporary directory already exists:' $work
@@ -141,11 +150,26 @@ fn deploymentStatus {
       echo $name root-intended $rootDirectory
       echo $name root-provider $rootProvider
     }
-    if(! target status) {
-      echo $name unavailable >[1=2]
-      failed=1
+    if(~ $action status-health) {
+      if(target status-health > $work/health >[2=1]) {
+        cat $work/health
+        if(! grep -s '^'^$name^' health-result ok$' $work/health) failed=1
+        if(~ $remote 1 && { ~ $#nix9MachineId 0 || ! ~ $nix9MachineId $identity }) echo $name health cpu ok
+      }
+      if not {
+        echo $name health cpu failed
+        cat $work/health
+        failed=1
+      }
+    }
+    if not {
+      if(! target status) {
+        echo $name unavailable >[1=2]
+        failed=1
+      }
     }
   }
+  if(~ $failed 1 && ~ $action status-health) fail 'some health checks failed'
   if(~ $failed 1) fail 'some machines could not be queried'
   status=''
 }
@@ -206,7 +230,7 @@ fn selectedSummary {
   }
 }
 switch($action) {
-case status
+case status status-health
   deploymentStatus
 case prepare
   prepareSystems

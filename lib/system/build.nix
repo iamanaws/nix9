@@ -197,6 +197,19 @@ let
       ;
     mounts = namespace.mounts;
   };
+  health = import ./health.nix {
+    inherit
+      lib
+      services
+      ndb
+      namespaceTools
+      cpuPackage
+      dialPackage
+      ;
+    mounts = namespace.mounts;
+    binds = namespace.binds;
+    listenPorts = builtins.attrNames listenScripts;
+  };
   write = path: contents: ''
     mkdir -p $out/${builtins.dirOf path}
     echo -n ${quote contents} > $out/${path}
@@ -263,6 +276,10 @@ else
           '') backups
         )}
         echo ${quote hostName} > $out/hostName
+        ${write "health-config" health}
+        ${write "health-probe" (builtins.readFile ./health-probe.rc)}
+        echo 'healthSystem='$out > $out/health
+        echo -n ${quote (builtins.readFile ./health.rc)} >> $out/health
         ${write "programs/profile" graphical.profile}
         ${lib.optionalString programs.rio.enable (write "programs/rio/riostart" graphical.riostart)}
         ${lib.optionalString programs.rio.enable "chmod 755 $out/programs/rio/riostart"}

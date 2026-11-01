@@ -72,7 +72,16 @@ shell has not activated the selected system. `reboot required` compares selected
 and booted system paths. It does not inspect service health or shared OS-root
 selection; use [deployment status](deployment.md#status-and-recovery) for OS roots.
 
-Both commands check the machine identity guard, activation, service settings,
+`nix9 status --health` also probes the recorded booted system. It checks declared
+TCP listeners, live NDB resolution, and fresh authenticated mounts with the caller's
+loaded keys, without prompting. Mount probes also check paths used by namespace
+bindings. Each probe has a 10-second limit; failures include native diagnostics
+and return a nonzero status. Optional mounts are checked too. Listener checks
+alone do not prove authentication or application behavior. Checks use a private
+copy of the caller's namespace and leave sessions and generation selections
+alone. Boot the selected system before the first check.
+
+`check` and `select` validate machine identity, activation, service settings,
 runtime prerequisites and startup hooks. `check` leaves the selected generation,
 history, hostname, hooks and logs unchanged. Activation preflight can create
 missing mount points and an empty revocation file. A temporary GC root protects

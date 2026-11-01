@@ -140,6 +140,14 @@ boot artifacts, `root-running`, `root-next`, and the running and next providers'
 `reboot required` covers pending system or root changes. These fields do not test
 service health or mean the machine matches the bundle's intended configuration.
 
+Use `nix9 status --health cpu files` to add [native health checks](configuration.md#generations)
+from each machine's booted system. The CPU connection tests remote login and
+authentication; mount diagnostics name the share and provider address. Checks
+continue after failures and return nonzero if any machine or probe fails. They
+reuse the retained bundle without evaluation and run independently of deployment
+locks. As with ordinary status, machines without administrative CPU access must
+be inspected locally.
+
 A failed initial check prevents selection on all requested machines. A failure
 during selection can leave earlier machines updated. Query status, resolve the
 failure, then repeat the affected operation. Use `nix9-rebuild rollback` for a

@@ -1,0 +1,42 @@
+# Probe the booted configuration without activating it in the caller's namespace.
+rfork ne
+path=(/$cputype/bin /rc/bin)
+# Native getkey opens the console directly, independently of standard input.
+for(healthConsole in /dev/cons /dev/consctl)
+  if(test -e $healthConsole) bind /dev/null $healthConsole
+healthName=$1
+. $healthSystem/health-config
+work=/tmp/nix9-health-^$pid
+if(test -e $work) exit 'health temporary directory already exists'
+mkdir $work || exit 'cannot create health temporary directory'
+chmod 700 $work
+fn sigexit {
+  result=$status
+  rm -r $work
+  status=$result
+}
+mkdir $work/mount
+failed=0
+fn probe {
+  label=$1
+  shift
+  if($healthAlarm 10 /$cputype/bin/rc -e $healthSystem/health-probe $healthSystem $work/mount $* < /dev/null > $work/result >[2=1]) {
+    echo $healthName health $label ok
+  }
+  if not {
+    reason=$status
+    echo $healthName health $label failed
+    if(test -s $work/result) sed 's/^/  /' $work/result
+    if not echo '  probe failed:' $reason
+    failed=1
+  }
+  status=''
+}
+echo $healthName health-system $healthSystem
+healthChecks
+if(~ $failed 1) {
+  echo $healthName health-result failed
+  exit 'health checks failed'
+}
+echo $healthName health-result ok
+exit ''

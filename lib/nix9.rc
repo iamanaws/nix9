@@ -13,6 +13,7 @@ fn usage {
   select OUTPUT      Check and select a prebuilt local system.
   status             Show local identity, selected, booted and session systems.
   status MACHINE ... Query machines from a built installation.
+  status --health    Also probe the booted system and its declared providers.
   show [MACHINE ...] Describe a built installation offline.
   deploy MACHINE ... Build, prepare, check and select the requested machines.
   select-root MACHINE ... Select prepared next-boot OS roots explicitly.
@@ -23,6 +24,7 @@ Installation options:
   --all              Request every machine; select-root requests network-root CPUs.
   --prepare          With deploy, prepare without selecting.
   --select           With deploy, select the previously prepared bundle.
+  --health           With status, run bounded native service checks.
 
 Prepare and select are mutually exclusive. Deploy and select-root require
 machine names or --all. Inspection and --select reuse the last successful
@@ -55,6 +57,7 @@ requested=()
 all=0
 mode=apply
 fileGiven=0
+health=0
 while(! ~ $#* 0) {
   switch($1) {
   case --file --from
@@ -71,6 +74,10 @@ while(! ~ $#* 0) {
     shift
   case --all
     all=1
+  case --health
+    if(! ~ $action status) fail '--health is only valid with status'
+    if(~ $health 1) fail 'duplicate --health'
+    health=1
   case --prepare --select
     if(! ~ $action deploy) fail $1 'is only valid with deploy'
     if(! ~ $mode apply) fail '--prepare and --select are mutually exclusive'
@@ -87,8 +94,11 @@ if(~ $fileGiven 1 && ! ~ $#from 0) fail '--file and --from are mutually exclusiv
 if(~ $all 1 && ! ~ $#requested 0) fail 'choose machine names or --all'
 if(~ $action deploy select-root && ~ $all 0 && ~ $#requested 0)
   fail 'specify machine names or --all'
+if(~ $action status && ~ $health 1 && ~ $all 0 && ~ $#requested 0 && ~ $fileGiven 0 && ~ $#from 0)
+  exec /$cputype/bin/rc -e $nix9/packages/system/manage.rc nix9 status --health
 if(~ $action deploy) operation=$mode
 if not operation=$action
+if(~ $action status && ~ $health 1) operation=status-health
 
 . $nix9/packages/system/machine.rc || fail 'machine setup failed'
 . $nix9/packages/system/output.rc

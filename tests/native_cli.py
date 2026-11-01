@@ -29,6 +29,9 @@ with files_guest(qemu, image, files) as guest:
     for action in ("build", "switch", "rollback"):
         rejected(guest, "nix9 " + action, "unknown action")
     guest.command("nix9 status", "machine -")
+    rejected(guest, "nix9 status --health", "no recorded booted system")
+    rejected(guest, "nix9 show --health", "only valid with status")
+    rejected(guest, "nix9 status --health --health", "duplicate --health")
     guest.command("nix9 init local; nix9 init local")
     rejected(guest, "nix9 init other", "identity is already fixed")
     guest.command("mkdir -p /usr/glenda/site; cp /tmp/cli.nix /usr/glenda/site/default.nix")

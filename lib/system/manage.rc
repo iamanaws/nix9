@@ -16,7 +16,11 @@ case build switch
 case check select
   if(! ~ $#* 2) fail 'expected a system store path or a file containing one'
   target=$2
-case rollback list status
+case status
+  health=0
+  if(~ $#* 2 && ~ $2 --health) health=1
+  if(~ $#* 2 && ~ $health 0) fail 'unexpected argument for status'
+case rollback list
   if(! ~ $#* 1) fail 'unexpected argument for' $action
 case delete
   if(! ~ $#* 2) fail 'expected a generation number'
@@ -52,6 +56,11 @@ if(~ $action status) {
     if(! ~ $selected $session) refresh=required
     echo reboot $reboot
     echo refresh $refresh
+  }
+  if(~ $health 1) {
+    if(~ $booted -) fail 'no recorded booted system; boot the selected system before checking health'
+    if(! test -f $booted/health) fail 'booted system has no health checks; rebuild and reboot'
+    /$cputype/bin/rc -e $booted/health $identity || fail 'health checks failed'
   }
   exit ''
 }

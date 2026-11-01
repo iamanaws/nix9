@@ -23,6 +23,7 @@ ROOTS = "/usr/local/nix/state/gcroots"
 PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
 NAMES = ("auth", "files", "build", "batch", "terminal")
 BACKUPS = os.environ.get("NIX9_BACKUP_TEST") == "1"
+HEALTH = os.environ.get("NIX9_HEALTH_TEST") == "1"
 if BACKUPS:
     NAMES += ("backup",)
 
@@ -67,6 +68,11 @@ with ExitStack() as stack:
     work = Path(stack.enter_context(nullcontext(state) if state else tempfile.TemporaryDirectory()))
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
+    if HEALTH:
+        bad = work / "health-bad.keys"
+        bad.write_text("key proto=dp9ik dom=nix9.storage user=glenda role=client !hex="
+                       + secrets.token_hex(16) + " !password=______\n")
+        bad.chmod(0o600)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
     shutil.copyfile(Path(__file__).with_name("backups.nix" if BACKUPS else "storage.nix"), work / "storage.nix")
     (work / "cwfs.setup").write_text("service files\nconfig /adm/storage/config\n"
@@ -136,7 +142,8 @@ with ExitStack() as stack:
     for name in NAMES:
         disks[name] = work / (name + ".qcow2")
         disk(disks[name], foundation)
-        with boot(qemu, disks[name], snapshot=False) as guest:
+        # CWFS shutdown diagnostics can precede the serial prompt on the same line.
+        with boot(qemu, disks[name], snapshot=False, prompt=r"term% ") as guest:
             guest.child.timeout = 900
             guest.command(". /usr/local/pkg/nix9/activate; nix9 init " + name)
             download(guest, "storage.nix")
@@ -159,6 +166,8 @@ with ExitStack() as stack:
                 guest.command(f"mkdir -p /cfg/{name}/service")
             else:
                 download(guest, "glenda.keys", "/adm/terminal.keys", private=True)
+                if HEALTH:
+                    download(guest, "health-bad.keys", "/adm/health-bad.keys", private=True)
                 guest.command("echo 'cat /adm/terminal.keys > /mnt/factotum/ctl' > /rc/bin/termrc.local")
                 download(guest, "project.nix")
                 download(guest, "hello.c")
@@ -222,6 +231,14 @@ with ExitStack() as stack:
     terminal = stack.enter_context(start("terminal"))
     terminal.command(". /usr/local/pkg/nix9/system")
     terminal.command("cat /n/tools/stock-marker", "tls-tools-ready")
+    if HEALTH:
+        from native_health import check_health
+        result = check_health(stack=stack, auth=auth, files=files,
+                              builders=builders, terminal=terminal, start=start, stop=stop,
+                              listening=listening)
+        Path(output).mkdir(parents=True, exist_ok=True)
+        Path(output, "results.json").write_text(json.dumps(result, indent=2) + "\n")
+        sys.exit(0)
     terminal.command("cp /tmp/project.nix /usr/glenda/work/default.nix")
     terminal.command("cp /tmp/hello.c /usr/glenda/work/hello.c")
     if BACKUPS:
