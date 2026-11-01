@@ -53,14 +53,6 @@ def check_health(*, stack, auth, files, builders, terminal, start, stop, listeni
     print("PASS: authenticated inventory checks, deployment lock independence and booted generation selection", flush=True)
 
     # A working 9P root must not hide a missing declared workspace directory.
-    source = '''let p = import <nix9>; in p.mkSystem {
-      hostName = "health-path";
-      namespace.mounts.work = { address = "tcp!files!564"; transport = "tcp";
-        attach = "main"; keyPattern = "dom=nix9.storage"; };
-      namespace.binds = [{ source = "/n/work/missing-workspace";
-        target = "/tmp/health-path"; }];
-    }'''
-    terminal.command("echo '" + source + "' > /tmp/health-path.nix")
     terminal.command("nix-build /tmp/health-path.nix --out-link /usr/local/nix/state/gcroots/health-path")
     terminal.command("pathCheck=`{cat /usr/local/nix/state/gcroots/health-path}")
     result = rejected(terminal, "rc -e $pathCheck/health terminal", "terminal health mount/work tcp!files!564 failed")

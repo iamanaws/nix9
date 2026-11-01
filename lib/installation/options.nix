@@ -69,6 +69,11 @@ in
           };
       };
     };
+    ndb = mkOption {
+      type = types.deferredModule;
+      default = { };
+      description = "Shared services.ndb module for every machine, extending generated inventory records.";
+    };
     jobs = mkOption {
       default = { };
       description = "Scheduled jobs referring to machines in this installation.";

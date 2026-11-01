@@ -9,7 +9,10 @@
     /$cputype/bin/bind /lib/ndb/local /cfg/nix9/ndb-original || exit 'nix9: cannot preserve original NDB'
   }
   for(database in `{cat $nix9NextSystem/ndb/include})
-    test -r $database || { echo 'nix9: unreadable NDB include:' $database >[1=2]; exit 'missing NDB include' }
+    if(! test -f $database || ! test -r $database) {
+      echo 'nix9: unreadable NDB include:' $database >[1=2]
+      exit 'missing NDB include'
+    }
  }
  exit ''
 } && {

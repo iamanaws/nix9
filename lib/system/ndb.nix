@@ -41,6 +41,8 @@ in
     enable ? false,
     hosts ? { },
     networks ? { },
+    records ? [ ],
+    extraConfig ? "",
     include ? [
       "/lib/ndb/common"
       "/cfg/nix9/ndb-original"
@@ -48,9 +50,12 @@ in
     dns ? { },
   }:
   let
+    recordText = import ./ndb-records.nix records;
     host =
       {
         ip,
+        aliases ? [ ],
+        extraAddresses ? [ ],
         dom ? null,
         ether ? null,
         auth ? null,
@@ -59,10 +64,14 @@ in
         authdom ? null,
         dns ? [ ],
         ntp ? [ ],
+        ipgw ? null,
+        dnsdomain ? [ ],
       }:
       {
         inherit
           ip
+          aliases
+          extraAddresses
           dom
           ether
           auth
@@ -71,6 +80,8 @@ in
           authdom
           dns
           ntp
+          ipgw
+          dnsdomain
           ;
       };
     network =
@@ -83,6 +94,8 @@ in
         authdom ? null,
         dns ? [ ],
         ntp ? [ ],
+        ipgw ? null,
+        dnsdomain ? [ ],
       }:
       {
         inherit
@@ -94,6 +107,8 @@ in
           authdom
           dns
           ntp
+          ipgw
+          dnsdomain
           ;
       };
     hostNames = builtins.attrNames hosts;
@@ -101,13 +116,6 @@ in
     hostData = builtins.mapAttrs (_: host) hosts;
     networkData = builtins.mapAttrs (_: network) networks;
     allRecords = builtins.attrValues hostData ++ builtins.attrValues networkData;
-    references =
-      record:
-      builtins.filter (value: value != null) [
-        record.auth
-        record.fs
-        record.cpu
-      ];
     defaults =
       record:
       optional "auth" record.auth
@@ -115,6 +123,7 @@ in
       ++ optional "cpu" record.cpu
       ++ optional "authdom" record.authdom
       ++ values "dns" record.dns
+      ++ values "dnsdomain" record.dnsdomain
       ++ values "ntp" record.ntp;
     hostText =
       name:
@@ -126,8 +135,21 @@ in
           (pair "sys" name)
           (pair "ip" record.ip)
         ]
+        ++ values "sys" record.aliases
         ++ optional "dom" record.dom
         ++ optional "ether" record.ether
+        ++ optional "ipgw" record.ipgw
+      )
+      + builtins.concatStringsSep "" (
+        map (
+          address:
+          "\n\t"
+          + line (
+            [ (pair "ip" address.ip) ]
+            ++ optional "ether" (address.ether or null)
+            ++ optional "ipgw" (address.ipgw or null)
+          )
+        ) record.extraAddresses
       )
       + "\n\t"
       + line (defaults record)
@@ -143,7 +165,7 @@ in
         (pair "ipmask" (builtins.concatStringsSep "." (map toString (maskParts record.prefixLength))))
       ]
       + "\n\t"
-      + line (defaults record)
+      + line (defaults record ++ optional "ipgw" record.ipgw)
       + "\n";
     dnsConfig =
       (
@@ -156,7 +178,15 @@ in
         }
       )
         dns;
-    addresses = map (record: record.ip) (builtins.attrValues hostData);
+    hostAddresses = builtins.concatLists (
+      map (record: [ { inherit (record) ip ether ipgw; } ] ++ record.extraAddresses) (
+        builtins.attrValues hostData
+      )
+    );
+    addresses = map (record: record.ip) hostAddresses;
+    aliases = builtins.concatLists (map (record: record.aliases) (builtins.attrValues hostData));
+    publicReference =
+      value: value == null || (safe value && builtins.match "[^[:space:]]+" value != null);
     unique =
       items:
       builtins.length items == builtins.length (
@@ -197,10 +227,12 @@ in
     ) include
   then
     error "include must list absolute paths shorter than 128 bytes without whitespace; use /cfg/nix9/ndb-original for the original local database"
-  else if !builtins.all (record: validIP record.ip) (builtins.attrValues hostData) then
+  else if !builtins.all (record: validIP record.ip) hostAddresses then
     error "hosts require IPv4 addresses"
   else if !unique addresses then
     error "hosts contain duplicate IPv4 addresses"
+  else if !builtins.all label aliases || !unique (hostNames ++ aliases) then
+    error "hosts.aliases must be unique lowercase labels distinct from canonical host names"
   else if
     !builtins.all (
       record: record.dom == null || (safe record.dom && builtins.all label (split record.dom))
@@ -210,9 +242,9 @@ in
   else if
     !builtins.all (
       record:
-      record.ether == null
+      (record.ether or null) == null
       || (builtins.isString record.ether && builtins.match "[0-9a-f]{12}" record.ether != null)
-    ) (builtins.attrValues hostData)
+    ) hostAddresses
   then
     error "hosts.ether must contain twelve lowercase hexadecimal digits"
   else if
@@ -229,10 +261,14 @@ in
   else if
     !builtins.all (
       record:
-      builtins.all (name: builtins.isString name && builtins.hasAttr name hostData) (references record)
+      builtins.all publicReference [
+        record.auth
+        record.fs
+        record.cpu
+      ]
     ) allRecords
   then
-    error "auth, fs and cpu must refer to declared hosts"
+    error "auth, fs and cpu must be native server names or addresses without whitespace"
   else if
     !builtins.all (
       record:
@@ -241,13 +277,24 @@ in
       && builtins.all validIP record.dns
       && builtins.isList record.ntp
       && builtins.all safe record.ntp
+      && builtins.all safe record.dnsdomain
     ) allRecords
   then
-    error "invalid authdom, dns or ntp defaults"
+    error "invalid authdom, dns, dnsdomain or ntp defaults"
+  else if
+    !builtins.all (record: (record.ipgw or null) == null || validIP record.ipgw) (
+      hostAddresses ++ builtins.attrValues networkData
+    )
+  then
+    error "ipgw must be an IPv4 address"
+  else if !builtins.isString extraConfig then
+    error "extraConfig must contain native NDB text"
+  else if !builtins.isString recordText then
+    error "records must contain structured NDB records"
   else if !builtins.isBool dnsConfig.enable || !builtins.isBool dnsConfig.resolver then
     error "dns settings must be boolean"
-  else if !enable && (hosts != { } || networks != { }) then
-    error "hosts and networks require enable"
+  else if !enable && (hosts != { } || networks != { } || records != [ ] || extraConfig != "") then
+    error "hosts, networks, records and extraConfig require enable"
   else if !enable then
     null
   else
@@ -258,7 +305,12 @@ in
         "database=\n"
         + builtins.concatStringsSep "" (map (path: "\tfile=${quoted path}\n") include)
         + "\n"
-        + builtins.concatStringsSep "\n" (map hostText hostNames ++ map networkText networkNames);
+        + builtins.concatStringsSep "\n" (map hostText hostNames ++ map networkText networkNames)
+        + "\n"
+        + recordText
+        + "\n\n"
+        + extraConfig
+        + "\n";
     }
 )
   configuration

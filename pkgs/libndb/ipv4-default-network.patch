@@ -1,0 +1,11 @@
+--- a/ndbipinfo.c
++++ b/ndbipinfo.c
+@@ -195,7 +195,7 @@ netinfo(Ndb *db, Ndbtuple *t, char **alist, int n)
+ 	ipmove(net, ip);
+ 	if(isv4(ip)){
+ 		prefix = 127;
+-		smallestprefix = 100;
++		smallestprefix = 96;
+ 		force = 0;
+ 	} else {
+ 		/* in v6, the last 8 bytes have no structure (we hope) */

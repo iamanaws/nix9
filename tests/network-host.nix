@@ -11,6 +11,8 @@ pkgs.runCommand "network-tests" { nativeBuildInputs = [ pkgs.nix ]; } ''
       testSupport [
         ./network-checks.nix
         ./networks.nix
+        ./ndb.nix
+        ./ndb-multinet.nix
         ./network-server.nix
       ]
     }/network-checks.nix > "$out/results.json"

@@ -41,6 +41,11 @@ let
     };
 in
 {
+  minimal = system "ndb-minimal" { enable = true; };
+  included = system "ndb-included" {
+    enable = true;
+    include = [ "/lib/ndb/common" ];
+  };
   one = system "ndb-one" discovery;
   two = system "ndb-two" (discovery // { dns.enable = false; });
   disabled = system "ndb-disabled" { };
@@ -54,13 +59,13 @@ in
       };
     }
   );
-  missingHost = system "invalid" (
+  invalidReference = system "invalid" (
     discovery
     // {
       networks.lab = {
         address = "10.0.2.0";
         prefixLength = 24;
-        fs = "missing";
+        fs = "bad\nserver";
       };
     }
   );

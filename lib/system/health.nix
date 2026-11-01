@@ -38,9 +38,15 @@ in
     ${lib.concatMapStringsSep "\n" (port: listener "tcp/${port}/listener" port) listenPorts}
     ${lib.optionalString (ndb != null) (
       lib.concatStringsSep "\n" (
-        lib.mapAttrsToList (name: host: ''
-          probe ${quote "ndb/${name}"} ndb ${quote name} ${quote host.ip}
-        '') services.ndb.hosts
+        lib.mapAttrsToList (
+          name: host:
+          lib.concatMapStringsSep "\n" (hostName: ''
+            probe ${quote "ndb/${hostName}"} ndb ${quote hostName} \
+              ${lib.concatMapStringsSep " " quote (
+                [ host.ip ] ++ map (address: address.ip) (host.extraAddresses or [ ])
+              )}
+          '') ([ name ] ++ (host.aliases or [ ]))
+        ) (services.ndb.hosts or { })
       )
     )}
     ${lib.concatStringsSep "\n" (

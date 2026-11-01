@@ -62,6 +62,7 @@ like `mkSystem`. Its main settings are:
 | `machines.NAME.deployment` | CPU connection settings and boot-medium mount for [deployment](deployment.md). |
 | `defaults.auth`, `defaults.fs`, `defaults.cpu` | Discovery providers, referenced by inventory key. Each defaults to `null`. |
 | `defaults.authdom` | Public authentication domain, default `null`. |
+| `ndb` | Shared [NDB module](discovery.md#installation-records), extending generated inventory records. |
 | `jobs.NAME` | [Scheduled command](jobs.md) with `scheduler` and `target` inventory keys. |
 
 Declare a session mount by provider and export:
@@ -106,8 +107,9 @@ Use `fileSystem = "main"` or `"dump"` to mount a provider's enabled
 `services.cwfs` instead of a directory export. The inventory derives native TCP
 transport, the port and attach name. See the [storage example](storage.md).
 
-The inventory owns identities, hostnames, NDB host records and these named
-mounts. Configure NDB includes and DNS through each machine's `configuration`.
+The inventory owns identities, hostnames, primary NDB addresses and these named
+mounts. Extend shared discovery through `ndb`; configure per-machine discovery,
+includes and DNS through `configuration.services.ndb`.
 Use `configuration.namespace.mounts` for shares outside the inventory.
 
 Evaluation checks every machine, even when requesting one system. It rejects
@@ -121,7 +123,7 @@ controls runtime availability.
 | Output | Contents |
 | --- | --- |
 | `systems.NAME` | That machine's system derivation, guarded by its inventory identity. |
-| `discovery` | Generated `services.ndb` host records and discovery defaults. |
+| `discovery` | Shared NDB configuration after module evaluation. |
 | `manifest` | Versioned data containing identities, system paths, roles, endpoints, mounts, jobs and dependencies. |
 | `overview` | Readable inventory text. `nix9 show` displays it from the built bundle, with optional machine names. |
 | `build` | An output containing `manifest.json`, `ndb`, deployment settings under `deployment/` and one closure-path file per machine under `systems/`. Keeping it rooted retains all system closures. |

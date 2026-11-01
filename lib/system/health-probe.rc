@@ -15,10 +15,14 @@ case directory
   test -d $1
   ls -d $1 > /dev/null
 case ndb
+  host=$1
   answer=`{$healthNdb /net/cs tcp!^$1^!9}
-  echo $answer | awk -v 'expected='^$2^'!9' '{for(i=1;i<=NF;i++) if($i == expected) found=1} END {exit !found}' || {
-    echo 'cs lookup for' $1 'expected' $2 'but returned:' $answer >[1=2]
-    exit 'discovery differs'
+  shift
+  for(address in $*) {
+    echo $answer | awk -v 'expected='^$address^'!9' '{for(i=1;i<=NF;i++) if($i == expected) found=1} END {exit !found}' || {
+      echo 'cs lookup for' $host 'expected' $address 'but returned:' $answer >[1=2]
+      exit 'discovery differs'
+    }
   }
 case mount
   switch($1) {

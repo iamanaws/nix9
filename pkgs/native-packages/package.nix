@@ -27,6 +27,7 @@ let
     "installation" = ../../lib/installation;
     "netroot-base" = netrootBase;
     "examples/installation" = ../../examples/installation;
+    "examples/discovery" = ../../examples/discovery;
     "examples/network-server" = ../../examples/network-server;
     "examples/storage" = ../../examples/storage;
     "examples/backup" = ../../examples/backup;

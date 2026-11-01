@@ -58,14 +58,14 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command("nix9 init test")
         guest.command("echo 'sys=manual ip=10.3.4.5' >> /lib/ndb/local")
         guest.command("cp /lib/ndb/local /tmp/manual-ndb")
-        for name in ("one", "two", "disabled", "invalidAddress", "duplicateAddress", "missingHost", "invalidNetwork", "invalidInclude"):
+        for name in ("one", "two", "disabled", "invalidAddress", "duplicateAddress", "invalidReference", "invalidNetwork", "invalidInclude"):
             guest.command(f"echo '(import ./ndb.nix).{name}' > /tmp/{name}.nix")
         guest.command("nix9-rebuild switch /tmp/one.nix")
         guest.command(". /usr/local/pkg/nix9/system")
         discovery(guest)
         guest.command("cmp /cfg/nix9/ndb-original /tmp/manual-ndb")
         selected = guest.command("cat " + ROOT)
-        for name in ("invalidAddress", "duplicateAddress", "missingHost", "invalidNetwork", "invalidInclude"):
+        for name in ("invalidAddress", "duplicateAddress", "invalidReference", "invalidNetwork", "invalidInclude"):
             result = guest.command(f"nix9-rebuild switch /tmp/{name}.nix; echo NDB-ERROR:$status")
             if not re.search(r"(?m)^NDB-ERROR:.+", result) or "services.ndb" not in result:
                 raise RuntimeError(f"invalid discovery declaration was accepted: {name}: {result}")
@@ -100,10 +100,15 @@ with (contextlib.nullcontext(state) if state else tempfile.TemporaryDirectory())
         guest.command(". /usr/local/pkg/nix9/system")
         discovery(guest)
 
+    from native_ndb_multinet import check_multinet
+    check_multinet(qemu, image, archive, work)
+
 Path(output).mkdir()
 Path(output, "results.json").write_text(json.dumps({
-    "status": "passed", "machines": 2, "configured-boots": 4,
+    "status": "passed", "machines": 4, "configured-boots": 8,
     "native-ndb-build": "passed", "discovery-and-inheritance": "passed",
     "manual-includes": "passed", "dns-disable-and-rollback": "passed",
     "invalid-configurations": 5,
+    "multi-network-inventory": "passed", "native-record-grouping": "passed",
+    "generation-backed-includes-and-gc": "passed", "booted-cs-and-health": "passed",
 }, indent=2) + "\n")

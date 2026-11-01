@@ -75,6 +75,17 @@ in
       type = types.submodule {
         freeformType = types.attrsOf types.anything;
         imports = [
+          {
+            options.ndb = mkOption {
+              type = types.submoduleWith {
+                modules = [ ./modules/ndb.nix ];
+                shorthandOnlyDefinesConfig = true;
+                specialArgs = { inherit pkgs; };
+              };
+              default = { };
+              description = "Native network database.";
+            };
+          }
           ./modules/auth.nix
           ./modules/cpu.nix
           ./modules/exports.nix

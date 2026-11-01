@@ -84,12 +84,28 @@ let
       map (kind: lib.nameValuePair kind machines.${defaults.${kind}}.hostName) providers
     )
     // lib.optionalAttrs (defaults.authdom != null) { inherit (defaults) authdom; };
-  discovery = {
+  inventoryNdb = {
     enable = true;
     hosts = lib.mapAttrs' (
-      _: machine: lib.nameValuePair machine.hostName ({ inherit (machine) ip; } // discoveryDefaults)
+      _: machine: lib.nameValuePair machine.hostName { inherit (machine) ip; }
     ) machines;
+    networks = lib.optionalAttrs (discoveryDefaults != { }) {
+      default = {
+        address = "0.0.0.0";
+        prefixLength = 0;
+      }
+      // lib.mapAttrs (_: lib.mkDefault) discoveryDefaults;
+    };
   };
+  ndbModules = [
+    { config = inventoryNdb; }
+    inventory.ndb
+  ];
+  discovery =
+    (lib.evalModules {
+      modules = [ ../system/modules/ndb.nix ] ++ ndbModules;
+      specialArgs.pkgs = packages;
+    }).config;
   ndb = import ../system/ndb.nix {
     configuration = discovery;
     package = packages.ndb;
@@ -129,7 +145,7 @@ let
       {
         imports = [ machine.configuration ];
         inherit (machine) hostName machineId;
-        services.ndb = discovery;
+        services.ndb = { ... }: { imports = ndbModules; };
         namespace.mounts = mountConfigurations.${machineName};
         nix.builders = builderConfigurations.${machineName};
         services.cron = lib.mkIf (scheduledJobs machineName != { }) {
@@ -168,8 +184,10 @@ let
           {
             assertion =
               configs.${machineName}.services.ndb.enable
-              && configs.${machineName}.services.ndb.hosts == discovery.hosts;
-            message = "installation inventory owns NDB hosts for ${machineName}";
+              && builtins.all (
+                machine: (configs.${machineName}.services.ndb.hosts.${machine.hostName}.ip or null) == machine.ip
+              ) (builtins.attrValues machines);
+            message = "installation inventory owns NDB primary addresses for ${machineName}";
           }
           {
             assertion = builtins.all (

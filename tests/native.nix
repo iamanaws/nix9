@@ -25,6 +25,7 @@
     files = [
       ./storage.nix
       ./native_health.py
+      ./health-path.nix
     ];
     env = {
       NIX9_STORAGE_TEST_STATE = "health-state";
@@ -181,7 +182,11 @@
   };
   native-ndb-tests = vmTest "native-ndb-tests" {
     script = ./native_ndb.py;
-    files = [ ./ndb.nix ];
+    files = [
+      ./ndb.nix
+      ./ndb-multinet.nix
+      ./native_ndb_multinet.py
+    ];
     env.NIX9_NDB_TEST_STATE = "ndb-state";
     args = ''
       ${nativeBootstrap} "$out"

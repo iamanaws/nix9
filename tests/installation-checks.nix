@@ -83,7 +83,7 @@ assert fixtures.retiringCpu.manifest.machines.cpu.roles == [ ];
 assert valid.manifest.machines.cpu.mounts.projects.address == "tcp!files!17020";
 assert valid.manifest.machines.cpu.mounts.projects.keyPattern == "dom=nix9.share";
 assert renamed.manifest.machines.files.machineId == "file-id";
-assert renamed.discovery.hosts.storage.auth == "storage";
+assert renamed.discovery.networks.default.auth == "storage";
 assert renamed.manifest.machines.cpu.mounts.projects.address == "tcp!storage!17020";
 assert fixtures.movedPort.manifest.machines.cpu.mounts.projects.address == "tcp!files!17025";
 assert builtins.any (

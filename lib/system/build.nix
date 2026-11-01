@@ -130,7 +130,24 @@ let
         timesyncLogging = timesync.logging or false;
         listen = import ./listen.nix { configuration = listen; };
         ndb = import ./ndb.nix {
-          configuration = ndb;
+          configuration = ndb // {
+            include = map (
+              path:
+              if lib.hasPrefix "/cfg/nix9/files/" path then
+                let
+                  relative = lib.removePrefix "/cfg/nix9/files/" path;
+                in
+                if !(builtins.hasAttr relative files) then
+                  throw "mkSystem: services.ndb.include refers to undeclared files.${relative}"
+                else
+                  toString (mkDerivation {
+                    name = "nix9-ndb";
+                    buildCommand = "echo -n ${quote files.${relative}} > $out";
+                  })
+              else
+                path
+            ) ndb.include;
+          };
           package = ndbPackage;
         };
         access = import ./access.nix {

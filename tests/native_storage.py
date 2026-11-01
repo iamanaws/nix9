@@ -69,6 +69,7 @@ with ExitStack() as stack:
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
     if HEALTH:
+        shutil.copyfile(Path(__file__).with_name("health-path.nix"), work / "health-path.nix")
         bad = work / "health-bad.keys"
         bad.write_text("key proto=dp9ik dom=nix9.storage user=glenda role=client !hex="
                        + secrets.token_hex(16) + " !password=______\n")
@@ -167,6 +168,7 @@ with ExitStack() as stack:
             else:
                 download(guest, "glenda.keys", "/adm/terminal.keys", private=True)
                 if HEALTH:
+                    download(guest, "health-path.nix")
                     download(guest, "health-bad.keys", "/adm/health-bad.keys", private=True)
                 guest.command("echo 'cat /adm/terminal.keys > /mnt/factotum/ctl' > /rc/bin/termrc.local")
                 download(guest, "project.nix")
