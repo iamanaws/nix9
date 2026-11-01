@@ -28,6 +28,7 @@ let
     "netroot-base" = netrootBase;
     "examples/installation" = ../../examples/installation;
     "examples/discovery" = ../../examples/discovery;
+    "examples/dns" = ../../examples/dns;
     "examples/network-server" = ../../examples/network-server;
     "examples/storage" = ../../examples/storage;
     "examples/backup" = ../../examples/backup;

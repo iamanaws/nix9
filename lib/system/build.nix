@@ -259,6 +259,12 @@ else if access != null && access.cpu.enable && listenScripts ? "17019" then
 else if access != null && access.auth.enable && listenScripts ? "567" then
   throw "mkSystem: services.auth owns TCP port 567"
 else if
+  ndb != null
+  && ndb.dns.listenAddresses != [ ]
+  && (listenScripts ? "53" || sharing.scripts ? "53" || (storage != null && services.cwfs.port == 53))
+then
+  throw "mkSystem: services.ndb.dns owns TCP/UDP port 53"
+else if
   builtins.any (port: builtins.hasAttr port listenScripts) (builtins.attrNames sharing.scripts)
 then
   throw "mkSystem: services.exports and services.listen must not share a TCP port"
@@ -350,21 +356,31 @@ else
               mkdir -p $out/ndb/bin/ndb
               echo '#!/bin/rc' > $out/ndb/bin/ndb/cs
               echo 'exec ${ndb.package}/bin/ndb/cs -f /lib/ndb/local $*' >> $out/ndb/bin/ndb/cs
-              echo '#!/bin/rc' > $out/ndb/bin/ndb/dns
-              ${
+              ${write "ndb/bin/ndb/dns" (
                 if ndb.dns.enable then
                   ''
-                    echo 'nix9DnsArgs=()' >> $out/ndb/bin/ndb/dns
-                    echo 'for(argument in $*) if(! ~ $argument -r) nix9DnsArgs=($nix9DnsArgs $argument)' >> $out/ndb/bin/ndb/dns
-                    echo 'exec ${ndb.package}/bin/ndb/dns -f /lib/ndb/local ${
-                      if ndb.dns.resolver then "-r " else ""
-                    }$nix9DnsArgs' >> $out/ndb/bin/ndb/dns
+                    #!/bin/rc
+                    nix9DnsArgs=()
+                    for(argument in $*) if(! ~ $argument -r) nix9DnsArgs=($nix9DnsArgs $argument)
+                    exec ${ndb.package}/bin/ndb/dns -f /lib/ndb/local ${if ndb.dns.resolver then "-r " else ""}${
+                      if ndb.dns.recursion == "none" then
+                        "-R "
+                      else if ndb.dns.recursion == "local" then
+                        "-L "
+                      else
+                        ""
+                    }$nix9DnsArgs${
+                      lib.optionalString (ndb.dns.listenAddresses != [ ]) (
+                        " -s " + lib.concatMapStringsSep " " quote ndb.dns.listenAddresses
+                      )
+                    }
                   ''
                 else
                   ''
-                    echo ${quote "exit ''"} >> $out/ndb/bin/ndb/dns
+                    #!/bin/rc
+                    exit '''
                   ''
-              }
+              )}
               chmod 755 $out/ndb/bin/ndb/*
               echo 'path=('$out'/ndb/bin $path)' > $out/ndb/boot.rc
             ''

@@ -158,11 +158,49 @@ fallback. `dns.resolver` defaults to true. Disabling `services.ndb` restores the
 native database and startup on the next boot.
 
 Host `dom` entries are DNS hints. Upstream DNS answers can take precedence.
-Serving DNS, DHCP or PXE to other machines requires native service setup in
-addition to the database records.
+DHCP and PXE services require separate native setup.
 
 ```sh
 ndb/query sys cpu1 ip
 ndb/ipquery ip 10.0.0.20 auth fs cpu authdom
 ndb/csquery /net/cs tcp!cpu1!17019
+```
+
+## Serving DNS
+
+Enable UDP and TCP DNS on specific IPv4 addresses:
+
+```nix
+{
+  services.ndb.dns = {
+    listenAddresses = [ "172.23.0.10" ];
+    recursion = "none";
+    resolver = false;
+  };
+}
+```
+
+`listenAddresses` defaults to empty, serving only local `/net/dns` requests.
+Use `[ "*" ]` to listen on all local addresses. Configure interfaces separately.
+DNS serving reserves port 53 against other declared TCP services.
+
+`recursion` controls network clients: `"none"` disables recursive queries,
+`"local"` allows clients on directly connected networks, and `"all"` allows any
+client. The default is `"local"`. Local `/net/dns` queries are unaffected.
+`resolver` controls outgoing lookups: true forwards them to configured DNS
+servers; false uses native iterative resolution.
+
+A `dom` record with `soa = "";` declares an authoritative zone. A reverse zone
+such as `0.23.172.in-addr.arpa` generates PTR answers from matching domain/IP
+records. The [DNS example](../examples/dns/configuration.nix) serves a lab network
+on `ether1`, keeps `ether0` on DHCP and configures a terminal to use that server.
+It includes forward/reverse zones, IPv6 answers, mail preferences and a CNAME.
+Native DNS returns an empty authoritative answer with SOA for absent names.
+
+Listener and policy changes take effect at the next boot.
+`nix9 status --health` checks both UDP and TCP listeners on each declared address.
+To query the server from another machine:
+
+```sh
+ndb/dnsdebug @172.23.0.10 build.lab.example.test ip
 ```

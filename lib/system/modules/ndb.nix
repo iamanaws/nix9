@@ -115,6 +115,16 @@ in
             default = true;
             description = "Use native DNS resolver mode.";
           };
+          listenAddresses = strings "IPv4 addresses to serve over UDP/TCP port 53, or [ \"*\" ] for all local addresses. Empty keeps DNS local to /net/dns.";
+          recursion = mkOption {
+            type = types.enum [
+              "none"
+              "local"
+              "all"
+            ];
+            default = "local";
+            description = "Answer recursive network queries from no clients, directly connected networks, or all clients. Local /net/dns queries are unaffected.";
+          };
         };
       };
       description = "Native DNS startup settings.";

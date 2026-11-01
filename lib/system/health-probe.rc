@@ -14,6 +14,23 @@ case listener
 case directory
   test -d $1
   ls -d $1 > /dev/null
+case dns-listener
+  protocol=$1
+  expected=$2^'!53'
+  if(test $2 '=' '*') expected=(::!53 0.0.0.0!53)
+  state=Listen
+  if(~ $protocol udp) state=Open
+  found=0
+  for(connection in /net/$protocol/[0-9]*)
+    if(test -f $connection/local && ~ `{cat $connection/local} $expected) {
+      current=`{cat $connection/status}
+      if(~ $current(1) $state) found=1
+    }
+  if(~ $found 0) {
+    echo 'no DNS' $protocol 'listener on' $2 >[1=2]
+    exit 'DNS listener unavailable'
+  }
+  status=''
 case ndb
   host=$1
   answer=`{$healthNdb /net/cs tcp!^$1^!9}

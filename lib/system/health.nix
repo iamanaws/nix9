@@ -37,6 +37,19 @@ in
     )}
     ${lib.concatMapStringsSep "\n" (port: listener "tcp/${port}/listener" port) listenPorts}
     ${lib.optionalString (ndb != null) (
+      lib.concatMapStringsSep "\n" (
+        address:
+        lib.concatMapStringsSep "\n"
+          (protocol: ''
+            probe ${quote "dns/${protocol}/${address}"} dns-listener ${protocol} ${quote address}
+          '')
+          [
+            "udp"
+            "tcp"
+          ]
+      ) ndb.dns.listenAddresses
+    )}
+    ${lib.optionalString (ndb != null) (
       lib.concatStringsSep "\n" (
         lib.mapAttrsToList (
           name: host:

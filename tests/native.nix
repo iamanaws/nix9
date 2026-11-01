@@ -192,6 +192,15 @@
       ${nativeBootstrap} "$out"
     '';
   };
+  native-dns-tests = vmTest "native-dns-tests" {
+    nativeBuildInputs = [ pkgs.bind.dnsutils ];
+    script = ./native_dns.py;
+    files = [ ./dns.nix ];
+    env.NIX9_DNS_TEST_STATE = "dns-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-machine-tests = vmTest "native-machine-tests" {
     script = ./native_machine.py;
     files = [

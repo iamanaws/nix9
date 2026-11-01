@@ -2,6 +2,17 @@ let
   fixtures = import ./networks.nix { };
   ndb = import ./ndb.nix;
   multinet = import ./ndb-multinet.nix { };
+  dns = import ./dns.nix { };
+  dnsValid = [
+    "initial"
+    "changed"
+    "local"
+    "localOnly"
+    "disabled"
+  ];
+  dnsRejected = builtins.mapAttrs (
+    _: value: !(builtins.tryEval (value.systems.dns or value).drvPath).success
+  ) (builtins.removeAttrs dns dnsValid);
   ndbValid = [
     "initial"
     "changed"
@@ -31,6 +42,9 @@ assert builtins.all (name: builtins.isString fixtures.${name}.drvPath) positive;
 assert builtins.all (value: value) (builtins.attrValues rejected);
 assert builtins.isString ndb.minimal.drvPath;
 assert builtins.isString ndb.included.drvPath;
+assert builtins.all (name: builtins.isString dns.${name}.systems.dns.drvPath) dnsValid;
+assert builtins.all (value: value) (builtins.attrValues dnsRejected);
+assert builtins.isString dns.initial.systems.terminal.drvPath;
 assert builtins.all (value: value) (builtins.attrValues ndbRejected);
 assert builtins.all (name: builtins.isString multinet.${name}.systems.cpu.drvPath) ndbValid;
 assert multinet.initial.discovery.hosts.cpu.aliases == [ "compute" ];
@@ -67,4 +81,5 @@ assert builtins.all (name: builtins.isString scenario.${name}.drvPath) [
     "included"
   ];
   inherit ndbValid ndbRejected;
+  inherit dnsValid dnsRejected;
 }

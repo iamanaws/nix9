@@ -172,9 +172,16 @@ in
         {
           enable ? true,
           resolver ? true,
+          listenAddresses ? [ ],
+          recursion ? "local",
         }:
         {
-          inherit enable resolver;
+          inherit
+            enable
+            resolver
+            listenAddresses
+            recursion
+            ;
         }
       )
         dns;
@@ -293,6 +300,31 @@ in
     error "records must contain structured NDB records"
   else if !builtins.isBool dnsConfig.enable || !builtins.isBool dnsConfig.resolver then
     error "dns settings must be boolean"
+  else if
+    !builtins.isList dnsConfig.listenAddresses
+    || !builtins.all (
+      address:
+      address == "*"
+      || (
+        validIP address
+        && builtins.fromJSON (builtins.head (split address)) > 0
+        && builtins.fromJSON (builtins.head (split address)) < 224
+      )
+    ) dnsConfig.listenAddresses
+    || !unique dnsConfig.listenAddresses
+    || (builtins.elem "*" dnsConfig.listenAddresses && dnsConfig.listenAddresses != [ "*" ])
+  then
+    error "dns.listenAddresses must list distinct unicast IPv4 addresses, or only \"*\""
+  else if
+    !builtins.elem dnsConfig.recursion [
+      "none"
+      "local"
+      "all"
+    ]
+  then
+    error "dns.recursion must be none, local or all"
+  else if dnsConfig.listenAddresses != [ ] && (!enable || !dnsConfig.enable) then
+    error "dns.listenAddresses requires services.ndb.enable and dns.enable"
   else if !enable && (hosts != { } || networks != { } || records != [ ] || extraConfig != "") then
     error "hosts, networks, records and extraConfig require enable"
   else if !enable then
