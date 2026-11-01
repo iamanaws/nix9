@@ -85,17 +85,8 @@ Use `inputsFrom` to reuse derivations' dependencies and shell hooks.
 
 ## Native Go
 
-The optional bootstrap includes Go 1.26.7 sources and a cross-built seed compiler.
-Build it on Linux:
-
-```sh
-nix build .#native-go-bootstrap -o result-native-go-bootstrap
-```
-
-Follow the [quick start](../README.md#quick-start), substituting this archive for
-`native-bootstrap`. If a complete release is selected, also follow the
-[release upgrade](native.md#complete-releases) steps. Use a
-[4 GiB VM](vm.md#persistent-disks) for native Go builds and tests. In the guest:
+The standard bootstrap caches native Go 1.26.7, including `go`, `gofmt`, compiler
+tools and the standard library. In the guest:
 
 ```sh
 . /usr/local/pkg/nix9/activate
@@ -105,10 +96,16 @@ go=`{cat $roots/go}^/bin/go
 $go version
 ```
 
-The toolchain rebuilds with upstream `make.rc` and has no runtime reference to
-the seed. Source and seed archives use fixed-output hashes. Build caches stay in
-the build directory; automatic toolchain downloads, module proxies and
+This substitutes the finished toolchain without its seed or source archive.
+Use a [4 GiB VM](vm.md#persistent-disks) for Go builds and tests. Build caches
+stay in the build directory; automatic toolchain downloads, module proxies and
 checksum-service lookups are disabled.
+
+To rebuild Go itself, build `nix build .#native-go-bootstrap` on Linux and
+install that archive using the [quick start](../README.md#quick-start).
+It adds hash-checked source and seed archives for upstream `make.rc`.
+For an already selected complete release, follow the
+[release upgrade](native.md#complete-releases) steps too.
 
 For commands in a project with `go.mod`:
 

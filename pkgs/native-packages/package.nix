@@ -6,10 +6,9 @@
   sources,
   packageDefinitions,
   netrootBase,
-  goBootstrap ? null,
+  goBootstrap,
   goSource ? null,
 }:
-assert (goBootstrap == null) == (goSource == null);
 let
   copy = destination: source: ''cp -r ${source} "$out/${destination}"'';
   files = {
@@ -34,15 +33,16 @@ let
     "examples/builders" = ../../examples/builders;
     "examples/workstation" = ../../examples/workstation;
     "examples/netroot" = ../../examples/netroot;
-  }
-  // (lib.optionalAttrs (goBootstrap != null) {
-    "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";
+    "cache-packages.nix" = ../cache-packages.nix;
     "go-bootstrap.sha256" = runCommand "go-bootstrap.sha256" { } ''
       sha256sum ${goBootstrap}/go-bootstrap.tar.gz | cut -d ' ' -f1 > "$out"
     '';
-    "sources/go.tar.gz" = goSource;
     "pkgs/go" = ../go;
     "build-go-module.nix" = ../../lib/build-go-module.nix;
+  }
+  // (lib.optionalAttrs (goSource != null) {
+    "go-bootstrap.tar.gz" = goBootstrap + "/go-bootstrap.tar.gz";
+    "sources/go.tar.gz" = goSource;
   });
 in
 runCommand "native-packages" { } ''

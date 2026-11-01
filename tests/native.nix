@@ -19,6 +19,15 @@
   vmTest,
 }:
 {
+  native-bootstrap-cache-tests = vmTest "native-bootstrap-cache-tests" {
+    script = ./native_bootstrap_cache.py;
+    files = [
+      ./artifacts.py
+      ./go
+      ./go-vendor
+    ];
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-cli-tests = vmTest "native-cli-tests" {
     script = ./native_cli.py;
     files = [ ./cli.nix ];

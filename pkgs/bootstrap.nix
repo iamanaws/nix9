@@ -5,12 +5,17 @@
   vm,
   nativeNix,
   nativePackageSet,
+  nativeGoPackageSet,
+  lua,
+  libbz2,
+  clone,
+  cachePackages ? import ./cache-packages.nix,
 }:
 let
   nativeBootstrapBuild =
     let
       revision = builtins.substring 0 12 (
-        builtins.hashString "sha256" "${nativeNix} ${nativePackageSet} ${./native-bootstrap} ${../examples/hello} ${../examples/ramfs}"
+        builtins.hashString "sha256" "${nativeNix} ${nativePackageSet} ${./native-bootstrap} ${../examples/hello} ${../examples/ramfs} ${builtins.toJSON cachePackages}"
       );
     in
     pkgs.runCommand "nix9-${revision}-bootstrap.tar"
@@ -27,8 +32,9 @@ let
           ]
         }/native_publish.py \
           ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-          ${nativeNix} ${nativePackageSet} ${./native-bootstrap} ${../examples/hello} ${../examples/ramfs} \
-          /usr/local/pkg/nix9-${revision} "$out"
+          ${nativeNix} ${nativePackageSet} ${nativeGoPackageSet} ${./native-bootstrap} ${../examples/hello} ${../examples/ramfs} \
+          /usr/local/pkg/nix9-${revision} "$out" ${lua.src} ${libbz2.src} ${clone.src} \
+          ${pkgs.lib.escapeShellArgs cachePackages}
       '';
 in
 # The archive is self-contained; embedded host debug paths need no GC roots.

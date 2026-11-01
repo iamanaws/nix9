@@ -63,7 +63,10 @@ pkgs.lib.makeScope pkgs.newScope (
     netrootBase = callPackage ./netroot-base { };
     moduleLibrary = pkgs.callPackage ./native-packages/module-library.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
-    nativeGoBootstrap = nativeBootstrap.override { nativePackageSet = nativeGoPackageSet; };
+    nativeGoBootstrap = nativeBootstrap.override {
+      nativePackageSet = nativeGoPackageSet;
+      cachePackages = [ ];
+    };
     hello = callPackage ./hello-plan9 { };
     goBootstrap = callPackage ./go/bootstrap.nix { };
     cTools = callPackage ./goken9cc {
@@ -84,9 +87,8 @@ pkgs.lib.makeScope pkgs.newScope (
     };
     mkGuestEnvironment = import ../lib/mk-guest-environment.nix { inherit pkgs; };
     nativeNix = callPackage ./nix/package.nix { };
-    nativePackageSet = callPackage ./native-packages/package.nix { goBootstrap = null; };
+    nativePackageSet = callPackage ./native-packages/package.nix { };
     nativeGoPackageSet = nativePackageSet.override {
-      inherit goBootstrap;
       goSource = pkgs.fetchurl (import ./go/source.nix).src;
     };
     nativePackagesArchive = mkGuestPackage {

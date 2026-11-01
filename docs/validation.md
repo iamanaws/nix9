@@ -33,6 +33,7 @@ with the Nix sandbox enabled.
 | `nix-store-tests` | Signed caches, transfers, repair and recovery. Includes two-VM read-only 9P reuse after the server stops, and HTTP(S) failure cases. |
 | `nix-util-tests` | Aggregates the four preceding Nix suites. |
 | `native-bootstrap-tests` | Signed cache installation in a clean VM, C development, environment updates and rollback after GC. |
+| `native-bootstrap-cache-tests` | All selected native packages substitute offline with builds disabled; Go compiles, tests and formats without seed or source archives. |
 | `native-release-tests`, `native-update-tests` | Release and recipe updates, failed updates, offline rebuilding, reboot, rollback and GC retention. |
 | `native-reproducibility-tests` | Toolchain NAR comparison across two clean VMs without substitution. |
 | `native-system-tests` | Configuration validation, output-reference files, local status, activation preflight, hook preservation and edit rejection, generation reuse, terminal boot, login, rollback and boot roots. |

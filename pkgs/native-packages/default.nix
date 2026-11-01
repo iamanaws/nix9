@@ -87,32 +87,29 @@ let
       netrootBase = ./netroot-base;
     }
     // (
-      if builtins.pathExists ./go-bootstrap.tar.gz then
-        let
-          archive = pkgs.callPackage ./pkgs/go/archive.nix { };
-          upstream = import ./pkgs/go/source.nix;
-        in
-        {
-          goBootstrap = pkgs.callPackage ./pkgs/go/seed.nix {
-            src = archive {
-              name = "go-bootstrap.tar.gz";
-              file = toString ./go-bootstrap.tar.gz;
-              hash = builtins.replaceStrings [ "\n" ] [ "" ] (builtins.readFile ./go-bootstrap.sha256);
-            };
+      let
+        archive = pkgs.callPackage ./pkgs/go/archive.nix { };
+        upstream = import ./pkgs/go/source.nix;
+      in
+      {
+        goBootstrap = pkgs.callPackage ./pkgs/go/seed.nix {
+          src = archive {
+            name = "go-bootstrap.tar.gz";
+            file = toString ./go-bootstrap.tar.gz;
+            hash = builtins.replaceStrings [ "\n" ] [ "" ] (builtins.readFile ./go-bootstrap.sha256);
           };
-          go = pkgs.callPackage ./pkgs/go {
-            src = archive {
-              name = "go-${upstream.version}.tar.gz";
-              file = toString ./sources/go.tar.gz;
-              hash = upstream.src.hash;
-            };
+        };
+        go = pkgs.callPackage ./pkgs/go {
+          src = archive {
+            name = "go-${upstream.version}.tar.gz";
+            file = toString ./sources/go.tar.gz;
+            hash = upstream.src.hash;
           };
-          buildGoModule = pkgs.callPackage ./build-go-module.nix {
-            goEnvironment = builtins.readFile ./pkgs/go/environment.rc;
-          };
-        }
-      else
-        { }
+        };
+        buildGoModule = pkgs.callPackage ./build-go-module.nix {
+          goEnvironment = builtins.readFile ./pkgs/go/environment.rc;
+        };
+      }
     );
 in
 pkgs

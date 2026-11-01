@@ -74,7 +74,9 @@ with a cache URL and its public signing key. Supported URLs include:
 
 `nix-store --realise` fetches missing outputs and dependencies, verifying
 signatures and content hashes. HTTPS also checks the host's certificate pin.
-Network caches are read-only. The bootstrap configures its bundled file cache.
+Network caches are read-only. The bootstrap configures a bundled file cache for
+the [selected native packages](../pkgs/cache-packages.nix), including Go.
+Cross-built outputs have different store paths and cannot substitute native builds.
 
 To publish a local cache:
 
@@ -86,3 +88,10 @@ nix-store --store $cache --import < /tmp/closure.export
 
 Share the cache and public key; keep the secret key private.
 See [store maintenance](native.md#store-maintenance) for verification and repair.
+
+## Cache publication
+
+Publication is manual. The Cachix `nix9` pin retains one validated revision of
+the [cache bundle](../tools/cache-bundle.nix): the bootstrap, selected cross-built
+packages, and cross-build tools and sources. VM images, standalone archives,
+test and debug outputs, generated installations and build history are excluded.
