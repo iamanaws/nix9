@@ -21,6 +21,10 @@ in
     ./modules/programs.nix
   ];
   config.logging = lib.mkMerge [
+    (lib.mkIf config.services.dhcpd.enable {
+      enable = lib.mkDefault true;
+      files.ipboot.mode = lib.mkDefault "0660";
+    })
     (lib.mkIf config.services.cron.enable {
       enable = lib.mkDefault true;
       files.cron.mode = lib.mkDefault "0660";
@@ -38,7 +42,9 @@ in
       };
     }) (lib.unique (map (job: job.user) (builtins.attrValues config.services.cron.jobs)))
     ++ lib.optional config.services.cron.enable { "/cron".mode = lib.mkDefault "0775"; }
+    ++ lib.optional config.services.dhcpd.enable { "/lib/ndb/dhcp".mode = lib.mkDefault "0775"; }
   );
+  config.services.ndb.enable = lib.mkIf config.services.dhcpd.enable (lib.mkDefault true);
   options = {
     namespace = lib.mkOption {
       type = lib.types.submodule { imports = [ ./modules/namespace.nix ]; };
@@ -92,6 +98,7 @@ in
           ./modules/cron.nix
           ./modules/cwfs.nix
           ./modules/backups.nix
+          ./modules/dhcpd.nix
           (import ./modules/plumber.nix { inherit lib pkgs; })
         ];
       };

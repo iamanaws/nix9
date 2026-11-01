@@ -201,6 +201,14 @@
       ${nativeBootstrap} "$out"
     '';
   };
+  native-dhcp-tests = vmTest "native-dhcp-tests" {
+    script = ./native_dhcp.py;
+    files = [ ./dhcpd.nix ];
+    env.NIX9_DHCP_TEST_STATE = "dhcp-state";
+    args = ''
+      ${nativeBootstrap} "$out"
+    '';
+  };
   native-machine-tests = vmTest "native-machine-tests" {
     script = ./native_machine.py;
     files = [

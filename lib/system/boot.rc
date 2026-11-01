@@ -18,6 +18,7 @@
         if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
         . $nix9SelectedSystem/activate && {
           if(test -f $nix9System/ndb/boot.rc) . $nix9System/ndb/boot.rc
+          if(test -f $nix9System/services/dhcpd.rc) . $nix9System/services/dhcpd.rc
           if(~ $service cpu && test -f $nix9System/services/listen-boot.rc)
             . $nix9System/services/listen-boot.rc
           status=''

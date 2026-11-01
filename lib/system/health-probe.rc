@@ -11,9 +11,29 @@ case listener
     echo 'no TCP listener on port' $1 >[1=2]
     exit 'listener unavailable'
   }
-case directory
+case directory writable-directory
   test -d $1
+  if(~ $operation writable-directory) {
+    temporary=$1^'/.nix9-health-'^$pid
+    if(! echo -n '' > $temporary) {
+      echo 'directory is not writable:' $1 >[1=2]
+      exit 'directory is not writable'
+    }
+    rm $temporary
+  }
   ls -d $1 > /dev/null
+case udp-listener
+  found=0
+  for(connection in /net/udp/[0-9]*)
+    if(test -f $connection/local && ~ `{cat $connection/local} ::!^$1 0.0.0.0!^$1) {
+      current=`{cat $connection/status}
+      if(~ $current(1) Open) found=1
+    }
+  if(~ $found 0) {
+    echo 'no UDP listener on port' $1 >[1=2]
+    exit 'listener unavailable'
+  }
+  status=''
 case dns-listener
   protocol=$1
   expected=$2^'!53'

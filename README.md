@@ -58,6 +58,7 @@ and a C development example.
 | [Deployment](docs/deployment.md) | Inspect an installation, prepare systems and shared roots, select machines and check status. |
 | [Services](docs/services.md) | Ethernet, clocks, logging, webfs, remote CPU access and scheduled jobs. |
 | [Service discovery](docs/discovery.md) | NDB records, service locations and native cs/DNS. |
+| [DHCP](docs/dhcp.md) | NDB reservations, dynamic pools and persistent leases. |
 | [Session namespaces](docs/namespaces.md) | Ordered bindings and union directories across local files and shared providers. |
 | [Network server](docs/network-server.md) | Use a lab network from terminal and CPU sessions through authenticated 9P. |
 | [Storage and recovery](docs/storage.md) | Dedicated CWFS storage, shared workspaces and recovery from dump history. |

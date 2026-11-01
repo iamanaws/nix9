@@ -12,6 +12,7 @@ let
   build = import ./build.nix {
     inherit mkDerivation buildEnv lib;
     ndbPackage = packages.ndb;
+    dhcpPackage = packages.dhcpd;
     authPackage = packages.auth;
     cpuPackage = packages.rcpu;
     listenPackage = packages.listen;

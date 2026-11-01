@@ -3,6 +3,20 @@ let
   ndb = import ./ndb.nix;
   multinet = import ./ndb-multinet.nix { };
   dns = import ./dns.nix { };
+  dhcp = import ./dhcpd.nix { };
+  dhcpValid = [
+    "initial"
+    "changed"
+    "reservations"
+    "disabled"
+    "visitor"
+    "automaticNdb"
+    "multiplePools"
+    "rawNetwork"
+  ];
+  dhcpRejected = builtins.mapAttrs (
+    _: value: !(builtins.tryEval (value.systems.dns or value).drvPath).success
+  ) (builtins.removeAttrs dhcp dhcpValid);
   dnsValid = [
     "initial"
     "changed"
@@ -44,6 +58,10 @@ assert builtins.isString ndb.minimal.drvPath;
 assert builtins.isString ndb.included.drvPath;
 assert builtins.all (name: builtins.isString dns.${name}.systems.dns.drvPath) dnsValid;
 assert builtins.all (value: value) (builtins.attrValues dnsRejected);
+assert builtins.all (
+  name: builtins.isString (dhcp.${name}.systems.dns or dhcp.${name}).drvPath
+) dhcpValid;
+assert builtins.all (value: value) (builtins.attrValues dhcpRejected);
 assert builtins.isString dns.initial.systems.terminal.drvPath;
 assert builtins.all (value: value) (builtins.attrValues ndbRejected);
 assert builtins.all (name: builtins.isString multinet.${name}.systems.cpu.drvPath) ndbValid;
@@ -82,4 +100,5 @@ assert builtins.all (name: builtins.isString scenario.${name}.drvPath) [
   ];
   inherit ndbValid ndbRejected;
   inherit dnsValid dnsRejected;
+  inherit dhcpValid dhcpRejected;
 }

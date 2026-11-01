@@ -3,6 +3,7 @@
   buildEnv,
   lib,
   ndbPackage,
+  dhcpPackage,
   authPackage,
   cpuPackage,
   listenPackage,
@@ -76,6 +77,7 @@ let
     paths =
       packages
       ++ (if ndb == null then [ ] else [ ndb.package ])
+      ++ lib.optional (dhcp != null) dhcpPackage
       ++ (if access == null then [ ] else access.packages)
       ++ sharing.packages
       ++ graphical.packages
@@ -105,6 +107,7 @@ let
         cwfs,
         backups,
         plumber,
+        dhcpd,
       }:
       {
         cron = import ./cron.nix {
@@ -179,6 +182,12 @@ let
     inherit lib;
     configuration = services.cwfs;
     package = cwfsPackage;
+  };
+  dhcp = import ./dhcpd.nix {
+    inherit lib networking;
+    configuration = services.dhcpd;
+    ndb = services.ndb;
+    package = dhcpPackage;
   };
   backups = import ./backups.nix {
     inherit lib;
@@ -282,6 +291,7 @@ else
       storage
       backups
       graphical
+      dhcp
     ]
     (mkDerivation {
       name = "nix9-system-${hostName}";
@@ -336,6 +346,7 @@ else
         }
         ${if directoryConfiguration == null then "" else write "directories" directoryConfiguration.script}
         ${if network == "" then "" else write "network" network}
+        ${if dhcp == null then "" else write "services/dhcpd.rc" dhcp.start}
         ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
         ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
         ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}

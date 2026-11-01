@@ -89,6 +89,9 @@ in
   ndbSource = selectSource "9front-ndb-source" {
     paths = "sys/src/libip sys/src/libndb sys/src/libauthsrv sys/src/cmd/ndb";
   };
+  dhcpSource = selectSource "9front-dhcp-source" {
+    paths = "sys/src/cmd/ip/dhcpd sys/src/cmd/ip/dhcp.h sys/src/cmd/ip/icmp.h";
+  };
   accessSource = selectSource "9front-access-source" {
     paths =
       "sys/src/cmd/auth sys/src/cmd/aux/listen.c sys/src/cmd/exportfs "

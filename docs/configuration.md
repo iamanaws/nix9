@@ -99,6 +99,7 @@ Selection and rollback apply settings at different times:
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |
+| DHCP serving | Next boot. Dynamic leases persist across selection and rollback. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
 | CWFS data service and daily dump policy | Next CPU-server boot. Project contents and historical dumps persist across system selections. |
 | Backup definitions | Next invocation in an activated system session. See [backups](backups.md). |

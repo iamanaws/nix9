@@ -29,6 +29,7 @@ let
     "examples/installation" = ../../examples/installation;
     "examples/discovery" = ../../examples/discovery;
     "examples/dns" = ../../examples/dns;
+    "examples/lab" = ../../examples/lab;
     "examples/network-server" = ../../examples/network-server;
     "examples/storage" = ../../examples/storage;
     "examples/backup" = ../../examples/backup;
