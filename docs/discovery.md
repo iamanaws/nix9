@@ -158,7 +158,7 @@ fallback. `dns.resolver` defaults to true. Disabling `services.ndb` restores the
 native database and startup on the next boot.
 
 Host `dom` entries are DNS hints. Upstream DNS answers can take precedence.
-DHCP and PXE services require separate native setup.
+See [DHCP](dhcp.md) for address serving and [PXE](netboot.md) for boot files.
 
 ```sh
 ndb/query sys cpu1 ip

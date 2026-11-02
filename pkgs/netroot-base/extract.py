@@ -28,6 +28,8 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.child.timeout = 600
                 guest.command(f"hget -o /tmp/root.proto http://10.0.2.2:{server.server_port}/root.proto")
                 guest.command("mkdir /tmp/root; disk/mkfs -d /tmp/root -s /root /tmp/root.proto")
+                guest.command("mkdir /tmp/root/boot-files; cp /386/9bootpxe /tmp/root/boot-files/9bootpxe")
+                guest.command("9fs 9fat && cp /n/9fat/9pc64 /tmp/root/boot-files/9pc64")
                 guest.command("@{ cd /tmp/root && tar cf /tmp/root.tar * }")
                 guest.command("gzip -c /tmp/root.tar > /tmp/root.tar.gz")
                 guest.command("size=`{ls -l /tmp/root.tar.gz | awk '{print $6}'}")
@@ -58,6 +60,14 @@ with tempfile.TemporaryDirectory() as directory:
         namespace = source.extractfile(members["lib/namespace"]).read()
         if b". /lib/namespace.local\n" not in namespace:
             raise RuntimeError("seed namespace does not support local includes")
+        (destination / "boot").mkdir()
+        for name in ("9bootpxe", "9pc64"):
+            member = members.get("boot-files/" + name)
+            if member is None or not member.isfile() or member.size == 0:
+                raise RuntimeError("missing public boot file: " + name)
+            with source.extractfile(member) as original, (destination / "boot" / name).open("wb") as target:
+                shutil.copyfileobj(original, target)
+            (destination / "boot" / name).chmod(0o755)
         # VM clock, archive enumeration and filesystem ownership do not affect the seed.
         with (
             (destination / "root.tar.gz").open("wb") as packed,
@@ -65,6 +75,8 @@ with tempfile.TemporaryDirectory() as directory:
             tarfile.open(fileobj=compressed, mode="w|", format=tarfile.USTAR_FORMAT) as archive,
         ):
             for name, member in sorted(members.items()):
+                if name == "boot-files" or name.startswith("boot-files/"):
+                    continue
                 entry = tarfile.TarInfo(name)
                 entry.type = tarfile.DIRTYPE if member.isdir() else tarfile.REGTYPE
                 entry.mode = member.mode & 0o777

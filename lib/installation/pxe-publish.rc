@@ -1,0 +1,35 @@
+#!/bin/rc
+rfork ne
+fn fail {
+  echo 'nix9: publish PXE:' $* >[1=2]
+  exit 'PXE publication failed'
+}
+if(! ~ $#* 1) fail 'usage: publish-pxe TFTP-DIRECTORY'
+bundle=`{basename -d $0}
+. $bundle/configuration.rc || fail 'cannot read boot configuration'
+~ $#pxeProvider 1 || fail 'not a PXE boot artifact'
+directory=$1
+test -d $directory || fail 'provision the TFTP directory first'
+mkdir -p $directory/versions $directory/cfg/pxe || fail 'cannot prepare public directories'
+if(test -e $directory/9bootpxe) {
+  cmp -s $bundle/pxe/9bootpxe $directory/9bootpxe || fail 'the published loader differs'
+}
+if not {
+  cp $bundle/pxe/9bootpxe $directory/9bootpxe.new || fail 'cannot stage the loader'
+  chmod 555 $directory/9bootpxe.new
+  mv $directory/9bootpxe.new $directory/9bootpxe || fail 'cannot publish the loader'
+}
+version=`{basename $bundle}
+destination=$directory/versions/$version
+if(test -e $destination) {
+  for(file in 9bootpxe 9pc64 plan9.ini)
+    cmp -s $bundle/pxe/$file $destination/$file || fail 'published PXE version differs:' $file
+  echo 'PXE version already published:' $version
+  exit ''
+}
+partial=$destination^.partial
+mkdir $partial || fail 'partial publication already exists or cannot be created:' $partial
+. $bundle/copy-tree.rc || fail 'cannot read tree copier'
+copyTree $bundle/pxe $partial 555 || fail 'incomplete PXE version left at:' $partial
+mv $partial $destination || fail 'cannot publish PXE version'
+echo 'Published PXE version:' $version

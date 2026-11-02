@@ -1,0 +1,25 @@
+# Operations run on the independently booted TFTP provider, under its target lock.
+bundle=$system
+test -f $bundle/publish-pxe || fail 'not a PXE boot artifact'
+. $bundle/configuration.rc || fail 'cannot read PXE boot configuration'
+~ $#pxeProvider 1 && ~ $pxeProvider $identity || fail 'PXE artifact belongs to another boot provider'
+readRoot $nix9SystemRoot^-boot
+test -f $value/services/tftpd-directory || fail 'boot the TFTP provider configuration first'
+~ `{cat $value/services/tftpd-directory} $pxeDirectory || fail 'booted TFTP directory differs'
+retained=$root^-pxe/$machineId
+if(~ $action prepare-pxe) {
+  mkdir -p $root^-pxe
+  nix-store --option substitute false --realise $bundle --add-root $retained > /dev/null || fail 'cannot retain PXE artifact'
+  rc $bundle/publish-pxe $pxeDirectory || fail 'cannot publish PXE boot files'
+}
+if not {
+  readRoot $retained
+  ~ $value $bundle || fail 'prepare the intended PXE artifact on its boot provider'
+  . $helperDirectory/root-mount.rc
+  mountRoot
+  . $bundle/check-root.rc || fail 'cannot check published root'
+  ~ `{cat $node/usr/local/nix/state/machine-id} $machineId || fail 'persistent machine identity mismatch'
+  . $bundle/check-pxe.rc || fail 'PXE selection preflight failed'
+  if(~ $action select-pxe) rc $bundle/select-pxe $rootMount || fail 'PXE root selection failed'
+}
+status=''

@@ -92,6 +92,9 @@ in
   dhcpSource = selectSource "9front-dhcp-source" {
     paths = "sys/src/cmd/ip/dhcpd sys/src/cmd/ip/dhcp.h sys/src/cmd/ip/icmp.h";
   };
+  tftpSource = selectSource "9front-tftp-source" {
+    paths = "sys/src/cmd/ip/tftpd.c sys/src/cmd/ip/tftpfs.c";
+  };
   accessSource = selectSource "9front-access-source" {
     paths =
       "sys/src/cmd/auth sys/src/cmd/aux/listen.c sys/src/cmd/exportfs "

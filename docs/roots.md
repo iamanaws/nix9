@@ -55,8 +55,8 @@ change permissions through native filesystem tools.
 
 To supply a different pinned seed, set `base` to a directory containing
 `root.tar.gz` and `base.json`. The archive must contain a compatible amd64 CPU
-userland and a `/lib/namespace` that includes `/lib/namespace.local`. Kernels
-remain separately provisioned.
+userland and a `/lib/namespace` that includes `/lib/namespace.local`. Provision
+kernels on local boot media, or use [PXE network boot](netboot.md).
 
 ## Select one CPU
 

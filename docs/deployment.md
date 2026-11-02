@@ -96,17 +96,24 @@ nix9 status build batch
 `select-root` checks every requested CPU's prepared artifact, intended provider,
 published hooks, persistent identity and boot medium before changing any boot
 settings. It then selects machines in argument order. `--all` requests every
-network-root CPU. Repeating an unchanged selection preserves `plan9.bak`.
+network-root CPU. Repeating an unchanged selection preserves the boot backup.
 Reboot each CPU explicitly when ready. Ordinary deployment selects packages
 and module settings separately from OS roots.
 
-`machines.NAME.deployment.bootMedium` defaults to `/n/9fat`. When needed, deployment
+For CPUs using local boot media, `machines.NAME.deployment.bootMedium` defaults
+to `/n/9fat`. When needed, deployment
 mounts the CPU's single local `9fat` partition through the native FAT server.
 The server uses its own namespace and shares its cache with console mounts.
 Deployment rejects ambiguous local disks and avoids devices exported by the
 coordinator. A custom path must already be mounted in the administration
 session's namespace. Boot media and kernels remain provisioned
 through native tools. See [root recovery](roots.md#roll-back) for FAT write limits.
+
+For [PXE CPUs](netboot.md), preparation also publishes immutable boot files on
+the TFTP provider. `select-root` updates that CPU's MAC configuration there;
+other CPUs and the running TFTP service keep serving. Status reads the actual
+next-boot configuration over TFTP. Firmware and NVRAM credentials remain
+separately provisioned.
 
 ## Connections
 

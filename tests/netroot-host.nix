@@ -11,6 +11,7 @@ pkgs.runCommand "netroot-tests" { nativeBuildInputs = [ pkgs.nix ]; } ''
       testSupport [
         ./netroot.nix
         ./netroot-checks.nix
+        ./pxe.nix
       ]
     }/netroot-checks.nix > "$out/results.json"
 ''

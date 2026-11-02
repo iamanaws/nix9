@@ -1,0 +1,13 @@
+# The caller has checked the intended published CWFS root and machine state.
+~ $#pxeProvider 1 && ~ $#pxeEther 1 || fail 'not a PXE boot artifact'
+version=`{basename $bundle}
+for(file in 9bootpxe 9pc64 plan9.ini)
+  cmp -s $bundle/pxe/$file $pxeDirectory/versions/$version/$file || fail 'PXE version is missing or differs:' $file
+cmp -s $bundle/pxe/9bootpxe $pxeDirectory/9bootpxe || fail 'PXE loader is missing or differs'
+ini=$pxeDirectory/cfg/pxe/$pxeEther
+if(test -e $ini) {
+  awk '-F=' -v 'id='^$machineId '$1 == "nix9machine" {count++; if($0 != "nix9machine=" id) bad=1}
+    END {exit !(count == 1 && !bad)}' $ini || fail 'PXE configuration belongs to another machine'
+}
+if(test -e $ini^.lock) fail 'PXE configuration is locked'
+status=''

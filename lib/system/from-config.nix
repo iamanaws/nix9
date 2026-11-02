@@ -13,6 +13,7 @@ let
     inherit mkDerivation buildEnv lib;
     ndbPackage = packages.ndb;
     dhcpPackage = packages.dhcpd;
+    tftpPackage = packages.tftpd;
     authPackage = packages.auth;
     cpuPackage = packages.rcpu;
     listenPackage = packages.listen;

@@ -2,6 +2,7 @@
 
 See [service discovery](discovery.md) for generated NDB records and packaged cs/DNS.
 See [DHCP](dhcp.md) for serving addresses and network defaults from NDB.
+See [PXE](netboot.md) for native TFTP serving and CPU boot files.
 
 These options belong inside [mkSystem](configuration.md) and are disabled by
 default. See its [activation table](configuration.md#generations) for when

@@ -3,6 +3,7 @@ fn webfs
 nix9System=()
 nix9EnvironmentActive=()
 nix9EnvironmentPaths=()
+nix9EnvironmentCommandRoot=()
 nix9EnvironmentFileTargets=()
 nix9EnvironmentFileRoot=()
 nix9BasePath=()

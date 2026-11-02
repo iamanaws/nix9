@@ -56,7 +56,7 @@ class SerialLog:
 def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
          memory="2G", prompt=r"(?m)^term% ", configure_network=True, cpu=False,
          forward_ports=(), guest_forwards=(), network_options=(), extra_nics=(), network_backend="user",
-         qemu_options=(), boot_prompt=True):
+         qemu_options=(), boot_prompt=True, boot_nic=None):
     network = network_backend
     for option in network_options:
         network += "," + option
@@ -71,14 +71,23 @@ def boot(qemu, disk, *, snapshot=True, forward_port=None, guest_forward=None,
         # Start a fresh relay for each connection, including after peer reboots.
         # Forward EOF so the peer can release its connection when the guest closes it.
         network += f",guestfwd=tcp:{address}:{port}-cmd:nc -N 127.0.0.1 {host_port}"
+    nics = []
+    for index, nic in enumerate((network, *extra_nics)):
+        if index == boot_nic:
+            backend, separator, mac = nic.rpartition(",mac=")
+            if not separator:
+                raise ValueError("the boot NIC needs an explicit MAC address")
+            nics.extend(("-netdev", backend + ",id=bootnet", "-device",
+                         "e1000,netdev=bootnet,mac=" + mac + ",bootindex=1"))
+        else:
+            nics.extend(("-nic", nic))
     child = pexpect.spawn(
         qemu,
         [
             "-enable-kvm", "-m", memory, "-smp", "2",
             "-display", "none", "-monitor", "none", "-serial", "stdio",
             "-drive", f"file={disk},format=qcow2,if=virtio",
-            "-nic", network,
-        ] + [argument for nic in extra_nics for argument in ("-nic", nic)]
+        ] + nics
         + list(qemu_options)
         + (["-snapshot"] if snapshot else []),
         encoding="utf-8",

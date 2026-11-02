@@ -11,7 +11,7 @@ let
         void main(void) { print("${message}\n"); exits(nil); }
       '';
       buildCommand = ''
-        mkdir -p $out/bin
+        mkdir -p $out/bin/${builtins.dirOf executable}
         6c -o command.6 $src
         6l -s -o $out/bin/${executable} command.6
       '';
@@ -60,6 +60,20 @@ in
     paths = [
       first
       second
+    ];
+  };
+  nested = pkgs.buildEnv {
+    name = "environment-nested";
+    paths = [
+      (command "nested-one" "ip/one" "nested-one")
+      (command "nested-two" "ip/two" "nested-two")
+    ];
+  };
+  nestedCollision = pkgs.buildEnv {
+    name = "environment-nested-collision";
+    paths = [
+      (command "nested-one" "ip/one" "nested-one")
+      (command "nested-conflict" "ip/one" "collision")
     ];
   };
   tools = pkgs.buildEnv {

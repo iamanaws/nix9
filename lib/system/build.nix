@@ -4,6 +4,7 @@
   lib,
   ndbPackage,
   dhcpPackage,
+  tftpPackage,
   authPackage,
   cpuPackage,
   listenPackage,
@@ -78,6 +79,7 @@ let
       packages
       ++ (if ndb == null then [ ] else [ ndb.package ])
       ++ lib.optional (dhcp != null) dhcpPackage
+      ++ lib.optional services.tftpd.enable tftpPackage
       ++ (if access == null then [ ] else access.packages)
       ++ sharing.packages
       ++ graphical.packages
@@ -108,6 +110,7 @@ let
         backups,
         plumber,
         dhcpd,
+        tftpd,
       }:
       {
         cron = import ./cron.nix {
@@ -347,6 +350,16 @@ else
         ${if directoryConfiguration == null then "" else write "directories" directoryConfiguration.script}
         ${if network == "" then "" else write "network" network}
         ${if dhcp == null then "" else write "services/dhcpd.rc" dhcp.start}
+        ${lib.optionalString services.tftpd.enable (
+          write "services/tftpd-directory" (services.tftpd.directory + "\n")
+          + write "services/tftpd-map" ''
+            (^|/)\.\.(/|$) #
+            ^/*(.*)$ ${services.tftpd.directory}/\1
+          ''
+          + write "services/tftpd.rc" ''
+            ${tftpPackage}/bin/ip/tftpd -r -h ${quote services.tftpd.directory} -m $nix9System/services/tftpd-map
+          ''
+        )}
         ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
         ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
         ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}

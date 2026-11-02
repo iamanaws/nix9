@@ -123,6 +123,20 @@ fn transfer {
   target $transferAction $transferObject || fail 'preparation failed for' $name
 }
 
+fn pxeTarget {
+  pxeOperation=$1
+  pxeConsumer=$name
+  pxeObject=$bootArtifact
+  name=$pxeServer
+  machine $name
+  if(~ $pxeOperation prepare-pxe) transfer $pxeObject prepare-pxe
+  if not target $pxeOperation $pxeObject || status=$status
+  pxeResult=$status
+  name=$pxeConsumer
+  machine $name
+  status=$pxeResult
+}
+
 fn preparationTargets {
   preparing=$requested
   expanded=1
@@ -196,6 +210,7 @@ fn prepareSystems {
     echo Preparing $name
     transfer $system prepare
     if(~ $#bootArtifact 1) transfer $bootArtifact prepare-boot
+    if(~ $#pxeServer 1) pxeTarget prepare-pxe || fail 'PXE preparation failed for' $name
     echo $name prepared $system
   }
 }
@@ -244,10 +259,12 @@ case select-root
   for(name in $requested) {
     machine $name
     target root-ready || fail 'root preflight failed for' $name
+    if(~ $#pxeServer 1) pxeTarget pxe-ready || fail 'PXE preflight failed for' $name
   }
   for(name in $requested) {
     machine $name
-    target select-root || fail 'root selection stopped at' $name '; use status before retrying'
+    if(~ $#pxeServer 1) pxeTarget select-pxe || fail 'PXE selection stopped at' $name
+    if not target select-root || fail 'root selection stopped at' $name '; use status before retrying'
     echo $name root-selected $rootDirectory
   }
 }

@@ -3,7 +3,8 @@
 A CPU can load its kernel from a small boot medium and mount its root from an
 [authenticated CWFS server](storage.md). The medium needs the native loader,
 compatible amd64 kernel, boot settings and private NVRAM credentials. It needs no
-local OS filesystem. Authentication and file servers boot independently.
+local OS filesystem. [PXE](netboot.md) can fetch the loader, kernel and settings
+over the network. Authentication and file servers boot independently.
 
 The [example](../examples/netroot/configuration.nix) describes auth, files and a
 build CPU. Declare a root and assign it to a CPU in the installation:
@@ -114,5 +115,5 @@ mismatched machine state cannot start Nix.
 
 See [root upgrades](roots.md) to publish another userland version, change one
 CPU's next boot and return to an earlier root. Nix system generations select
-packages and module settings separately. Kernels, boot media, NVRAM credentials
-and PXE remain native provisioning.
+packages and module settings separately. Local boot media and NVRAM credentials
+remain native provisioning; [PXE](netboot.md) can manage kernel delivery.

@@ -66,6 +66,7 @@ and a C development example.
 | [Remote builders](docs/builders.md) | Schedule Nix builds on CPU servers and return results to the terminal. |
 | [Rio, Acme and plumbing](docs/workstation.md) | Native startup configuration, shared projects and remote builds. |
 | [Network-root CPUs](docs/netroot.md) | Boot CPUs from shared OS files with separate writable Nix state. |
+| [PXE network boot](docs/netboot.md) | Fetch CPU kernels and settings over TFTP; select and roll back their next boot. |
 | [Shared root versions](docs/roots.md) | Publish OS userland, upgrade individual CPUs and return to an earlier root. |
 | [Downloads and caches](docs/transport.md) | HTTPS trust, source fetches, closure transfers and signed caches. |
 | [Tests](docs/validation.md) | Test commands, coverage and benchmarks. |

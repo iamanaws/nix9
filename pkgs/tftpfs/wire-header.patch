@@ -1,0 +1,62 @@
+--- a/tftpfs.c
++++ b/tftpfs.c
+@@ -154,9 +154,12 @@
+ 	Tfile *f;
+ 	Req *r;
+ 
+-	struct {
++	union {
+ 		Udphdr;
+-		uchar buf[2+2+Segsize+1];
++		struct {
++			uchar header[Udphdrsize];
++			uchar buf[2+2+Segsize+1];
++		};
+ 	} msg;
+ 
+ 	c = nil;
+@@ -188,10 +191,11 @@
+ 		goto out;
+ 	}
+ 
++	memset(&msg, 0, sizeof msg);
+ 	n = filereq(msg.buf, f->path);
+ 	ipmove(msg.raddr, f->addr);
+ 	hnputs(msg.rport, TftpPort);
+-	if(write(fd, &msg, sizeof(Udphdr) + n) < 0){
++	if(write(fd, &msg, Udphdrsize + n) < 0){
+ 		err = "send read request: %r";
+ 		goto out;
+ 	}
+@@ -202,13 +206,13 @@
+ 	last = 0;
+ 	while(!last){
+ 		alarm(5000);
+-		if((n = read(fd, &msg, sizeof(Udphdr) + sizeof(msg.buf)-1)) < 0){
++		if((n = read(fd, &msg, Udphdrsize + sizeof(msg.buf)-1)) < 0){
+ 			err = "receive response: %r";
+ 			goto out;
+ 		}
+ 		alarm(0);
+ 
+-		n -= sizeof(Udphdr);
++		n -= Udphdrsize;
+ 		msg.buf[n] = 0;
+ 		switch(nhgets(msg.buf)){
+ 		case Tftp_ERROR:
+@@ -223,7 +227,7 @@
+ 			if(block > seq)
+ 				continue;
+ 			hnputs(msg.buf, Tftp_ACK);
+-			if(write(fd, &msg, sizeof(Udphdr) + 4) < 0){
++			if(write(fd, &msg, Udphdrsize + 4) < 0){
+ 				err = "send acknowledge: %r";
+ 				goto out;
+ 			}
+@@ -470,4 +474,5 @@
+ 		usage();
+ 
+ 	threadpostmountsrv(&fs, srvname, mtpt, MREPL|MCREATE);
+-}
++	threadexits(nil);
++}

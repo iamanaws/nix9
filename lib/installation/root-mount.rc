@@ -1,0 +1,17 @@
+fn mountRoot {
+  rootWork=/usr/local/nix/state/deploy-root-^$identity^-^$pid
+  if(test -e $rootWork) fail 'temporary root mount already exists:' $rootWork
+  mkdir $rootWork || fail 'cannot create private root mount'
+  chmod 700 $rootWork || fail 'cannot protect private root mount'
+  rootMount=$rootWork/main
+  mkdir $rootMount || fail 'cannot create root mount point'
+  if(~ $action prepare-root) {
+    alarm $timeout mount -c /srv/cwfs-nix9 $rootMount main || fail 'cannot mount local CWFS provider'
+  }
+  if not {
+    alarm $timeout $rootDial $rootAddress /$cputype/bin/mount -c -k $rootKeyPattern /fd/0 $rootMount main ||
+      fail 'cannot mount intended root provider'
+  }
+  rootMounted=1
+}
+status=''

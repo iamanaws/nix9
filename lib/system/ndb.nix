@@ -7,6 +7,7 @@ let
     && builtins.stringLength value <= 63
     && builtins.match "[a-z0-9]([a-z0-9-]*[a-z0-9])?" value != null;
   split = value: builtins.filter builtins.isString (builtins.split "\\." value);
+  splitPath = value: builtins.filter builtins.isString (builtins.split "/" value);
   validIP =
     value:
     builtins.isString value
@@ -66,6 +67,8 @@ in
         ntp ? [ ],
         ipgw ? null,
         dnsdomain ? [ ],
+        bootf ? null,
+        tftp ? null,
       }:
       {
         inherit
@@ -82,6 +85,8 @@ in
           ntp
           ipgw
           dnsdomain
+          bootf
+          tftp
           ;
       };
     network =
@@ -96,6 +101,8 @@ in
         ntp ? [ ],
         ipgw ? null,
         dnsdomain ? [ ],
+        bootf ? null,
+        tftp ? null,
       }:
       {
         inherit
@@ -109,6 +116,8 @@ in
           ntp
           ipgw
           dnsdomain
+          bootf
+          tftp
           ;
       };
     hostNames = builtins.attrNames hosts;
@@ -125,6 +134,7 @@ in
       ++ values "dns" record.dns
       ++ values "dnsdomain" record.dnsdomain
       ++ values "ntp" record.ntp;
+    bootDefaults = record: optional "bootf" record.bootf ++ optional "tftp" record.tftp;
     hostText =
       name:
       let
@@ -152,7 +162,7 @@ in
         ) record.extraAddresses
       )
       + "\n\t"
-      + line (defaults record)
+      + line (defaults record ++ bootDefaults record)
       + "\n";
     networkText =
       name:
@@ -165,7 +175,7 @@ in
         (pair "ipmask" (builtins.concatStringsSep "." (map toString (maskParts record.prefixLength))))
       ]
       + "\n\t"
-      + line (defaults record ++ optional "ipgw" record.ipgw)
+      + line (defaults record ++ bootDefaults record ++ optional "ipgw" record.ipgw)
       + "\n";
     dnsConfig =
       (
@@ -272,10 +282,24 @@ in
         record.auth
         record.fs
         record.cpu
+        record.tftp
       ]
     ) allRecords
   then
-    error "auth, fs and cpu must be native server names or addresses without whitespace"
+    error "auth, fs, cpu and tftp must be native server names or addresses without whitespace"
+  else if
+    !builtins.all (
+      record:
+      record.bootf == null
+      || (
+        safe record.bootf
+        && builtins.stringLength record.bootf < 128
+        && builtins.match "/?[a-zA-Z0-9_+.-]+(/[a-zA-Z0-9_+.-]+)*" record.bootf != null
+        && builtins.all (part: part != "." && part != "..") (splitPath record.bootf)
+      )
+    ) allRecords
+  then
+    error "bootf must be a boot file path shorter than 128 bytes without traversal"
   else if
     !builtins.all (
       record:

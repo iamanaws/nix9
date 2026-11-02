@@ -13,7 +13,7 @@ installation=$2
 name=$3
 identity=$4
 system=$5
-if(! ~ $action status status-health missing prepare ready select prepare-root prepare-boot root-ready select-root)
+if(! ~ $action status status-health missing prepare ready select prepare-root prepare-boot root-ready select-root prepare-pxe pxe-ready select-pxe)
   fail 'invalid target action'
 . /usr/local/pkg/nix9/activate || fail 'cannot activate target Nix'
 path=($nix9/bin /$cputype/bin /rc/bin)
@@ -79,7 +79,7 @@ fn sigexit {
   rm $lock
   status=$result
 }
-if(~ $action prepare prepare-root prepare-boot) {
+if(~ $action prepare prepare-root prepare-boot prepare-pxe) {
   if(test -f $input/closure.export)
     nix-store --import < $input/closure.export > /dev/null || fail 'closure import failed'
 }
@@ -98,5 +98,7 @@ case ready select
   if(~ $action select) nix9 select $system || fail 'system selection failed'
 case prepare-root prepare-boot root-ready select-root
   . $helperDirectory/root-target.rc || fail 'root deployment failed'
+case prepare-pxe pxe-ready select-pxe
+  . $helperDirectory/pxe-target.rc || fail 'PXE deployment failed'
 }
 exit ''

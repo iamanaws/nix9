@@ -18,6 +18,8 @@ for(directory in rc/bin rc/lib adm service sys/log sys/lib/tls/webfs cfg/nix9 tm
 chmod 700 $node/adm || fail 'cannot protect runtime keys'
 . $bundle/copy-tree.rc || fail 'cannot read tree copier'
 copyTree $base/usr/glenda $node/usr/glenda 755 || fail 'cannot seed the initial home directory'
+mkdir -p -m 755 $node/usr/glenda/bin/rc $node/usr/glenda/bin/amd64 ||
+  fail 'cannot prepare native user command directories'
 if(test -f $base/sys/lib/tls/webfs/revoked) {
   cp $base/sys/lib/tls/webfs/revoked $node/sys/lib/tls/webfs/revoked &&
   chmod u+w $node/sys/lib/tls/webfs/revoked || fail 'cannot seed TLS revocations'

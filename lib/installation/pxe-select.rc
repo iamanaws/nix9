@@ -1,0 +1,28 @@
+#!/bin/rc
+rfork ne
+fn fail {
+  echo 'nix9: select PXE root:' $* >[1=2]
+  exit 'PXE selection failed'
+}
+if(! ~ $#* 1) fail 'usage: select-pxe ROOT-MOUNT'
+bundle=`{basename -d $0}
+rootMount=$1
+. $bundle/check-root.rc || fail 'cannot check published root'
+identity=`{cat $node/usr/local/nix/state/machine-id}
+~ $#identity 1 && ~ $identity $machineId || fail 'persistent machine identity mismatch'
+. $bundle/check-pxe.rc || fail 'PXE selection preflight failed'
+mkdir $ini^.lock || fail 'PXE configuration is locked'
+fn sigexit {
+  result=$status
+  rm $ini^.lock
+  status=$result
+}
+if(test -f $ini && cmp -s $bundle/pxe/plan9.ini $ini) {
+  echo 'PXE root already selected:' $rootDirectory
+  exit ''
+}
+cp $bundle/pxe/plan9.ini $ini^.new || fail 'cannot stage PXE configuration'
+chmod 644 $ini^.new
+if(test -f $ini) cp $ini $ini^.bak || fail 'cannot save previous PXE configuration'
+mv $ini^.new $ini || fail 'cannot select PXE configuration'
+echo 'Selected PXE root for next boot:' $rootDirectory

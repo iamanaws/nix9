@@ -27,6 +27,8 @@ let
     dns = strings "IPv4 DNS server addresses.";
     dnsdomain = strings "DNS search domains, in order.";
     ntp = strings "NTP server names or addresses.";
+    bootf = nullable "Native boot file path supplied by BOOTP/DHCP.";
+    tftp = nullable "TFTP server name or address.";
   };
 in
 {

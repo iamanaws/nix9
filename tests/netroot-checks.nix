@@ -1,11 +1,26 @@
 let
   fixtures = import ./netroot.nix { };
+  pxe = import ./pxe.nix { };
+  pxeRejected = builtins.mapAttrs (
+    _: value: !(builtins.tryEval value.build.drvPath).success
+  ) pxe.invalid;
   rejected = builtins.mapAttrs (
     _: value: !(builtins.tryEval value.systems.auth.drvPath).success
   ) fixtures.invalid;
   inherit (fixtures.first) manifest;
 in
 assert builtins.all (value: value) (builtins.attrValues rejected);
+assert builtins.isString pxe.initial.build.drvPath;
+assert builtins.isString pxe.tftpOnly.build.drvPath;
+assert builtins.isString pxe.separateDhcp.build.drvPath;
+assert builtins.isString pxe.second.build.drvPath;
+assert builtins.all (value: value) (builtins.attrValues pxeRejected);
+assert builtins.isString pxe.ndb.drvPath;
+assert builtins.isString pxe.tftp.drvPath;
+assert !(builtins.tryEval pxe.badBootFile.drvPath).success;
+assert !(builtins.tryEval pxe.badDirectory.drvPath).success;
+assert pxe.initial.discovery.hosts.build.bootf == "9bootpxe";
+assert pxe.initial.discovery.hosts.build.tftp == "files";
 assert builtins.isString fixtures.first.build.drvPath;
 assert
   builtins.match ".*boot: files attach main, root stable.*state: /machines/build.*" fixtures.first.overview
@@ -50,4 +65,5 @@ assert builtins.any (
 {
   status = "passed";
   inherit rejected;
+  inherit pxeRejected;
 }

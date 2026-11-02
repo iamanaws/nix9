@@ -36,8 +36,12 @@ let
   targetJobs = machine: lib.filterAttrs (_: job: job.target == machine) jobs;
   names = builtins.attrNames machines;
   bootNames = builtins.filter (name: machines.${name}.boot != null) names;
+  pxeNames = builtins.filter (name: machines.${name}.boot.pxe != null) bootNames;
   networkRoots = lib.genAttrs bootNames (
     machineName:
+    let
+      machinePxe = machines.${machineName}.boot.pxe;
+    in
     import ./netroot.nix {
       inherit lib mkDerivation;
       machine = machines.${machineName};
@@ -46,6 +50,17 @@ let
       networking = configs.${machineName}.networking;
       rootKeyPattern = "dom=${defaults.authdom}";
       dial = packages.dial;
+      pxe =
+        if machinePxe == null then
+          null
+        else
+          {
+            inherit (machinePxe) kernel settings;
+            provider = machines.${machinePxe.provider};
+            directory = configs.${machinePxe.provider}.services.tftpd.directory;
+            ether = discovery.hosts.${machines.${machineName}.hostName}.ether;
+            loader = "${packages.netrootBase}/boot/9bootpxe";
+          };
       # The CPU uses a published CWFS path; it does not need the root bundle in its store.
       rootDirectory =
         builtins.unsafeDiscardStringContext
@@ -87,7 +102,17 @@ let
   inventoryNdb = {
     enable = true;
     hosts = lib.mapAttrs' (
-      _: machine: lib.nameValuePair machine.hostName { inherit (machine) ip; }
+      _: machine:
+      lib.nameValuePair machine.hostName (
+        {
+          inherit (machine) ip;
+        }
+        // lib.optionalAttrs (machine.ether != null) { inherit (machine) ether; }
+        // lib.optionalAttrs (machine.boot != null && machine.boot.pxe != null) {
+          bootf = "9bootpxe";
+          tftp = machines.${machine.boot.pxe.provider}.hostName;
+        }
+      )
     ) machines;
     networks = lib.optionalAttrs (discoveryDefaults != { }) {
       default = {
@@ -188,6 +213,21 @@ let
                 machine: (configs.${machineName}.services.ndb.hosts.${machine.hostName}.ip or null) == machine.ip
               ) (builtins.attrValues machines);
             message = "installation inventory owns NDB primary addresses for ${machineName}";
+          }
+          {
+            assertion = builtins.all (
+              machine:
+              let
+                host = configs.${machineName}.services.ndb.hosts.${machine.hostName};
+              in
+              (machine.ether == null || host.ether == machine.ether)
+              && (
+                machine.boot == null
+                || machine.boot.pxe == null
+                || (host.bootf == "9bootpxe" && host.tftp == machines.${machine.boot.pxe.provider}.hostName)
+              )
+            ) (builtins.attrValues machines);
+            message = "installation inventory owns declared NDB MAC addresses and PXE boot settings for ${machineName}";
           }
           {
             assertion = builtins.all (
@@ -308,6 +348,13 @@ let
           kind = "authentication";
         }
       ]
+    ++ lib.optional (machines.${consumer}.boot.pxe != null) {
+      inherit consumer;
+      provider = machines.${consumer}.boot.pxe.provider;
+      kind = "pxe";
+      phase = "boot";
+      required = true;
+    }
   ) bootNames;
   manifest = {
     version = 1;
@@ -330,7 +377,12 @@ let
       command = "${tasks.${jobName}}/run";
     }) jobs;
     machines = lib.mapAttrs (machineName: machine: {
-      inherit (machine) hostName machineId ip;
+      inherit (machine)
+        hostName
+        machineId
+        ip
+        ;
+      ether = discovery.hosts.${machine.hostName}.ether;
       deployment = deployment.${machineName};
       builders = configs.${machineName}.nix.builders;
       boot =
@@ -418,6 +470,26 @@ let
       keyPattern=${quote connection.keyPattern}
       timeout=${toString connection.timeout}
       bootMedium=${quote connection.bootMedium}
+      tftpClient=(${
+        lib.optionalString (machine.boot != null && machine.boot.pxe != null) (
+          quote "${packages.tftpfs}/bin/ip/tftpfs"
+        )
+      })
+      pxeServer=(${
+        lib.optionalString (machine.boot != null && machine.boot.pxe != null) (
+          quote machine.boot.pxe.provider
+        )
+      })
+      pxeAddress=(${
+        lib.optionalString (machine.boot != null && machine.boot.pxe != null) (
+          quote machines.${machine.boot.pxe.provider}.ip
+        )
+      })
+      pxeEther=(${
+        lib.optionalString (machine.boot != null && machine.boot.pxe != null) (
+          quote discovery.hosts.${machine.hostName}.ether
+        )
+      })
       bootArtifact=(${lib.optionalString (machine.boot != null) (quote (toString boot.${machineName}))})
       rootProvider=(${lib.optionalString (machine.boot != null) (quote machine.boot.provider)})
       rootBundle=(${
@@ -451,6 +523,57 @@ else if !unique (map (machine: machine.hostName) (builtins.attrValues machines))
   error "duplicate hostnames"
 else if !unique (map (machine: machine.ip) (builtins.attrValues machines)) then
   error "duplicate IPv4 addresses"
+else if
+  !builtins.all (name: builtins.hasAttr machines.${name}.boot.pxe.provider machines) pxeNames
+then
+  error "PXE boot refers to an unknown provider"
+else if
+  !builtins.all (
+    name:
+    let
+      provider = machines.${name}.boot.pxe.provider;
+    in
+    provider != name && machines.${provider}.boot == null && configs.${provider}.services.tftpd.enable
+  ) pxeNames
+then
+  error "PXE boot requires an independently booted TFTP provider"
+else if
+  !builtins.all (
+    name:
+    let
+      ether = discovery.hosts.${machines.${name}.hostName}.ether;
+    in
+    ether != null && builtins.match "[0-9a-f]{12}" ether != null
+  ) pxeNames
+then
+  error "PXE boot requires an NDB ether address for each client"
+else if !unique (map (name: discovery.hosts.${machines.${name}.hostName}.ether) pxeNames) then
+  error "PXE clients must have distinct NDB ether addresses"
+else if
+  !builtins.all (
+    name:
+    builtins.all (
+      key:
+      builtins.match "[a-zA-Z0-9_*.-]+" key != null
+      && !builtins.elem key [
+        "service"
+        "sysname"
+        "nix9machine"
+        "bootargs"
+        "nobootprompt"
+        "fs"
+        "nix9rootfs"
+        "auth"
+        "rootspec"
+        "rootdir"
+        "init"
+        "bootfile"
+      ]
+      && builtins.match ".*[\r\n].*" (toString machines.${name}.boot.pxe.settings.${key}) == null
+    ) (builtins.attrNames machines.${name}.boot.pxe.settings)
+  ) pxeNames
+then
+  error "PXE settings require single-line hardware parameters outside generated boot settings"
 else if
   !builtins.all (
     machineName:
@@ -619,6 +742,10 @@ else
       build = mkDerivation {
         name = "nix9-installation-${name}";
         buildCommand = ''
+          ${lib.optionalString (bootNames != [ ]) ''
+            fn fail { echo $* >[1=2]; exit 'cannot assemble boot artifacts' }
+            ${builtins.readFile ./copy-tree.rc}
+          ''}
           mkdir -p $out/systems $out/boot $out/roots $out/deployment $out/overview
           echo -n ${quote (builtins.toJSON manifest + "\n")} > $out/manifest.json
           echo -n ${quote ndb.database} > $out/ndb
@@ -631,7 +758,7 @@ else
           '') names}
           ${lib.concatMapStringsSep "\n" (machineName: ''
             mkdir -p $out/boot/${machineName}
-            cp ${boot.${machineName}}/* $out/boot/${machineName}/
+            copyTree ${boot.${machineName}} $out/boot/${machineName} 755
             echo ${quote (toString boot.${machineName})} > $out/boot/${machineName}/path
           '') bootNames}
           ${lib.concatMapStringsSep "\n" (rootName: ''

@@ -23,6 +23,8 @@ in
   libauthsrv = package ./libauthsrv { src = sources.ndbSource + "/sys/src/libauthsrv"; };
   ndb = package ./ndb { src = sources.ndbSource + "/sys/src/cmd/ndb"; };
   dhcpd = package ./dhcpd { src = sources.dhcpSource; };
+  tftpd = package ./tftpd { src = sources.tftpSource + "/sys/src/cmd/ip/tftpd.c"; };
+  tftpfs = package ./tftpfs { src = sources.tftpSource + "/sys/src/cmd/ip/tftpfs.c"; };
   auth = package ./auth { src = sources.accessSource + "/sys/src/cmd/auth"; };
   listen = package ./listen { src = sources.accessSource + "/sys/src/cmd/aux/listen.c"; };
   exportfs = package ./exportfs { src = sources.accessSource + "/sys/src/cmd/exportfs"; };

@@ -21,9 +21,9 @@ in
     ./modules/programs.nix
   ];
   config.logging = lib.mkMerge [
-    (lib.mkIf config.services.dhcpd.enable {
+    (lib.mkIf (config.services.dhcpd.enable || config.services.tftpd.enable) {
       enable = lib.mkDefault true;
-      files.ipboot.mode = lib.mkDefault "0660";
+      files.ipboot.mode = lib.mkDefault (if config.services.tftpd.enable then "0666" else "0660");
     })
     (lib.mkIf config.services.cron.enable {
       enable = lib.mkDefault true;
@@ -43,6 +43,9 @@ in
     }) (lib.unique (map (job: job.user) (builtins.attrValues config.services.cron.jobs)))
     ++ lib.optional config.services.cron.enable { "/cron".mode = lib.mkDefault "0775"; }
     ++ lib.optional config.services.dhcpd.enable { "/lib/ndb/dhcp".mode = lib.mkDefault "0775"; }
+    ++ lib.optional config.services.tftpd.enable {
+      "${config.services.tftpd.directory}".mode = lib.mkDefault "0755";
+    }
   );
   config.services.ndb.enable = lib.mkIf config.services.dhcpd.enable (lib.mkDefault true);
   options = {
@@ -99,6 +102,7 @@ in
           ./modules/cwfs.nix
           ./modules/backups.nix
           ./modules/dhcpd.nix
+          ./modules/tftpd.nix
           (import ./modules/plumber.nix { inherit lib pkgs; })
         ];
       };

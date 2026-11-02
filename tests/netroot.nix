@@ -1,5 +1,6 @@
 {
   pkgs ? import <nix9>,
+  pxe ? false,
 }:
 let
   base = import <nix9/examples/netroot/configuration.nix>;
@@ -7,7 +8,7 @@ let
     extra:
     pkgs.mkInstallation {
       imports = [
-        base
+        (if pxe then <nix9/examples/netboot/configuration.nix> else base)
         ({ lib, ... }: {
           machines.batch = {
             ip = "10.0.2.103";
@@ -45,7 +46,38 @@ let
           machines.batch.configuration.services.ndb.dns.enable = false;
         })
         extra
-      ];
+      ]
+      ++ pkgs.lib.optional pxe (
+        { lib, ... }: {
+          machines.auth.configuration.networking = {
+            primaryInterface = "ether1";
+            interfaces.ether0 = lib.mkForce { useDHCP = true; };
+            interfaces.ether1 = {
+              useDHCP = false;
+              address = "10.0.2.100";
+              prefixLength = 24;
+            };
+          };
+          machines.files.configuration.networking = {
+            primaryInterface = "ether1";
+            interfaces.ether0 = lib.mkForce { useDHCP = true; };
+            interfaces.ether1 = {
+              useDHCP = false;
+              address = "10.0.2.101";
+              prefixLength = 24;
+            };
+          };
+          machines.build.configuration.networking = {
+            primaryInterface = "ether1";
+            interfaces.ether0 = lib.mkForce { useDHCP = true; };
+            interfaces.ether1 = {
+              useDHCP = false;
+              address = "10.0.2.102";
+              prefixLength = 24;
+            };
+          };
+        }
+      );
     };
   first = make { };
 in

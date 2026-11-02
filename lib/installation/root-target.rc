@@ -19,23 +19,8 @@ fn bootMediumReady {
     END {exit !(count == 1 && !bad)}' $bootMedium/plan9.ini ||
     fail 'boot medium belongs to another machine or is not initialized'
 }
-fn mountRoot {
-  rootWork=/usr/local/nix/state/deploy-root-^$identity^-^$pid
-  if(test -e $rootWork) fail 'temporary root mount already exists:' $rootWork
-  mkdir $rootWork || fail 'cannot create private root mount'
-  chmod 700 $rootWork || fail 'cannot protect private root mount'
-  rootMount=$rootWork/main
-  mkdir $rootMount || fail 'cannot create root mount point'
-  if(~ $action prepare-root) {
-    alarm $timeout mount -c /srv/cwfs-nix9 $rootMount main || fail 'cannot mount local CWFS provider'
-  }
-  if not {
-    alarm $timeout $rootDial $rootAddress /$cputype/bin/mount -c -k $rootKeyPattern /fd/0 $rootMount main ||
-      fail 'cannot mount intended root provider'
-  }
-  rootMounted=1
-}
-if(~ $action status) {
+. $helperDirectory/root-mount.rc
+if(~ $action status status-health) {
   readRoot $root^-boot
   echo $name root-prepared $value
   running=-
@@ -45,9 +30,21 @@ if(~ $action status) {
       fail 'invalid running root marker'
     running=/systems/$version
   }
-  bootMediumReady
-  next=`{awk '-F=' '$1 == "rootdir" {print $2}' $bootMedium/plan9.ini}
-  nextProvider=`{awk '-F=' '$1 == "fs" {print $2}' $bootMedium/plan9.ini}
+  if(~ $#pxeServer 1) {
+    client=$tftpClient
+    # Status can run before the intended installation is imported on this CPU.
+    if(! test -f $client) client=/mnt/term^$client
+    test -f $client || fail 'cannot access the TFTP client'
+    alarm $timeout /$cputype/bin/rc -e $helperDirectory/pxe-status.rc $client $pxeAddress $pxeEther > $input/pxe-status ||
+      fail 'cannot read next-boot PXE configuration'
+    nextIni=$input/pxe-status
+  }
+  if not {
+    bootMediumReady
+    nextIni=$bootMedium/plan9.ini
+  }
+  next=`{awk '-F=' '$1 == "rootdir" {print $2}' $nextIni}
+  nextProvider=`{awk '-F=' '$1 == "fs" {print $2}' $nextIni}
   if(! ~ $#next 1 || ! ~ $#nextProvider 1) fail 'ambiguous next-boot root settings'
   if(! echo $next | awk '/^\/root\/systems\/[a-z0-9]+-nix9-root-[a-z0-9-]+$/ {ok=1} END {exit !ok}')
     fail 'invalid next-boot root path'
@@ -102,11 +99,18 @@ if not {
       ~ `{cat $node/usr/local/nix/state/machine-id} $identity || fail 'persistent machine identity mismatch'
   }
   if not {
-    bootMediumReady
-    medium=$bootMedium
-    . $bundle/check-select.rc || fail 'root selection preflight failed'
-    if(~ $action select-root)
-      rc $bundle/select $rootMount $bootMedium || fail 'root selection failed'
+    if(~ $#pxeServer 1) {
+      . $bundle/check-root.rc || fail 'published root preflight failed'
+      ~ `{cat $node/usr/local/nix/state/machine-id} $identity || fail 'persistent machine identity mismatch'
+      if(~ $action select-root) fail 'select the PXE configuration on its boot provider'
+    }
+    if not {
+      bootMediumReady
+      medium=$bootMedium
+      . $bundle/check-select.rc || fail 'root selection preflight failed'
+      if(~ $action select-root)
+        rc $bundle/select $rootMount $bootMedium || fail 'root selection failed'
+    }
   }
 }
 status=''

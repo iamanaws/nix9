@@ -1,4 +1,4 @@
-"""Make private kernel/9fat/NVRAM media from the pinned VM, without its OS filesystem."""
+"""Make private boot or credential media from the VM, without its OS filesystem."""
 
 from pathlib import Path
 import re
@@ -6,7 +6,7 @@ import struct
 import subprocess
 
 
-def boot_medium(qemu, image, destination, configuration, nvram):
+def boot_medium(qemu, image, destination, configuration, nvram, *, network=False):
     destination = Path(destination)
     if destination.exists():
         raise RuntimeError(f"refusing to replace {destination}")
@@ -23,9 +23,14 @@ def boot_medium(qemu, image, destination, configuration, nvram):
     start, _ = struct.unpack_from("<II", data, entry + 8)
     table = data[(start + 1) * 512:(start + 2) * 512].split(b"\0", 1)[0].decode()
     parts = {name: (int(first), int(last)) for name, first, last in re.findall(r"part (\S+) (\d+) (\d+)", table)}
-    retained = {name: parts[name] for name in ("9fat", "nvram")}
+    retained = {name: parts[name] for name in (("nvram",) if network else ("9fat", "nvram"))}
     sectors = start + max(last for _, last in retained.values())
-    subprocess.run([qemu_img, "dd", "-f", "qcow2", f"if={image}", f"of={raw}", "bs=512", f"count={sectors}"], check=True)
+    if network:
+        with raw.open("xb") as file:
+            file.write(data)
+            file.truncate(sectors * 512)
+    else:
+        subprocess.run([qemu_img, "dd", "-f", "qcow2", f"if={image}", f"of={raw}", "bs=512", f"count={sectors}"], check=True)
     with raw.open("r+b") as file:
         file.seek(entry + 12)
         file.write(struct.pack("<I", sectors - start))
@@ -34,14 +39,16 @@ def boot_medium(qemu, image, destination, configuration, nvram):
         file.write(table.ljust(512, b"\0"))
         file.seek((start + parts["nvram"][0]) * 512)
         file.write(nvram)
-    medium = f"{raw}@@{(start + parts['9fat'][0]) * 512}"
-    original = subprocess.check_output(["mtype", "-i", medium, "::plan9.ini"], text=True)
-    keys = {line.split("=", 1)[0] for line in configuration.splitlines() if "=" in line}
-    lines = [line for line in original.splitlines() if line.split("=", 1)[0] not in keys]
-    ini.write_text("\n".join(lines) + "\n" + configuration)
-    subprocess.run(["mcopy", "-o", "-i", medium, str(ini), "::plan9.ini"], check=True)
+    if not network:
+        medium = f"{raw}@@{(start + parts['9fat'][0]) * 512}"
+        original = subprocess.check_output(["mtype", "-i", medium, "::plan9.ini"], text=True)
+        keys = {line.split("=", 1)[0] for line in configuration.splitlines() if "=" in line}
+        lines = [line for line in original.splitlines() if line.split("=", 1)[0] not in keys]
+        ini.write_text("\n".join(lines) + "\n" + configuration)
+        subprocess.run(["mcopy", "-o", "-i", medium, str(ini), "::plan9.ini"], check=True)
     subprocess.run([qemu_img, "convert", "-f", "raw", "-O", "qcow2", str(raw), str(destination)], check=True)
     destination.chmod(0o600)
     for file in (header, raw, ini):
-        file.unlink()
+        if file.exists():
+            file.unlink()
     return sectors * 512

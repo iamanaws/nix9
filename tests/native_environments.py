@@ -1,6 +1,7 @@
 """Build and switch rooted environments using native namespace bindings."""
 
 import re
+import time
 
 
 def store_paths(result):
@@ -136,7 +137,7 @@ def check_environments(guest, packages, port):
     guest.command(f"environmentPackages={packages}")
     guest.command("fn environment { nix-build /tmp/environments.nix --argstr packages $environmentPackages -A $1 --out-link $2 }")
     environments = {}
-    for name in ("one", "two", "empty", "duplicate", "tools"):
+    for name in ("one", "two", "empty", "duplicate", "tools", "nested"):
         root = f"/usr/local/nix/state/gcroots/environment-{name}"
         guest.command(f"environment {name} {root}")
         paths = store_paths(guest.command(f"cat {root}"))
@@ -147,6 +148,9 @@ def check_environments(guest, packages, port):
     if "command collision: nix9-choice" not in result or not re.search(r"(?m)^COLLISION-STATUS:.*cc9exit=100$", result):
         raise RuntimeError(f"command collision was not rejected: {result}")
     guest.command("test ! -e /usr/local/nix/state/gcroots/collision")
+    result = guest.command("environment nestedCollision /usr/local/nix/state/gcroots/collision; echo COLLISION-STATUS:$status")
+    if "command collision: ip/one" not in result or not re.search(r"(?m)^COLLISION-STATUS:.*cc9exit=100$", result):
+        raise RuntimeError("nested command collision was not rejected: " + result)
     guest.command("basePath=$path; basePATH=$PATH")
     guest.command(f"@{{ . {environments['one']}/activate; nix9-choice }}", "one")
     guest.command("test ! -e /bin/nix9-choice")
@@ -159,6 +163,20 @@ def check_environments(guest, packages, port):
     if closure != selected | {environments["one"]} or len(selected) != 3:
         raise RuntimeError(f"environment does not retain exactly its selected packages: {closure}")
     guest.command(f". {environments['two']}/activate; nix9-choice", "two")
+    def command_servers():
+        return set(re.findall(r"(?m)^\S+\s+(\d+)\s+.*\sramfs\s*$", guest.command("ps")))
+    before_merge = command_servers()
+    guest.command(f". {environments['nested']}/activate && /bin/ip/one", "nested-one")
+    guest.command("/bin/ip/two", "nested-two")
+    guest.command("test -f /bin/ip/ipconfig")
+    guest.command(f"nix-store --verify-path {environments['nested']}")
+    guest.command(f". {environments['two']}/activate && test ! -e /bin/ip/one && nix9-choice", "two")
+    for _ in range(20):
+        if command_servers() == before_merge:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("switching environments retained a command-directory server")
     guest.command("nix9-new-only", "new-only")
     guest.command("test ! -e /bin/nix9-old-only")
     for variable in ("path", "PATH"):

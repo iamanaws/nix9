@@ -24,6 +24,10 @@ in
   }
   ${lib.optionalString (ndb != null) "healthNdb=${ndb.package}/bin/ndb/csquery"}
   fn healthChecks {
+    ${lib.optionalString services.tftpd.enable ''
+      probe 'tftpd/listener' udp-listener 69
+      probe 'tftpd/directory' directory ${quote services.tftpd.directory}
+    ''}
     ${lib.optionalString services.dhcpd.enable ''
       probe 'dhcpd/listener' udp-listener 67
       probe 'dhcpd/leases' writable-directory /lib/ndb/dhcp

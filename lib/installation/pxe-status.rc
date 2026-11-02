@@ -1,0 +1,17 @@
+#!/bin/rc -e
+# Read the configuration actually served for the next boot in a fresh namespace.
+rfork ne
+if(! ~ $#* 3) exit 'usage: pxe-status CLIENT ADDRESS ETHER'
+point=/tmp/nix9-pxe-status-^$pid
+mkdir $point || exit 'cannot create private TFTP mount'
+chmod 700 $point
+mounted=0
+fn sigexit {
+  result=$status
+  if(~ $mounted 1) unmount $point
+  rm $point
+  status=$result
+}
+$1 -m $point $2 || exit 'cannot mount TFTP provider'
+mounted=1
+cat $point/cfg/pxe/$3^.

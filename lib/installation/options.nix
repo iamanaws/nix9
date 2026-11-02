@@ -120,6 +120,11 @@ in
                 type = types.str;
                 description = "IPv4 address advertised in NDB; native networking must make it reachable.";
               };
+              ether = mkOption {
+                type = types.nullOr (types.strMatching "[0-9a-f]{12}");
+                default = null;
+                description = "Primary interface MAC address advertised in NDB, independent of the hostname.";
+              };
               boot = mkOption {
                 default = null;
                 description = "Network-root CPU boot; null keeps native boot provisioning.";
@@ -138,6 +143,30 @@ in
                         type = runtimeFile;
                         default = "/machines/${machineModule.config.machineId}";
                         description = "Separate persistent machine tree within the provider's main filesystem.";
+                      };
+                      pxe = mkOption {
+                        default = null;
+                        description = "PXE kernel and configuration delivery; null uses a locally provisioned boot medium.";
+                        type = types.nullOr (
+                          types.submodule {
+                            options = {
+                              provider = mkOption {
+                                type = label;
+                                description = "Independently booted machine providing TFTP.";
+                              };
+                              kernel = mkOption {
+                                type = types.path;
+                                default = "${pkgs.netrootBase}/boot/9pc64";
+                                description = "Public amd64 kernel served over TFTP.";
+                              };
+                              settings = mkOption {
+                                type = types.attrsOf (types.either types.str types.int);
+                                default = { };
+                                description = "Additional public plan9.ini hardware settings, such as console = 0. Generated identity, kernel and root settings are reserved.";
+                              };
+                            };
+                          }
+                        );
                       };
                     };
                   }

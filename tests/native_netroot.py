@@ -22,6 +22,7 @@ from guest import boot
 ROOTS = "/usr/local/nix/state/gcroots"
 PROMPT = r"(?m)^(?:term% |% |[a-z0-9-]+# )"
 CPUS = ("build", "batch")
+PXE = os.environ.get("NIX9_PXE_TEST") == "1"
 
 
 def quote(value):
@@ -59,10 +60,22 @@ with ExitStack() as stack:
     work = Path(stack.enter_context(nullcontext(state) if state else tempfile.TemporaryDirectory()))
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
+    network = None
+    if PXE:
+        from ethernet import Ethernet
+        network = Ethernet(("auth", "files", "build"))
+        stack.callback(network.close)
+        def save_traffic():
+            (work / "dhcp-messages.json").write_text(json.dumps(network.captured(), indent=2) + "\n")
+            (work / "tftp-requests.json").write_text(json.dumps(network.requested(), indent=2) + "\n")
+        stack.callback(save_traffic)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
     for file in ("netroot.nix", "netroot-project.nix", "machine-newns.c",
                  "deployment-truncate.rc", "deployment-store.rc"):
         shutil.copyfile(Path(__file__).with_name(file), work / file)
+    if PXE:
+        (work / "netroot.nix").rename(work / "netroot-base.nix")
+        (work / "netroot.nix").write_text('{ pkgs ? import <nix9> }: import ./netroot-base.nix { inherit pkgs; pxe = true; }\n')
     (work / "cwfs.setup").write_text("service files\nconfig /adm/storage/config\n"
         "filsys main cw0fw1\nfilsys dump o\nream main\nend\n")
     keys = {name: secrets.token_bytes(16) for name in ("files", "glenda", *CPUS)}
@@ -101,6 +114,11 @@ with ExitStack() as stack:
     # The secstore reservation deliberately refuses the optional connection.
     # Otherwise a user-network alias with no forwarded port stalls during ARP.
     peers.append(("10.0.2.104", http.server_port, http.server_port))
+    tftp_port = None
+    if PXE:
+        tftp_socket = stack.enter_context(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+        tftp_socket.bind(("127.0.0.1", 0))
+        tftp_port = tftp_socket.getsockname()[1]
 
     def disk(path, backing):
         if path.exists():
@@ -118,6 +136,8 @@ with ExitStack() as stack:
         guest.command("{ echo 'status=()'; echo exit; cat $nix9/bin/nix9 $nix9/packages/installation/*.rc; } > /tmp/deployment-syntax.rc")
         guest.command("rc -b /tmp/deployment-syntax.rc")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb --out-link " + ROOTS + "/netroot-tools")
+        if PXE:
+            guest.command("nix-build '<nix9>' -A dhcpd -A tftpd -A tftpfs --no-out-link")
 
     disks, systems, bundles, boot_artifacts = {}, {}, {}, {}
     root_bundles, root_directories = {}, {}
@@ -138,6 +158,8 @@ with ExitStack() as stack:
             download(guest, "server.nvram", "/tmp/server.nvram", private=True)
             guest.command("dd -if /tmp/server.nvram -of /dev/sdF0/nvram -bs 126 -count 1")
             download(guest, "netroot.nix")
+            if PXE:
+                download(guest, "netroot-base.nix")
             if name == "auth":
                 guest.command("rm -f /adm/keys; auth/keyfs -m /mnt/keys /adm/keys")
                 for identity in keys:
@@ -196,8 +218,13 @@ with ExitStack() as stack:
         forwarded = [(host, port) for peer, port, host in peers if peer == address and port != 5356]
         for host, _ in forwarded:
             reservations[host].close()
+        network_options = ("restrict=on",)
+        if PXE and name == "files":
+            tftp_socket.close()
+            network_options = (f"hostfwd=udp:127.0.0.1:{tftp_port}-:69",)
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False, prompt=PROMPT,
-                  forward_ports=forwarded, guest_forwards=peers, network_options=("restrict=on",),
+                  forward_ports=forwarded, guest_forwards=peers, network_options=network_options,
+                  extra_nics=(network.backend(name, "52:54:00:12:34:" + ("60" if name == "auth" else "61")),) if PXE else (),
                   qemu_options=storage_drives if name == "files" else ()) as guest:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/system")
@@ -240,12 +267,35 @@ with ExitStack() as stack:
         settings = files.command("cat " + artifact + "/plan9.ini")
         configuration = "\n".join(line for line in settings.splitlines() if re.match(r"^[a-z0-9]+=", line)) + "\n"
         disks[cpu] = work / (cpu + ".qcow2")
-        sizes[cpu] = boot_medium(qemu, image, disks[cpu], configuration, nvram(keys["glenda"]))
+        sizes[cpu] = boot_medium(qemu, image, disks[cpu], configuration, nvram(keys["glenda"]), network=PXE and cpu == "build")
+        if PXE and cpu == "build":
+            files.command(f"rc {artifact}/publish-pxe /lib/tftp")
+            files.command(f"rc {artifact}/select-pxe /n/site")
         if cpu == "build":
             bad_medium = work / "bad-key.qcow2"
-            boot_medium(qemu, image, bad_medium, configuration, nvram(secrets.token_bytes(16)))
+            boot_medium(qemu, image, bad_medium, configuration, nvram(secrets.token_bytes(16)), network=PXE)
     files.command("echo dump >> /srv/cwfs-nix9.cmd")
-    print("PASS: native inventory artifacts prepare distinct state and kernel-only boot media", flush=True)
+    if PXE:
+        from tftp import read, denied
+        endpoint = ("127.0.0.1", tftp_port)
+        loader = read(endpoint, "9bootpxe")
+        if not loader or read(endpoint, "/9bootpxe", blocksize=1024) != loader:
+            raise RuntimeError("TFTP option negotiation changed the bootloader")
+        settings = read(endpoint, "/cfg/pxe/525400123462")
+        if b"nix9machine=build\n" not in settings:
+            raise RuntimeError("TFTP did not serve the selected CPU configuration")
+        files.command("echo -n '' > /lib/tftp/empty")
+        if read(endpoint, "empty") != b"":
+            raise RuntimeError("TFTP returned data for an empty file")
+        for path in ("../adm/keys", "nested/..", "#c/user", "/adm/files.keys"):
+            denied(endpoint, path)
+        denied(endpoint, "new-file", write=True)
+        denied(endpoint, "9bootpxe", write=True)
+        files.command("test ! -e /lib/tftp/new-file")
+        files.command("/tmp/check-newns '. /usr/local/pkg/nix9/system && test -f /bin/cwfs-check && test -f /bin/ip/tftpd'")
+        files.command("nix9 status --health", "files health-result ok")
+        print("PASS: native TFTP reads, options, selected boot files and rejected traversal/writes", flush=True)
+    print("PASS: native inventory artifacts prepare distinct state and boot media", flush=True)
 
     @contextmanager
     def cpu(name, *, medium=None, failure=None):
@@ -253,10 +303,17 @@ with ExitStack() as stack:
         forwarded = [(port, host) for peer, port, host in peers if peer == address]
         for _, host in forwarded:
             reservations[host].close()
-        options = ("restrict=on",) + tuple(f"hostfwd=tcp:127.0.0.1:{host}-{address}:{port}"
+        # Keep the PXE client's management subnet separate from its boot link.
+        management = "192.168.100.15" if PXE and name == "build" else address
+        options = (("net=192.168.100.0/24",) if PXE and name == "build" else ())
+        options += ("restrict=on",) + tuple(f"hostfwd=tcp:127.0.0.1:{host}-{management}:{port}"
                                          for port, host in forwarded)
         with boot(qemu, medium or disks[name], snapshot=False, cpu=True, configure_network=False,
-                  prompt=failure or PROMPT, boot_prompt=False, guest_forwards=peers,
+                  prompt=failure or PROMPT, boot_prompt=False,
+                  guest_forwards=() if PXE and name == "build" else peers,
+                  extra_nics=(network.backend("build", "52:54:00:12:34:62"),) if PXE and name == "build" else (),
+                  qemu_options=("-boot", "order=n,strict=on") if PXE and name == "build" else (),
+                  boot_nic=1 if PXE and name == "build" else None,
                   network_options=options) as guest:
             guest.child.timeout = 1200
             if failure:
@@ -266,10 +323,13 @@ with ExitStack() as stack:
                 guest.command("cat /network-root-marker", "root-one" if root == "stable" else "root-two")
                 guest.command("cat /cfg/nix9/root", root_directories[root].rsplit("/", 1)[1])
                 guest.command("cat /usr/glenda/home-marker", name)
+                guest.command("test -d /usr/glenda/bin/rc && test -d /usr/glenda/bin/amd64")
                 guest.command("test ! -w /network-root-marker")
                 guest.command("echo -n >> /sys/lib/tls/webfs/revoked")
                 guest.command("echo `{ls -p /dev/sdF0}")
                 guest.command("test ! -e /dev/sdF0/fs && test ! -e /dev/sdF0/fscache")
+                if PXE and name == "build":
+                    guest.command("test ! -e /dev/sdF0/9fat")
                 guest.command(". /usr/local/pkg/nix9/activate; echo $nix9MachineId", name)
                 guest.command("cat /usr/local/nix/state/machine-id", name)
             yield guest
@@ -309,7 +369,7 @@ with ExitStack() as stack:
                 guest.command(". /usr/local/pkg/nix9/system")
                 guest.command("cat $nix9SystemRoot^-boot", systems[name]["first"])
                 until(guest, "netstat -n | grep 'Listen *17019 '")
-                files.command("rcpu -u glenda -h " + name + " -k 'dom=nix9.netroot' -c "
+                files.command("alarm 60 rcpu -u glenda -h " + name + " -k 'dom=nix9.netroot' -c "
                               + quote("echo `{cat /dev/sysname}; nix-store --verify-path " + systems[name]["first"]), name)
             untrusted_service("one")
             first, second = bundles["first"], bundles["second"]
@@ -341,23 +401,32 @@ with ExitStack() as stack:
             batch.command("cat /network-root-marker", "root-one")
             next_boot = boot_artifacts["build"]["second"]
             rejected(files, f"rc {next_boot}/select /n/site /tmp", "machine identity mismatch")
-            build.command("9fs 9fat; cp /n/9fat/plan9.ini /tmp/original.ini")
-            build.command("mkdir /tmp/wrong-medium; echo 'nix9machine=batch' > /tmp/wrong-medium/plan9.ini")
-            rejected(build, f"rc {next_boot}/select /root /tmp/wrong-medium", "boot medium belongs to another machine")
-            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            observer = files if PXE else build
+            boot_ini = "/lib/tftp/cfg/pxe/525400123462" if PXE else "/n/9fat/plan9.ini"
+            if not PXE:
+                build.command("9fs 9fat")
+            observer.command("cp " + boot_ini + " /tmp/original.ini")
+            if PXE:
+                files.command("echo 'nix9machine=batch' > " + boot_ini)
+                rejected(auth, f"nix9 select-root --from {second} build", "PXE configuration belongs to another machine")
+                files.command("cp /tmp/original.ini " + boot_ini)
+            else:
+                build.command("mkdir /tmp/wrong-medium; echo 'nix9machine=batch' > /tmp/wrong-medium/plan9.ini")
+                rejected(build, f"rc {next_boot}/select /root /tmp/wrong-medium", "boot medium belongs to another machine")
+            observer.command("cmp " + boot_ini + " /tmp/original.ini")
             batch.command("9fs 9fat; cp /n/9fat/plan9.ini /tmp/original.ini")
             batch.command("echo 'nix9machine=build' > /n/9fat/plan9.ini")
             rejected(auth, f"nix9 select-root --from {second} build batch", "boot medium belongs to another machine")
-            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            observer.command("cmp " + boot_ini + " /tmp/original.ini")
             batch.command("cp /tmp/original.ini /n/9fat/plan9.ini")
             batch.command("mkdir /n/9fat/nix9lock")
             rejected(auth, f"nix9 select-root --from {second} build batch", "boot medium is locked")
-            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            observer.command("cmp " + boot_ini + " /tmp/original.ini")
             batch.command("rm /n/9fat/nix9lock")
             root_path = "/n/site" + root_directories["next"]
             files.command(f"mv {root_path} {root_path}.saved")
             rejected(auth, f"nix9 select-root --from {second} build", "incomplete published root")
-            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            observer.command("cmp " + boot_ini + " /tmp/original.ini")
             files.command(f"mv {root_path}.saved {root_path}")
             # Run the expensive compiler imports after deployment preflight,
             # so transport and boot-medium failures surface early.
@@ -371,12 +440,12 @@ with ExitStack() as stack:
                 guest.command("/tmp/check-newns '. /usr/local/pkg/nix9/system; echo $nix9MachineId'", name)
             print("PASS: native C builds retain distinct CPU stores through newns", flush=True)
             auth.command(f"nix9 deploy --select --from {second} build")
-            build.command("cmp /n/9fat/plan9.ini /tmp/original.ini")
+            observer.command("cmp " + boot_ini + " /tmp/original.ini")
             build.command("nix-store --gc; nix-store --verify-path " + next_boot)
             auth.command(f"nix9 select-root --from {second} build")
-            build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
+            observer.command("cmp " + (boot_ini + ".bak" if PXE else "/n/9fat/plan9.bak") + " /tmp/original.ini")
             auth.command(f"nix9 select-root --from {second} build")
-            build.command("cmp /n/9fat/plan9.bak /tmp/original.ini")
+            observer.command("cmp " + (boot_ini + ".bak" if PXE else "/n/9fat/plan9.bak") + " /tmp/original.ini")
             build.command("cat /network-root-marker", "root-one")
             build.command("cat $nix9SystemRoot^-boot", systems["build"]["first"])
             status = auth.command(f"nix9 status --from {second} build batch")
@@ -431,14 +500,26 @@ with ExitStack() as stack:
         build.command("nix-store --verify-path " + project_output)
     files.command("cat /usr/local/nix/state/machine-id", "files")
     files.command("cat /n/site/machines/batch/usr/local/nix/state/machine-id", "batch")
-    files.child.sendline("fshalt")
-    files.child.expect("done halting")
-    files.crash()
+    if PXE:
+        files.command("echo halt >> /srv/cwfs-nix9.cmd")
+        until(files, "test ! -e /srv/cwfs-nix9.cmd")
+    else:
+        files.child.sendline("fshalt")
+        files.child.expect("done halting")
+        files.crash()
     with cpu("build", failure=r"mount:.*(?:/root|boot)"):
         pass
     print("PASS: bad credentials and missing or mismatched state fail before Nix starts", flush=True)
     destination = Path(output)
     destination.mkdir(parents=True, exist_ok=True)
+    if PXE:
+        requests = network.requested()
+        for required in ("9bootpxe", "/cfg/pxe/525400123462"):
+            if not any(request.lstrip("/") == required.lstrip("/") for request in requests):
+                raise RuntimeError("missing native TFTP boot request: " + required)
+        if not any(request.startswith("/versions/") and request.endswith("/9pc64") for request in requests):
+            raise RuntimeError("the CPU did not fetch a versioned kernel over TFTP")
+        (destination / "tftp-requests.json").write_text(json.dumps(requests, indent=2) + "\n")
     (destination / "results.json").write_text(json.dumps({"status": "passed", "machines": 4,
         "bootMediaBytes": sizes, "systems": systems, "nativeOutput": project_output, "roots": root_directories,
         "checks": ["authenticated-network-root", "no-local-os", "separate-state", "native-c-build",

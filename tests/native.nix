@@ -64,6 +64,26 @@
     env.NIX9_NETROOT_TEST_STATE = "netroot-state";
     args = "${nativeBootstrap} \"$out\"";
   };
+  native-netboot-tests = vmTest "native-netboot-tests" {
+    nativeBuildInputs = [
+      pkgs.netcat-openbsd
+      pkgs.mtools
+    ];
+    script = ./native_netboot.py;
+    files = [
+      ./native_netroot.py
+      ./netroot.nix
+      ./netroot-project.nix
+      ./machine-newns.c
+      ./boot_medium.py
+      ./ethernet.py
+      ./tftp.py
+      ./deployment-truncate.rc
+      ./deployment-store.rc
+    ];
+    env.NIX9_NETROOT_TEST_STATE = "netboot-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-graphical-tests = vmTest "native-graphical-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_graphical.py;
@@ -203,7 +223,10 @@
   };
   native-dhcp-tests = vmTest "native-dhcp-tests" {
     script = ./native_dhcp.py;
-    files = [ ./dhcpd.nix ];
+    files = [
+      ./dhcpd.nix
+      ./ethernet.py
+    ];
     env.NIX9_DHCP_TEST_STATE = "dhcp-state";
     args = ''
       ${nativeBootstrap} "$out"

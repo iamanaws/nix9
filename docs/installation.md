@@ -54,10 +54,12 @@ like `mkSystem`. Its main settings are:
 | --- | --- |
 | `name` | Installation name, default `installation`. |
 | `machines.NAME.ip` | Advertised IPv4 address. |
+| `machines.NAME.ether` | Optional primary MAC address in NDB, independent of the hostname. |
 | `machines.NAME.machineId` | Stable provisioned identity, default `NAME`. |
 | `machines.NAME.hostName` | Mutable hostname, default `NAME`. |
 | `machines.NAME.configuration` | Ordinary `mkSystem` module declaring packages, services and machine settings. |
 | `machines.NAME.boot` | Optional [network-root CPU](netroot.md) provider, root name and state directory. |
+| `machines.NAME.boot.pxe` | Optional [PXE provider, kernel and hardware settings](netboot.md). |
 | `roots.NAME` | [Versioned shared OS root](roots.md), with a pinned seed and optional text files. |
 | `machines.NAME.deployment` | CPU connection settings and boot-medium mount for [deployment](deployment.md). |
 | `defaults.auth`, `defaults.fs`, `defaults.cpu` | Discovery providers, referenced by inventory key. Each defaults to `null`. |
@@ -107,9 +109,10 @@ Use `fileSystem = "main"` or `"dump"` to mount a provider's enabled
 `services.cwfs` instead of a directory export. The inventory derives native TCP
 transport, the port and attach name. See the [storage example](storage.md).
 
-The inventory owns identities, hostnames, primary NDB addresses and these named
-mounts. Extend shared discovery through `ndb`; configure per-machine discovery,
-includes and DNS through `configuration.services.ndb`.
+The inventory owns identities, hostnames, primary NDB addresses, declared MAC
+addresses, PXE boot settings and these named mounts. Extend shared discovery
+through `ndb`; configure per-machine discovery, includes and DNS through
+`configuration.services.ndb`.
 Use `configuration.namespace.mounts` for shares outside the inventory.
 
 Evaluation checks every machine, even when requesting one system. It rejects

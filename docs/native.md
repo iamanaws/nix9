@@ -26,7 +26,8 @@ touch /tmp/nix9.lua
 lua /tmp/nix9.lua
 ```
 
-`buildEnv` combines packages and rejects command-name collisions. Its optional
+`buildEnv` combines packages, merges command subdirectories such as `bin/ip`, and
+rejects duplicate command paths. Its optional
 `files` maps existing absolute paths to text. Activation binds those files in the
 shell's namespace; switching environments reveals the originals.
 

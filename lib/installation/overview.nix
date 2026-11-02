@@ -57,6 +57,9 @@ in
         "  boot: ${machine.boot.provider} attach main, root ${machine.boot.root}"
         "  state: ${machine.boot.stateDirectory}"
       ]
+      ++ lib.optional (
+        machine.boot != null && machine.boot.pxe != null
+      ) "  PXE: ${machine.boot.pxe.provider}, ether=${machine.ether}"
       ++ lib.mapAttrsToList (
         job: settings: "  job ${job}: ${settings.schedule} as ${settings.user} on ${settings.target}"
       ) (lib.filterAttrs (_: settings: settings.scheduler == name) manifest.jobs)

@@ -8,6 +8,7 @@
   rootDirectory,
   rootKeyPattern,
   dial,
+  pxe ? null,
 }:
 let
   inherit (machine.boot) stateDirectory;
@@ -68,6 +69,9 @@ let
     rootAddress=${quote "tcp!${provider.ip}!564"}
     rootKeyPattern=${quote rootKeyPattern}
     rootDial=${dial}/bin/dial
+    pxeProvider=(${lib.optionalString (pxe != null) (quote pxe.provider.machineId)})
+    pxeDirectory=(${lib.optionalString (pxe != null) (quote pxe.directory)})
+    pxeEther=(${lib.optionalString (pxe != null) (quote pxe.ether)})
   '';
 in
 {
@@ -86,6 +90,23 @@ in
       cp ${./netroot-check-select.rc} $out/check-select.rc
       cp ${./copy-tree.rc} $out/copy-tree.rc
       chmod 755 $out/init $out/prepare $out/select
+      ${lib.optionalString (pxe != null) ''
+        mkdir $out/pxe
+        cp ${pxe.kernel} $out/pxe/9pc64
+        cp ${pxe.loader} $out/pxe/9bootpxe
+        pxeVersion=`{echo $out | sed 's,.*/,,'}
+        echo 'bootfile=/versions/'^$pxeVersion^'/9pc64' > $out/pxe/plan9.ini
+        echo -n ${quote settings} >> $out/pxe/plan9.ini
+        echo -n ${
+          quote (
+            lib.concatStrings (lib.mapAttrsToList (key: value: "${key}=${toString value}\n") pxe.settings)
+          )
+        } >> $out/pxe/plan9.ini
+        cp ${./pxe-publish.rc} $out/publish-pxe
+        cp ${./pxe-check.rc} $out/check-pxe.rc
+        cp ${./pxe-select.rc} $out/select-pxe
+        chmod 755 $out/publish-pxe $out/select-pxe
+      ''}
     '';
   };
 }
