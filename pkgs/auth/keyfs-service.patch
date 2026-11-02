@@ -1,0 +1,46 @@
+--- a/keyfs.c
++++ b/keyfs.c
+@@ -138,7 +138,7 @@
+ static void
+ usage(void)
+ {
+-	fprint(2, "usage: %s [-p] [-r] [-m mtpt] [-w warn] [keyfile]\n", argv0);
++	fprint(2, "usage: %s [-p] [-r] [-s service] [-m mtpt] [-w warn] [keyfile]\n", argv0);
+ 	exits("usage");
+ }
+ 
+@@ -151,12 +151,15 @@
+ void
+ main(int argc, char *argv[])
+ {
+-	char *mntpt;
+-	int p[2];
++	char *mntpt, *srvname = nil, *srvpath;
++	int p[2], srvfd;
+ 
+ 	fmtinstall('W', weirdfmt);
+ 	mntpt = "/mnt/keys";
+ 	ARGBEGIN{
++	case 's':
++		srvname = EARGF(usage());
++		break;
+ 	case 'm':
+ 		mntpt = EARGF(usage());
+ 		break;
+@@ -201,6 +204,16 @@
+ 			getpass(&authkey, nil, 0, 0);
+ 			readusers();
+ 		}
++	}
++
++	if(srvname != nil){
++		if(strchr(srvname, '/') != nil || *srvname == 0)
++			error("invalid service name");
++		srvpath = smprint("#s/%s", srvname);
++		srvfd = create(srvpath, OWRITE|ORCLOSE, 0600);
++		if(srvfd < 0 || fprint(srvfd, "%d", p[0]) < 0)
++			error("cannot post private keyfs service: %r");
++		free(srvpath);
+ 	}
+ 
+ 	switch(rfork(RFPROC|RFNAMEG|RFNOTEG|RFNOWAIT|RFENVG|RFFDG)){

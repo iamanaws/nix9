@@ -37,6 +37,7 @@ let
     "examples/workstation" = ../../examples/workstation;
     "examples/netroot" = ../../examples/netroot;
     "examples/netboot" = ../../examples/netboot;
+    "examples/users" = ../../examples/users;
     "cache-packages.nix" = ../cache-packages.nix;
     "go-bootstrap.sha256" = runCommand "go-bootstrap.sha256" { } ''
       sha256sum ${goBootstrap}/go-bootstrap.tar.gz | cut -d ' ' -f1 > "$out"

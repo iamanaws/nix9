@@ -15,6 +15,7 @@ assert builtins.isInt dumpHour && dumpHour >= 0 && dumpHour <= 23;
 mkDerivation {
   name = "cwfs64x";
   inherit src;
+  patches = [ ./users.patch ];
   buildInputs = [
     libauth
     libauthsrv
@@ -28,9 +29,10 @@ mkDerivation {
     mv main.new main.c
     sed 's/conf.nodump = 0;/conf.nodump = ${if autoDump then "0" else "1"};/' cwfs64x/conf.c > cwfs64x/conf.new
     mv cwfs64x/conf.new cwfs64x/conf.c
+    cp ${./users.c} users.c
     cd cwfs64x
     objects=()
-    for(file in 9p2 auth chk con config console cw data dentry fworm iobuf juke main malloc mworm net proc scsi sub time uidgid wren srv) {
+    for(file in 9p2 auth chk con config console cw data dentry fworm iobuf juke main malloc mworm net proc scsi sub time uidgid users wren srv) {
       6c -I.. -o $file.6 ../$file.c
       objects=($objects $file.6)
     }
@@ -38,9 +40,11 @@ mkDerivation {
     6l -o cwfs64x $objects conf.6
     6c -I.. -o check.6 ${./check.c}
     6l -o cwfs-check check.6
+    6c -o users-check.6 ${./users-check.c}
+    6l -o cwfs-users users-check.6
   '';
   installPhase = ''
     mkdir -p $out/bin
-    cp cwfs64x cwfs-check $out/bin/
+    cp cwfs64x cwfs-check cwfs-users $out/bin/
   '';
 }

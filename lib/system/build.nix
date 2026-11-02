@@ -340,6 +340,8 @@ else
             ''
               ${write "services/cwfs/config" storage.settings}
               ${write "services/cwfs/devices" storage.map}
+              ${write "services/cwfs/users" storage.userTable}
+              ${write "services/cwfs/directories" storage.directoryTable}
               echo 'rfork e' > $out/services/cwfs/check
               echo 'cwfsSystem='$out >> $out/services/cwfs/check
               echo -n ${quote (builtins.readFile ./cwfs-check.rc)} >> $out/services/cwfs/check

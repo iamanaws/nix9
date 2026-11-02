@@ -53,6 +53,7 @@ like `mkSystem`. Its main settings are:
 | Setting | Meaning |
 | --- | --- |
 | `name` | Installation name, default `installation`. |
+| `users` | Shared [native user and group entries](users.md) for enabled CWFS providers. |
 | `machines.NAME.ip` | Advertised IPv4 address. |
 | `machines.NAME.ether` | Optional primary MAC address in NDB, independent of the hostname. |
 | `machines.NAME.machineId` | Stable provisioned identity, default `NAME`. |

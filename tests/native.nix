@@ -19,6 +19,19 @@
   vmTest,
 }:
 {
+  native-user-tests = vmTest "native-user-tests" {
+    nativeBuildInputs = [
+      pkgs.netcat-openbsd
+      pkgs.mtools
+    ];
+    script = ./native_users.py;
+    files = [
+      ./accounts.nix
+      ./boot_medium.py
+    ];
+    env.NIX9_USERS_TEST_STATE = "user-state";
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-health-tests = vmTest "native-health-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];
     script = ./native_storage.py;

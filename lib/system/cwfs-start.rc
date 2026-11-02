@@ -16,7 +16,10 @@
   if(~ $#cwfsKey 1)
     cat $cwfsKey > /mnt/factotum/ctl || fail 'cannot load server key'
   fsmempercent=$cwfsCache
-  $cwfsPackage/bin/cwfs64x -n cwfs-nix9 -f $cwfsDevice -m $cwfsSystem/services/cwfs/devices \
+  userArguments=()
+  if(~ $cwfsManagedUsers 1)
+    userArguments=(-U $cwfsSystem/services/cwfs/users -D $cwfsSystem/services/cwfs/directories)
+  $cwfsPackage/bin/cwfs64x $userArguments -n cwfs-nix9 -f $cwfsDevice -m $cwfsSystem/services/cwfs/devices \
     -a tcp!*!$cwfsPort < /dev/null >> /sys/log/cwfs >[2=1] || fail 'server launch failed'
   attempts=0
   while(! test -r /srv/cwfs-nix9) {

@@ -14,6 +14,11 @@ let
 in
 {
   options = {
+    users = mkOption {
+      type = import ../system/modules/users.nix { inherit lib; };
+      default = { };
+      description = "Shared native users and groups, merged into each enabled CWFS server's public table.";
+    };
     name = mkOption {
       type = label;
       default = "installation";

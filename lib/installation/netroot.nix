@@ -9,6 +9,7 @@
   rootKeyPattern,
   dial,
   pxe ? null,
+  sharedHomes ? false,
 }:
 let
   inherit (machine.boot) stateDirectory;
@@ -33,6 +34,7 @@ let
   '';
   namespace = ''
     bind -c ${state}/usr /usr
+    ${lib.optionalString sharedHomes "bind -a /root/usr /usr"}
     bind -bc ${state}/cfg/nix9 /cfg/nix9
     bind -c ${state}/sys/lib/tls/webfs /sys/lib/tls/webfs
     bind -bc ${state}/rc/bin /rc/bin

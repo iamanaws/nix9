@@ -21,6 +21,7 @@ let
     machines
     jobs
     roots
+    users
     ;
   makeJob = import ../system/job.nix { inherit mkDerivation buildEnv; };
   tasks = lib.mapAttrs (name: job: makeJob (job // { inherit name; })) jobs;
@@ -50,6 +51,7 @@ let
       networking = configs.${machineName}.networking;
       rootKeyPattern = "dom=${defaults.authdom}";
       dial = packages.dial;
+      sharedHomes = builtins.any (user: user.home != null) (builtins.attrValues users);
       pxe =
         if machinePxe == null then
           null
@@ -177,6 +179,7 @@ let
           enable = true;
           jobs = scheduledJobs machineName;
         };
+        services.cwfs.users = lib.mkIf configs.${machineName}.services.cwfs.enable users;
         packages = lib.mapAttrsToList (name: _: tasks.${name}) (targetJobs machineName);
         directories = lib.mkMerge (
           lib.mapAttrsToList (_: job: {
@@ -187,6 +190,14 @@ let
           }) (targetJobs machineName)
         );
         assertions = [
+          {
+            assertion =
+              !configs.${machineName}.services.cwfs.enable
+              || builtins.all (name: configs.${machineName}.services.cwfs.users.${name} == users.${name}) (
+                builtins.attrNames users
+              );
+            message = "installation inventory owns shared user entries for ${machineName}";
+          }
           {
             assertion = builtins.all (
               provider:

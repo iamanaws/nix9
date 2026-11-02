@@ -33,7 +33,10 @@ else if !cpu.enable && (cpu.allowedUsers != [ ] || cpu.keyFile != null || cpu.ke
   error "CPU settings require services.cpu.enable"
 else if !builtins.all userName.check (builtins.attrNames auth.speaksFor) then
   error "services.auth.speaksFor contains an invalid identity"
-else if !auth.enable && (auth.keyDatabase != "/adm/keys" || auth.speaksFor != { }) then
+else if
+  !auth.enable
+  && (auth.keyDatabase != "/adm/keys" || auth.speaksFor != { } || auth.requiredUsers != [ ])
+then
   error "authentication settings require services.auth.enable"
 else if !auth.enable && !needsFactotum then
   null
@@ -51,6 +54,7 @@ else
       nix9AccessKeys=(${lib.concatMapStringsSep " " quote keys})
       nix9ExportRoots=(${lib.concatMapStringsSep " " (item: quote item.path) exportList})
       nix9AuthPackage=${authPackage}
+      nix9AuthUsers=(${lib.concatMapStringsSep " " quote (lib.unique auth.requiredUsers)})
     '';
     policy = lib.concatStringsSep "" (
       lib.mapAttrsToList (

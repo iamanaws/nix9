@@ -8,6 +8,9 @@ fn fail {
 for(device in $cwfsDevices)
   test -f $device && test -r $device && test -w $device || fail 'data device is unavailable:' $device
 $cwfsPackage/bin/cwfs-check $cwfsDevice || fail 'invalid provisioned filesystem'
+if(~ $cwfsManagedUsers 1 && test -e /srv/cwfs-nix9.users)
+  $cwfsPackage/bin/cwfs-users /srv/cwfs-nix9.users $cwfsSystem/services/cwfs/users $cwfsSystem/services/cwfs/directories ||
+    fail 'invalid account or directory changes'
 test -w /mnt/factotum/ctl || fail 'boot factotum is unavailable'
 if(~ $#cwfsKey 1) {
   test -f $cwfsKey && test -r $cwfsKey || fail 'runtime key file is unavailable'

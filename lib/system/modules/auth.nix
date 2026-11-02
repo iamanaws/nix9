@@ -4,6 +4,11 @@ let
 in
 {
   options.auth = {
+    requiredUsers = lib.mkOption {
+      type = lib.types.listOf userName;
+      default = [ ];
+      description = "Provisioned identities that must have enabled, unexpired dp9ik keys. Keys are checked without changing the authentication database.";
+    };
     enable = lib.mkEnableOption "the native authentication ticket service";
     keyDatabase = lib.mkOption {
       type = runtimeFile;

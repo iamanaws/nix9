@@ -2,8 +2,9 @@
 
 `services.cwfs` starts a separate CWFS64x data filesystem on a provisioned CPU
 server. It manages startup, authentication keys and daily dump policy. Native
-tools provision devices and filesystem accounts. Selection never formats,
-reams or recovers a disk.
+tools initialize devices and the filesystem's account table. Selection never formats,
+reams or recovers a disk. Optional [user and directory declarations](users.md)
+manage the provisioned filesystem's public identity table and metadata at boot.
 
 CWFS provides writable `main` and read-only `dump` trees. The module uses the
 pinned 9front implementation. GEFS was considered for its retention controls,

@@ -1,8 +1,8 @@
 # CPU access and authentication
 
 These modules configure native services on an existing CPU server. Provision
-`service=cpu`, CPU init, filesystem accounts and NVRAM through the native tools
-first. See [boot integration](configuration.md#boot-integration).
+`service=cpu`, CPU init and NVRAM through the native tools first. Login also
+requires [file-server identities](users.md). See [boot integration](configuration.md#boot-integration).
 
 ## CPU login
 
@@ -56,8 +56,11 @@ part of native startup.
 This starts packaged `keyfs` and serves authentication tickets on TCP 567.
 `keyDatabase` defaults to `/adm/keys` and must already exist. It uses the machine's
 provisioned NVRAM key for decryption. Owner and group access are permitted; access
-for others is rejected. Manage accounts and keys with native tools. They are
-mutable data and are not restored by configuration rollback.
+for others is rejected. Manage accounts and keys with native tools, using the
+owner-only `/srv/nix9-keys` service to mount the running database. They are
+mutable data and are not restored by configuration rollback. Optional
+`requiredUsers` checks that named identities have enabled, unexpired dp9ik keys.
+See [users and groups](users.md#authentication).
 
 `speaksFor` maps authentication identities to the users they may represent. The
 example lets `terminal1` obtain tickets for `glenda`. The default grants no

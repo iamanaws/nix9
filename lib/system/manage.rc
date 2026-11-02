@@ -230,6 +230,7 @@ previousName=`{cat /dev/sysname}
 changing=1
 echo -n `{cat $target/hostName} > /dev/sysname
 nix-profile $root set $target
+chmod 644 $root || fail 'cannot publish the system selection'
 changing=0
 eventSystem=$target
 event=$action

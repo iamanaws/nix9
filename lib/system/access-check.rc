@@ -1,4 +1,5 @@
 #!/bin/rc -e
+rfork ne
 path=(/$cputype/bin /rc/bin)
 . $nix9AccessSystem/services/access-config
 fn fail {
@@ -12,6 +13,10 @@ fn privateFile {
 if(~ $nix9AuthEnabled 1) {
   privateFile $nix9AuthDatabase '^-[-l]r[-w]-[-r][-w]---- '
   test -f /lib/ndb/auth || fail 'native authentication policy mount point is missing'
+  if(! ~ $#nix9AuthUsers 0) {
+    $nix9AuthPackage/bin/auth/keyfs -r -m /mnt/keys $nix9AuthDatabase </dev/null || fail 'cannot inspect authentication database'
+    $nix9AuthPackage/bin/auth/checkuser /mnt/keys $nix9AuthUsers || fail 'required authentication identities are not provisioned'
+  }
 }
 if(~ $nix9FactotumRequired 1) {
   test -r /mnt/factotum/ctl && test -w /mnt/factotum/ctl || fail 'boot factotum is unavailable'

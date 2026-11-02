@@ -1,6 +1,7 @@
 . /usr/local/pkg/nix9/activate && {
   nix9SelectedSystem=`{cat $nix9SystemRoot}
-  nix-store --realise $nix9SelectedSystem --add-root $nix9SystemRoot^-boot > /dev/null && {
+  nix-store --realise $nix9SelectedSystem --add-root $nix9SystemRoot^-boot > /dev/null &&
+  chmod 644 $nix9SystemRoot^-boot && {
     sysname=`{cat $nix9SelectedSystem/hostName}
     echo -n $sysname > /dev/sysname && {
       if(test -f $nix9SelectedSystem/ndb/boot.rc) {

@@ -21,7 +21,9 @@ for(key in $nix9AccessKeys) {
   } < $key || exit 'cannot load service keys'
 }
 if(~ $nix9AuthEnabled 1) {
-  $nix9AuthPackage/bin/auth/keyfs -m /mnt/keys $nix9AuthDatabase </dev/null || exit 'cannot mount authentication database'
+  $nix9AuthPackage/bin/auth/keyfs -s nix9-keys -m /mnt/keys $nix9AuthDatabase </dev/null || exit 'cannot mount authentication database'
+  if(! ~ $#nix9AuthUsers 0)
+    $nix9AuthPackage/bin/auth/checkuser /mnt/keys $nix9AuthUsers || exit 'required authentication identities are not provisioned'
   bind $nix9ListenStartSystem/services/auth-policy /lib/ndb/auth || exit 'cannot bind authentication policy'
   trust=($nix9ListenStartSystem/services/auth)
 }

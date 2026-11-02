@@ -20,6 +20,7 @@ let
         {
           installation-tests = import ./installation-host.nix { inherit pkgs nativePackageSet testSupport; };
           directory-tests = import ./directory-host.nix { inherit pkgs nativePackageSet testSupport; };
+          user-tests = import ./users-host.nix { inherit pkgs nativePackageSet testSupport; };
           job-tests = import ./job-host.nix { inherit pkgs nativePackageSet testSupport; };
           binding-tests = import ./binding-host.nix { inherit pkgs nativePackageSet testSupport; };
           network-tests = import ./network-host.nix { inherit pkgs nativePackageSet testSupport; };
@@ -53,6 +54,7 @@ in
       '';
   checks.installation = tests.installation-tests;
   checks.directories = tests.directory-tests;
+  checks.users = tests.user-tests;
   checks.jobs = tests.job-tests;
   checks.bindings = tests.binding-tests;
   checks.networking = tests.network-tests;

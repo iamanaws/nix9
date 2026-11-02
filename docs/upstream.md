@@ -14,5 +14,7 @@ Destinations without a linked PR are proposals.
 | [goken9cc](../pkgs/goken9cc) | Plan 9 compiler ABI and archive fixes. | The pin passes ABI/archive tests without patches. |
 | [webfs](../pkgs/webfs) | Host-bound pins, live revocation, connection origin separation and HTTPS downgrade rejection for 9front. | Native and cross transport tests pass with an equivalent upstream trust policy. |
 | [Native archives](../pkgs/disk-archive/errors.patch) | Failure status, truncated reads, checked writes and path bounds for 9front's mkfs/mkext. | The pinned tools reject incomplete archives and report skipped files and extraction failures. |
+| [CWFS accounts](../pkgs/cwfs/users.patch), [importer](../pkgs/cwfs/users.c) | Private console checks and boot-time reconciliation of native identities and directory metadata. | The pinned CWFS provides equivalent checks and imports with stable IDs. |
+| [Keyfs service](../pkgs/auth/keyfs-service.patch) | Optional owner-only service for administering the running authentication database. | The pinned keyfs can post an equivalent private service. |
 
 cc9 uses a custom target ABI rather than a Nixpkgs cross stdenv.

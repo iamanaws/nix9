@@ -1,9 +1,19 @@
-{ lib, ... }:
+{ lib, config, ... }:
 let
   inherit (import ./types.nix { inherit lib; }) runtimeFile;
 in
 {
   options.cwfs = {
+    users = lib.mkOption {
+      type = import ./users.nix { inherit lib; };
+      default = { };
+      description = "Native /adm/users entries, each defining both a user and a group. Undeclared entries are preserved.";
+    };
+    directories = lib.mkOption {
+      type = (import ./directories.nix { inherit lib; }).options.directories.type;
+      default = { };
+      description = "Persistent directories inside the CWFS main tree, prepared through its administrative console at boot.";
+    };
     enable = lib.mkEnableOption "a separate cwfs64x data filesystem on a CPU server";
     configDevice = lib.mkOption {
       type = lib.types.nullOr runtimeFile;
@@ -41,4 +51,16 @@ in
       description = "Daily dump hour in the server's native timezone.";
     };
   };
+  config.cwfs.directories = lib.mkMerge (
+    lib.mapAttrsToList (
+      name: user:
+      lib.mkIf (user.home != null) {
+        "${user.home}" = {
+          mode = lib.mkDefault user.homeMode;
+          owner = lib.mkDefault name;
+          group = lib.mkDefault name;
+        };
+      }
+    ) config.cwfs.users
+  );
 }

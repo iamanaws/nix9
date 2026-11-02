@@ -39,6 +39,8 @@ files, Nix configuration mount points, TLS revocations, native service directory
 logs and temporary directory. Only that CPU
 opens its Nix database.
 Native `newns` and remote CPU login recreate these bindings.
+Installations with declared [shared homes](users.md) also append the provider's
+`/usr` after the machine-specific tree.
 
 ## Prepare the file server
 

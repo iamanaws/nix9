@@ -1,0 +1,101 @@
+--- a/9p2.c
++++ b/9p2.c
+@@ -1486,7 +1486,7 @@
+ 	return error;
+ }
+ 
+-static int
++int
+ fs_wstat(Chan* chan, Fcall* f, Fcall*, char* strs)
+ {
+ 	Iobuf *p, *p1;
+--- a/main.c
++++ b/main.c
+@@ -174,6 +174,8 @@
+ 	snprint(buf, sizeof(buf), "/srv/%s.cmd", name);
+ 	srvfd(buf, 0660, p[0]);
++	snprint(buf, sizeof(buf), "/srv/%s.users", name);
++	srvfd(buf, 0600, p[0]);
+ 	close(p[0]);
+ 
+ 	/* use it as stdin */
+ 	dup(p[1], 0);
+@@ -250,7 +250,7 @@
+ main(int argc, char **argv)
+ {
+ 	int i, nets = 0;
+-	char *ann, *sname = nil;
++	char *ann, *sname = nil, *users = nil, *directories = nil, *error;
+ 	
+ 	rfork(RFNOTEG);
+ 	formatinit();
+@@ -290,6 +290,12 @@
+ 	case 'f':			/* device / partition / file  */
+ 		conf.confdev = EARGF(usage());
+ 		break;
++	case 'U':
++		users = EARGF(usage());
++		break;
++	case 'D':
++		directories = EARGF(usage());
++		break;
+ 	case 'm':			/* name device-map file */
+ 		conf.devmap = EARGF(usage());
+ 		break;
+@@ -339,6 +345,13 @@
+ 
+ 	sysinit();
+ 	srvinit();
++	consinit();
++	if(users != nil || directories != nil){
++		if(users == nil || directories == nil)
++			sysfatal("-U and -D must be supplied together");
++		if((error = nix9users(users, directories, 1)) != nil)
++			sysfatal("CWFS accounts: %s", error);
++	}
+ 
+ 	/*
+ 	 * post filedescriptors to /srv
+--- a/con.c
++++ b/con.c
+@@ -10,7 +10,7 @@
+ static	void	tzinit(char*);
+ 
+ void
+-consserve(void)
++consinit(void)
+ {
+ 	int i;
+ 
+@@ -27,6 +27,11 @@
+ 			break;
+ 		}
+ 
++}
++
++void
++consserve(void)
++{
+ 	/* switch console output to the cmd pipe */
+ 	dup(0, 1);
+ 
+@@ -790,6 +795,7 @@
+ 	cmd_install("fstat", "path -- print info on a file/dir", cmd_fstat);
+ 	cmd_install("halt", "-- return to boot rom", cmd_halt);
+ 	cmd_install("help", "", cmd_help);
++	cmd_install("nix9-users", "users-file directories-file request-id -- check account declarations", cmd_nix9users);
+ 	cmd_install("newuser", "username -- add user to /adm/users", cmd_newuser);
+ 	cmd_install("profile", "[01] -- fs profile", cmd_prof);
+ 	cmd_install("remove", "[file ...] -- remove files/dirs", cmd_remove);
+--- a/portfns.h
++++ b/portfns.h
+@@ -22,6 +22,9 @@
+ int	checkname(char*);
+ int	checktag(Iobuf*, int, Off);
+ void	consserve(void);
++void	consinit(void);
++char*	nix9users(char*, char*, int);
++void	cmd_nix9users(int, char*[]);
+ int	con_attach(int, char*, char*);
+ int	con_clone(int, int);
+ int	con_create(int, char*, int, int, long, int);
