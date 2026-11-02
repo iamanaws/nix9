@@ -100,9 +100,38 @@ release, run `nix-profile $roots/nix9 rollback` and source the activation file.
 Releases, environments and [system configurations](configuration.md) have
 separate profiles.
 
+## Personal stores
+
+Each writable store has one native owner. Other users can run the packages in
+the selected system without opening its store database. For their own Nix builds
+on managed CPUs, select a separate store after system activation:
+
+```sh
+. /usr/local/pkg/nix9/system
+nixStore=$home/nix/$nix9MachineId
+NIX_REMOTE='local?store='^$nixStore^'/store&state='^$nixStore^'/state&log='^$nixStore^'/log'
+```
+
+Add these settings after system activation in `$home/lib/profile` for later
+logins. `nix9MachineId` must identify the current machine, and user builds need
+a writable `/tmp`, as declared in the shared-user example.
+Keep a separate store for each CPU even when the home is shared: native store
+locks do not coordinate different kernels.
+
+Build with `--option substitute false`. Personal stores use different absolute
+output paths, so the standard bootstrap cache cannot supply their packages and
+these stores cannot build for each other through the remote-builder interface.
+Run Nix on the chosen CPU with `rcpu`; use `--builders ''` if that machine has
+remote builders configured.
+Output roots and environment generations live under `$nixStore/state/gcroots`;
+the ordinary [environment commands](#generations-and-updates) apply there.
+See the [shared-user example](users.md#work-on-either-cpu).
+
+Refreshing `/usr/local/pkg/nix9/system` selects the machine store again.
+
 ## Store maintenance
 
-The store is `/usr/local/nix/store`. Roots are files containing store paths,
+The machine store is `/usr/local/nix/store`. Roots are files containing store paths,
 rather than symlinks. `nix-build` defaults to
 `/usr/local/nix/state/gcroots/result`; `--no-out-link` creates no permanent root.
 Running programs outside a Nix build need an explicit root.
@@ -123,4 +152,5 @@ After an unclean shutdown, reboot, activate Nix, and run `nix-store --recover`
 before any store client opens the store. Recovery removes stale lock markers
 and lets SQLite recover its journal. Then rebuild or repair interrupted outputs
 and verify them. Interrupted replacements need another repair after recovery.
+Restore a damaged SQLite database from backup.
 See [downloads and caches](transport.md#binary-caches) for cache configuration.

@@ -5,6 +5,7 @@ in
 assert builtins.isString fixtures.shared.drvPath;
 assert builtins.isString fixtures.membership.drvPath;
 assert builtins.isString fixtures.initial.build.drvPath;
+assert builtins.isString fixtures.distributed.build.drvPath;
 assert builtins.all (value: value) (builtins.attrValues rejected);
 {
   status = "passed";

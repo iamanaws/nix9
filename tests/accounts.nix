@@ -11,6 +11,7 @@ let
           machines.auth.configuration.services.ndb.dns.enable = false;
           machines.files.configuration.services.ndb.dns.enable = false;
           machines.build.configuration.services.ndb.dns.enable = false;
+          machines.batch.configuration.services.ndb.dns.enable = false;
           machines.files.configuration.services.cpu = {
             enable = true;
             allowedUsers = [ "glenda" ];
@@ -50,6 +51,8 @@ in
       };
     }
   );
+  updatedCpu =
+    (make { machines.build.configuration.files."user-workflow" = "updated\n"; }).systems.build;
   conflicting = (make ({ lib, ... }: { users.alice.id = lib.mkForce 1014; })).systems.files;
   occupied = (make { users.eve.id = 1; }).systems.files;
   unknownMember = (make { users.project.members = [ "missing" ]; }).systems.files;

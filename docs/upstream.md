@@ -4,7 +4,7 @@ Destinations without a linked PR are proposals.
 
 | Location | Purpose and owner | Remove when |
 | --- | --- | --- |
-| [cc9](../pkgs/cc9) | Compiler settings and libc fixes belong in cc9; reusable packaging belongs in Nixpkgs. | The pinned runtime passes native regressions without patches. |
+| [cc9](../pkgs/cc9) | Compiler settings and libc fixes, including concurrent directory creation, belong in cc9; reusable packaging belongs in Nixpkgs. | The pinned runtime passes native regressions without patches. |
 | [cc9-libs](../pkgs/cc9-libs) | Boost URL fix; SQLite native locking for SQLite/cc9 review. A kernel service serializes lock creation around an hjfs race. | Updated sources pass the URL, signing, compression and SQLite checks. |
 | [Nix fixes](../pkgs/nix/patches) | Brotli truncation and store fixes merged in [#16575](https://github.com/NixOS/nix/pull/16575) and [#16578](https://github.com/NixOS/nix/pull/16578). Repair fallback reporting is a candidate. | The pinned Nix includes the fixes and passes regressions. |
 | [cc9 compatibility](../pkgs/nix/patches/cc9-compat.patch) | Environment enumeration, file mapping and coroutine workarounds belong in cc9. | The runtime passes process, NAR/import and cancellation checks without them. Guard pages require runtime support. |

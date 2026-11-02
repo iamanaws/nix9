@@ -29,8 +29,10 @@ Declare shared entries in `mkInstallation`:
 The inventory shares these entries with every enabled CWFS server. A standalone
 `mkSystem` uses the same table under `services.cwfs.users`. Per-server entries
 can extend it. CPU login and export policies still declare their allowed users.
-See the [three-machine example](../examples/users/configuration.nix), which
-provides private homes and a shared project on a network-root CPU.
+See the [four-machine example](../examples/users/configuration.nix): an
+authentication server, a file server and two network-root CPUs, `build` and
+`batch`. Both CPUs expose the same private homes and `/n/projects`, and make
+the declared packages available to Alice and Bob.
 
 ## File-server identities
 
@@ -73,10 +75,42 @@ or authentication accounts. Passwords, NVRAM and private runtime files stay
 outside Nix expressions and the store. See [authentication](access.md).
 
 Native root mounts also need delegation for their NVRAM identity. The example
-uses `glenda` for root boot, so its authentication policy lets both `glenda` and
-the CPU service identity `build` represent Alice and Bob. A CPU service's
-`keyPattern` selects its login key; it does not select the key for native root
-mounts.
+uses `glenda` for root boot, so its authentication policy lets `glenda` and
+the CPU service identities `build` and `batch` represent Alice and Bob. A CPU
+service's `keyPattern` selects its login key; it does not select the key for native
+root mounts.
+
+## Work on either CPU
+
+With Alice's client key available to factotum, use ordinary CPU connections:
+
+```sh
+rcpu -u alice -h build
+```
+
+Her files under `/usr/alice` also appear when she logs into `batch`. The project
+directory belongs to Alice and the `project` group. As Alice, prepare the shared
+example once:
+
+```sh
+mkdir -p /n/projects/hello
+cp $nix9/packages/examples/workstation/project/* /n/projects/hello/
+chmod 770 /n/projects/hello
+chmod 660 /n/projects/hello/*
+```
+
+Either user can edit these sources. To build with Nix, select a
+[personal store](native.md#personal-stores), then run:
+
+```sh
+nix-build /n/projects/hello/environment.nix --option substitute false
+nix-profile $nixStore/state/gcroots/environment set `{cat $nixStore/state/gcroots/result}
+. $nix9/packages/profile $nixStore/state/gcroots/environment
+hello
+```
+
+Each user's package selection belongs to that CPU's store. Updating one CPU
+leaves the other CPU's selection and the shared homes in place.
 
 ## Changes and recovery
 

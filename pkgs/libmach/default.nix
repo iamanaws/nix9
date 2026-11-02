@@ -13,6 +13,8 @@ mkDerivation {
       sed 's|"[^"]*/([^/]+/include/ureg.h)"|"${src}/\1"|' $file > converted.c
       mv converted.c $file
     }
+    sed 's|: /sys/src/cmd/|: ${src}/sys/src/cmd/|' mkfile > converted.mk
+    mv converted.mk mkfile
   '';
   makeFlags = [
     "LIB=libmach.a"

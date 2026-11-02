@@ -17,6 +17,23 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+extern "C" long __real_n9_create(const char *, int, unsigned long);
+extern "C" long n9_close(int);
+static const char *mkdirRacePath;
+
+extern "C" long __wrap_n9_create(const char *path, int mode, unsigned long permissions) {
+    if (mkdirRacePath && std::strcmp(path, mkdirRacePath) == 0) {
+        mkdirRacePath = nullptr;
+        // Model another client creating this name between mkdir's stat and
+        // create. A read-only parent reproduces CWFS's failed-create error.
+        long fd = __real_n9_create(path, 0, 0x80000000UL | 0700);
+        if (fd < 0) return fd;
+        n9_close(fd);
+        return __real_n9_create("mkdir-denied/child", mode, permissions);
+    }
+    return __real_n9_create(path, mode, permissions);
+}
+
 static void check(bool ok, const char *message) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s (errno %d)\n", message, errno); std::exit(1); }
 }
@@ -218,6 +235,25 @@ static void copies() {
     check(close(directory) == 0, "close directory");
 }
 
+static void directories() {
+    check(mkdir("mkdir-denied", 0500) == 0, "directory permission fixture");
+    mkdirRacePath = "raced";
+    check(mkdir("raced", 0755) == -1 && errno == EEXIST, "mkdir concurrent creation");
+    check(!mkdirRacePath && modeOf("raced") == 0700, "preserve concurrently created directory");
+    check(rmdir("raced") == 0, "remove raced directory");
+
+    mkdirRacePath = "parent";
+    std::error_code error;
+    check(std::filesystem::create_directories("parent/child", error) && !error,
+          "create_directories concurrent parent creation");
+    check(!mkdirRacePath && modeOf("parent") == 0700, "preserve concurrently created parent");
+    check(rmdir("parent/child") == 0 && rmdir("parent") == 0, "remove directory tree");
+    check(mkdir("mkdir-denied/child", 0755) == -1 && errno == EACCES,
+          "preserve genuine directory permission denial");
+    check(chmod("mkdir-denied", 0700) == 0 && rmdir("mkdir-denied") == 0,
+          "remove directory permission fixture");
+}
+
 static volatile sig_atomic_t noted;
 static void onNote(int) { noted = 1; }
 
@@ -262,7 +298,7 @@ int main(int argc, char **argv) {
     const char *selected = argc == 2 ? argv[1] : "all";
     bool matched = false;
     for (auto [name, test] : {std::pair{"allocation", allocations}, {"threads", threadAllocations}, {"environment", environment},
-                            {"path", execPath}, {"copy", copies}, {"poll", polling},
+                            {"path", execPath}, {"copy", copies}, {"mkdir", directories}, {"poll", polling},
                             {"math", math}, {"exceptions", exceptions}}) {
         if (std::strcmp(selected, "all") && std::strcmp(selected, name)) continue;
         matched = true;
@@ -279,7 +315,7 @@ int main(int argc, char **argv) {
         waitFor(child, 42);
         std::puts("PASS: exit");
     }
-    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, poll, math, exceptions, exit, all)");
+    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, mkdir, poll, math, exceptions, exit, all)");
     check(chdir("/tmp") == 0 && rmdir(scratch.c_str()) == 0, "remove test directory");
     std::puts("cc9 runtime tests PASS");
 }

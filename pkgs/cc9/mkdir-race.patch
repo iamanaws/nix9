@@ -1,0 +1,18 @@
+--- a/fs.c
++++ b/fs.c
+@@ -295,7 +295,14 @@
+ 	struct stat st;
+ 	if(stat(path, &st) == 0){ errno = EEXIST; return -1; }
+ 	long fd = n9_create(path, 0/*OREAD*/, DMDIR|(m&0777));
+-	if(fd < 0){ errno = cc9_errno_from_errstr(); return -1; }
++	if(fd < 0){
++		int error = cc9_errno_from_errstr();
++		/* Another client may have created it after the initial stat.
++		 * CWFS reports a failed directory create as permission denied. */
++		if(stat(path, &st) == 0) error = EEXIST;
++		errno = error;
++		return -1;
++	}
+ 	n9_close((int)fd);
+ 	return 0;
+ }

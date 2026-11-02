@@ -1,3 +1,25 @@
+let
+  cpu = { config, pkgs, ... }: {
+    packages = [ pkgs.fortune ];
+    directories."/tmp".mode = "0777";
+    services.cpu = {
+      enable = true;
+      allowedUsers = [
+        "alice"
+        "bob"
+      ];
+      keyFile = "/adm/cpu.keys";
+      keyPattern = "dom=nix9.netroot user=${config.hostName}";
+    };
+    namespace.binds = [
+      {
+        source = "/root/projects";
+        target = "/n/projects";
+        create = true;
+      }
+    ];
+  };
+in
 {
   imports = [ ../netroot/configuration.nix ];
   users = {
@@ -26,8 +48,14 @@
         "glenda"
         "files"
         "build"
+        "batch"
       ];
       speaksFor.build = [
+        "alice"
+        "bob"
+      ];
+      speaksFor.batch = [
+        "glenda"
         "alice"
         "bob"
       ];
@@ -42,18 +70,26 @@
       group = "project";
       mode = "0770";
     };
-    build.configuration = {
-      services.cpu.allowedUsers = [
-        "alice"
-        "bob"
-      ];
-      namespace.binds = [
-        {
-          source = "/root/projects";
-          target = "/n/projects";
-          create = true;
-        }
-      ];
+    build.configuration = cpu;
+    batch = {
+      ip = "10.0.2.103";
+      boot = {
+        provider = "files";
+        root = "stable";
+      };
+      configuration = {
+        imports = [ cpu ];
+        networking = {
+          enable = true;
+          interfaces.ether0 = {
+            useDHCP = false;
+            address = "10.0.2.103";
+            prefixLength = 24;
+          };
+          defaultGateway = "10.0.2.2";
+        };
+        services.cpu.allowedUsers = [ "glenda" ];
+      };
     };
   };
 }

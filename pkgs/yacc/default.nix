@@ -18,8 +18,7 @@ stdenv.mkDerivation {
     cp ../../lib/yaccpar ../../lib/yaccpars $out/share/yacc/
     echo '#!/bin/rc
     rfork n || exit $status
-    bind '^$out^'/share/yacc/yaccpar /sys/lib/yaccpar || exit $status
-    bind '^$out^'/share/yacc/yaccpars /sys/lib/yaccpars || exit $status
+    bind -b '^$out^'/share/yacc /sys/lib || exit $status
     exec '^$out^'/libexec/yacc $*
     ' > $out/bin/yacc
     chmod +x $out/bin/yacc

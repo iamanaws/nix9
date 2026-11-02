@@ -65,6 +65,7 @@ let
 in
 {
   initial = make { };
+  distributed = pkgs.mkInstallation { imports = [ <nix9/examples/users/configuration.nix> ]; };
   shared = system { };
   membership = system {
     users = users // {
