@@ -380,6 +380,8 @@ static void forkPollReader() {
     check(unlink("fork-sentinel") == 0, "remove fork sentinel");
 }
 
+void checkProcessCleanup();
+
 int main(int argc, char **argv) {
     if (argc == 2 && std::strcmp(argv[1], "return42") == 0) return 42;
     auto executable = std::filesystem::absolute(argv[0]).string();
@@ -389,7 +391,7 @@ int main(int argc, char **argv) {
     bool matched = false;
     for (auto [name, test] : {std::pair{"allocation", allocations}, {"threads", threadAllocations}, {"environment", environment},
                             {"path", execPath}, {"copy", copies}, {"mkdir", directories}, {"poll", polling},
-                            {"fork", forkDescriptors}, {"fork-race", forkPollReader},
+                            {"fork", forkDescriptors}, {"fork-race", forkPollReader}, {"notifier", checkProcessCleanup},
                             {"math", math}, {"exceptions", exceptions}}) {
         if (std::strcmp(selected, "all") && std::strcmp(selected, name)) continue;
         matched = true;
@@ -406,7 +408,7 @@ int main(int argc, char **argv) {
         waitFor(child, 42);
         std::puts("PASS: exit");
     }
-    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, mkdir, poll, fork, fork-race, math, exceptions, exit, all)");
+    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, mkdir, poll, fork, fork-race, notifier, math, exceptions, exit, all)");
     check(chdir("/tmp") == 0 && rmdir(scratch.c_str()) == 0, "remove test directory");
     std::puts("cc9 runtime tests PASS");
 }

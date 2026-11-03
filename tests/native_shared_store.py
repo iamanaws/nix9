@@ -120,6 +120,9 @@ with tempfile.TemporaryDirectory() as directory:
             until("test `{ls /usr/local/nix/state/builds | wc -l} -eq 0", "build directory cleanup")
             guest.command("if(ls /srv | grep -s 'nix9-build-') exit 'build filesystem was retained'; status=''")
             until("test `{ls /usr/local/nix/state/db/clients | wc -l} -eq 0", "daemon worker exit")
+            until("test `{ps | awk '$1 == \"alice\" || $1 == \"bob\"' | wc -l} -eq 0", "user client/helper exit")
+            until("test `{ps | grep ' (nix-daemon-worker|nix-ramfs)$' | wc -l} -eq 0", "server worker/helper exit")
+            until("test `{ps | grep ' nix-store-service$' | wc -l} -eq 1", "connection helper exit")
 
         def start_job(user, name, args):
             guest.command("@{ auth/as " + user + " /bin/rc /usr/shared-client.rc /bin/rc /usr/shared-job.rc "
@@ -175,7 +178,8 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("nix-store --verify-path " + recovered)
             print("PASS: repeated timeouts return valid errors and another user can build afterward", flush=True)
 
-            for name, note in (("cancel", "interrupt"), ("disconnect", "kill")):
+            interruptions = [("cancel", "interrupt")] + [("kill-" + str(i), "kill") for i in range(3)]
+            for name, note in interruptions:
                 start_job("alice", name, "-A timeout")
                 until("grep -s '^SHARED-WAITING$' /tmp/" + name + ".log", name + " build start")
                 start_job("bob", name + "-queued", "-A queued --max-jobs 2 --argstr recoveryName " + name)
@@ -190,7 +194,7 @@ with tempfile.TemporaryDirectory() as directory:
                 guest.command("test `{wc -c </tmp/" + name + "-queued.status} -eq 1")
                 clean_builds()
                 output_path(user_command("alice", "shared recovery --argstr recoveryName " + name + "-reconnected"))
-            print("PASS: cancellation and client death release the build slot for another user", flush=True)
+            print("PASS: repeated client death cleans up processes and releases queued builds without restarting the service", flush=True)
             guest.command(f"nix-store --verify-path {compiler}")
             clean_builds()
             print("PASS: separate build identity, protected shared packages and credentials, private output import and cleanup", flush=True)
@@ -204,4 +208,5 @@ Path(output, "results.json").write_text(json.dumps({"status": "passed", "users":
     "private-output-import", "native-c-build", "shared-environment-reuse", "failed-build-cleanup",
     "anonymous-process-permissions", "detached-writer-revocation",
     "queued-builds", "repeated-timeout-recovery", "cancellation-recovery", "disconnected-client-recovery",
+    "repeated-client-death", "client-and-server-process-cleanup",
 ]}, indent=2) + "\n")

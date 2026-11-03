@@ -116,10 +116,9 @@ boundary, not a full sandbox. Profiles, development shells, managed startup and
 multi-CPU use are not integrated yet. The [test](../tests/native_shared_store.py)
 provisions disposable accounts and runtime keys.
 
-Recovery tests cover repeated timeouts, cancellation, killed clients and queued
-builds without restarting the listener. Forced client kills can still leave an
-orphaned cc9 bookkeeping process. An earlier malformed timeout reply has not
-recurred; its exact cause remains unconfirmed.
+Recovery tests cover repeated timeouts, cancellation and killed clients, checking
+process cleanup and queued builds without restarting the listener. An earlier
+malformed timeout reply has not recurred; its exact cause remains unconfirmed.
 
 ## Store maintenance
 

@@ -1,0 +1,127 @@
+--- a/posix_llvm.c
++++ b/posix_llvm.c
+@@ -775,6 +775,7 @@
+ #define N9_RFNOTEG 0x20   /* new note group — see cc9_spawn_new_group / kill() */
+ static void cc9_reap_forked(int pid);      /* below: child bookkeeping + reaper */
+ static void cc9_reap_child_reset(void);
++static void cc9_reap_fork_prepare(void), cc9_reap_fork_parent(void);
+ int waitpid(int, int *, int);
+ 
+ /* RLIMIT_NPROC over the process axis: live fork()ed children not yet reaped.
+@@ -796,8 +797,9 @@
+ 	}
+ 	extern void cc9_poll_fork_prepare(void), cc9_poll_fork_parent(void);
+ 	cc9_poll_fork_prepare();
++	cc9_reap_fork_prepare();
+ 	int pid = (int)n9_rfork(N9_RFPROC|N9_RFFDG|N9_RFENVG);
+-	if (pid != 0) cc9_poll_fork_parent();
++	if (pid != 0) { cc9_reap_fork_parent(); cc9_poll_fork_parent(); }
+ 	if (pid > 0) cc9_reap_forked(pid);
+ 	else if (pid == 0) {
+ 		cc9_reap_child_reset();                  /* copied tables describe the parent's kids */
+@@ -1043,10 +1045,13 @@
+ static int zlock = 1;
+ static struct { int pid; int status; } ztab[32];      /* collected, not yet returned */
+ static int znum;
+-static struct { int pid; int parent; } kids[64];      /* forked, not yet collected */
++static struct { int pid; int parent; int parentfd; } kids[64];      /* forked, not yet collected */
+ static int nkids;
+-static int sigchld_kick;                              /* released when a child is forked */
+ static int sigchld_running;
++
++/* Owner descriptors must not be retired/reused during a fork snapshot. */
++static void cc9_reap_fork_prepare(void){ n9_semacquire(&zlock, 1); }
++static void cc9_reap_fork_parent(void){ n9_semrelease(&zlock, 1); }
+ 
+ /* build "/proc/<pid>/status" */
+ static void cc9_status_path(char *d, int pid)
+@@ -1075,7 +1080,10 @@
+ static void cc9_forget_kid(int pid)
+ {
+ 	for (int i = 0; i < nkids; i++)
+-		if (kids[i].pid == pid) { kids[i] = kids[nkids - 1]; nkids--; return; }
++		if (kids[i].pid == pid) {
++			if (kids[i].parentfd >= 0) n9_close(kids[i].parentfd);
++			kids[i] = kids[nkids - 1]; nkids--; return;
++		}
+ }
+ 
+ /* Any child of this proc already dead? (i.e. await() has something waiting) */
+@@ -1087,21 +1095,45 @@
+ 	return 0;
+ }
+ 
++/* An open status channel identifies the original parent even after PID reuse.
++ * If /proc was unavailable at fork, retain the record for ordinary waitpid. */
++static int cc9_parent_gone(int fd)
++{
++	if (fd < 0) return 0;
++	char byte;
++	long n = n9_pread(fd, &byte, 1, 0);
++	if (n < 0) {
++		extern int cc9_errno_from_errstr_or(int);
++		return cc9_errno_from_errstr_or(5 /*EIO*/) != 4 /*EINTR*/;
++	}
++	return n == 0;
++}
++
+ static void *cc9_sigchld_thread(void *arg)
+ {
+ 	(void)arg;
+ 	for (;;) {
+-		while (nkids == 0)
+-			n9_semacquire(&sigchld_kick, 1);
+ 		n9_sleep(20);
+ 		int hit = 0;
+ 		n9_semacquire(&zlock, 1);
+-		for (int i = 0; i < nkids; i++)
+-			if (cc9_child_gone(kids[i].pid)) { hit = 1; break; }
++		for (int i = 0; i < nkids;) {
++			if (cc9_parent_gone(kids[i].parentfd)) {
++				/* Only the forking Plan 9 process can collect this status. */
++				cc9_forget_kid(kids[i].pid);
++				__sync_fetch_and_sub(&cc9_live_children, 1);
++				continue;
++			}
++			if (cc9_child_gone(kids[i].pid)) hit = 1;
++			i++;
++		}
++		if (nkids == 0) {
++			sigchld_running = 0;
++			n9_semrelease(&zlock, 1);
++			return 0;
++		}
+ 		n9_semrelease(&zlock, 1);
+ 		if (hit) raise(17 /*SIGCHLD*/);
+ 	}
+-	return 0;
+ }
+ 
+ static void cc9_reap_forked(int childpid)
+@@ -1110,6 +1142,9 @@
+ 	if (nkids < (int)(sizeof kids / sizeof kids[0])) {
+ 		kids[nkids].pid = childpid;
+ 		kids[nkids].parent = getpid();
++		char path[40];
++		cc9_status_path(path, kids[nkids].parent);
++		kids[nkids].parentfd = (int)n9_open(path, 0x20 /*OREAD|OCEXEC*/);
+ 		nkids++;
+ 	}
+ 	if (!sigchld_running) {
+@@ -1117,12 +1152,14 @@
+ 		if (pthread_create(&t, 0, cc9_sigchld_thread, 0) == 0) { pthread_detach(t); sigchld_running = 1; }
+ 	}
+ 	n9_semrelease(&zlock, 1);
+-	n9_semrelease(&sigchld_kick, 1);
+ }
+ 
+ static void cc9_reap_child_reset(void)
+ {
+-	zlock = 1; znum = 0; nkids = 0; sigchld_kick = 0; sigchld_running = 0;
++	/* fork holds zlock; these are private copies of the parent's descriptors. */
++	for (int i = 0; i < nkids; i++)
++		if (kids[i].parentfd >= 0) n9_close(kids[i].parentfd);
++	zlock = 1; znum = 0; nkids = 0; sigchld_running = 0;
+ 	cc9_live_children = 0;   /* the child has no children of its own yet */
+ 	/* A fork() child is a COW copy, not an rfork(RFMEM) sibling: drop the inherited
+ 	 * shm pool so it mints its own instead of racing the parent's carving of the same

@@ -28,7 +28,7 @@ with the Nix sandbox enabled.
 | `disk-archive-tests` | Native archive round trips, ownership and modes, filenames with spaces, empty files, SHA-256 vectors, corrupt checksums, truncated payloads, path traversal and missing source files. |
 | `package-tests`, `guest-development-tests` | Archive installation and native/APE C builds, including Lua, with image headers and libraries hidden. |
 | `nix-core-tests` | Nix libraries, commands, NARs, process handling and store primitives. |
-| `native-shared-store-tests` | Authenticated shared packages and native C builds on one CPU; access policy, protected credentials, anonymous builders, private output import, detached-writer revocation, and queued builds after timeouts, cancellation or client death. |
+| `native-shared-store-tests` | Authenticated shared packages and native C builds on one CPU; access policy, protected credentials, anonymous builders, private output import, detached-writer revocation, process cleanup and queued builds after timeouts, cancellation or repeated client death. |
 | `nix-native-tests` | Toolchain bootstrap, dependency builds, fixed hashes, multiple outputs, partial rebuilds, rebuild comparisons, cancellation, profiles, roots and GC. |
 | `nix-fetch-tests` | Evaluator file/archive hashes, relative imports, executable bits, malformed archives, path confinement, pure evaluation and offline reuse. |
 | `nix-store-tests` | Signed caches, transfers, repair and recovery. Includes two-VM read-only 9P reuse after the server stops, and HTTP(S) failure cases. |
