@@ -199,9 +199,9 @@ with ExitStack() as stack:
                     rejected(guest, f"nix9 {action} {paths['two']}", "system changes are locked")
                     guest.command("test -e '#s/nix9-system-target'")
                 guest.command("rm '#s/nix9-system-target'")
-                guest.command("@{ status='' } > '#s/nix9-profile'")
-                rejected(guest, "nix9 select " + paths["two"], "profiles are locked")
-                guest.command("rm '#s/nix9-profile'")
+                guest.command(f"mkdir {ROOT}.generations/invalid")
+                rejected(guest, "nix9 select " + paths["two"], "invalid generation")
+                guest.command(f"rm {ROOT}.generations/invalid")
                 unchanged(guest, before)
 
                 guest.command("nix9 select " + paths["two"])

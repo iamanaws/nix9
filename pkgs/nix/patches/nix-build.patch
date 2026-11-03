@@ -1,16 +1,17 @@
 --- a/src/nix/nix-build/nix-build.cc
 +++ b/src/nix/nix-build/nix-build.cc
-@@ -14,6 +14,9 @@
+@@ -14,6 +14,10 @@
  #include "nix/store/derivation-options.hh"
  #include "nix/store/store-open.hh"
  #include "nix/store/local-fs-store.hh"
 +#ifdef __plan9__
 +#include "nix/store/local-store.hh"
++#include "nix/store/plan9-roots.hh"
 +#endif
  #include "nix/store/globals.hh"
  #include "nix/store/realisation.hh"
  #include "nix/store/derivations.hh"
-@@ -30,6 +33,14 @@
+@@ -30,6 +34,14 @@
  #include "nix/cmd/compatibility-settings.hh"
  #include "nix/util/fun.hh"
  #include "man-pages.hh"
@@ -25,7 +26,7 @@
  
  using namespace nix;
  using namespace std::string_literals;
-@@ -125,6 +136,11 @@
+@@ -125,6 +137,11 @@
  {
      auto dryRun = false;
      auto isNixShell = std::regex_search(argv[0], std::regex("nix-shell$"));
@@ -37,7 +38,7 @@
      auto pure = false;
      auto fromArgs = false;
      auto packages = false;
-@@ -147,6 +163,9 @@
+@@ -147,6 +164,9 @@
      AutoDelete tmpDir(createTempDir("", myName));
  
      std::string outLink = "./result";
@@ -47,7 +48,7 @@
  
      // List of environment variables kept for --pure
      StringSet keepVars{
-@@ -167,6 +186,9 @@
+@@ -167,6 +187,9 @@
          "SHLVL",
      };
      keepVars.insert(networkProxyVariables.begin(), networkProxyVariables.end());
@@ -57,7 +58,7 @@
  
      Strings args;
      for (int i = 1; i < argc; ++i)
-@@ -197,6 +219,10 @@
+@@ -197,6 +220,10 @@
          }
      }
  
@@ -68,7 +69,7 @@
      struct MyArgs : LegacyArgs, MixEvalArgs
      {
          using LegacyArgs::LegacyArgs;
-@@ -208,6 +234,11 @@
+@@ -208,6 +235,11 @@
      };
  
      MyArgs myArgs(myName, [&](Strings::iterator & arg, const Strings::iterator & end) {
@@ -80,7 +81,7 @@
          if (*arg == "--help") {
              deletePath(tmpDir);
              showManPage(myName);
-@@ -219,8 +250,14 @@
+@@ -219,8 +251,14 @@
          else if (*arg == "--add-drv-link" || *arg == "--indirect")
              ; // obsolete
  
@@ -96,7 +97,7 @@
  
          else if (*arg == "--attr" || *arg == "-A")
              attrPaths.push_back(getArg(*arg, arg, end));
-@@ -228,8 +265,13 @@
+@@ -228,8 +266,13 @@
          else if (*arg == "--drv-link")
              getArg(*arg, arg, end); // obsolete
  
@@ -111,7 +112,7 @@
  
          else if (*arg == "--dry-run")
              dryRun = true;
-@@ -240,7 +282,11 @@
+@@ -240,7 +283,11 @@
          else if (isNixShell && (*arg == "--command" || *arg == "--run")) {
              if (*arg == "--run")
                  interactive = false;
@@ -123,7 +124,7 @@
          }
  
          else if (*arg == "--check")
-@@ -312,12 +358,39 @@
+@@ -312,12 +359,39 @@
          return true;
      });
  
@@ -152,9 +153,9 @@
 +    auto local = store.dynamic_pointer_cast<LocalStore>();
 +    auto localFS = store.dynamic_pointer_cast<LocalFSStore>();
 +    if (!localFS) throw UsageError("nix-build requires a filesystem store on Plan 9");
-+    if (!local && (isNixShell || !explicitOutLink || !outLink.empty()))
-+        throw UsageError("the shared-store prototype requires --no-out-link; profiles and development shells are not implemented yet");
-+    auto roots = canonPath(localFS->config.stateDir.get() / "gcroots");
++    if (!local && isNixShell)
++        throw UsageError("development shells are not supported by the shared store yet");
++    auto roots = plan9RootsDirectory(*store);
 +    if (isNixShell) outLink.clear();
 +    else if (!explicitOutLink) outLink = (roots / "result").string();
 +    if (!outLink.empty() && !isInDir(canonPath(absPath(outLink)), roots))
@@ -163,7 +164,7 @@
      auto evalStore = myArgs.evalStoreUrl ? openStore(StoreReference{*myArgs.evalStoreUrl}) : store;
  
      auto state = std::make_shared<EvalState>(myArgs.lookupPath, evalStore, fetchSettings, evalSettings, store);
-@@ -463,6 +533,7 @@
+@@ -463,6 +537,7 @@
          std::vector<DerivedPath> pathsToBuild;
          RealisedPath::Set pathsToCopy;
  
@@ -171,7 +172,7 @@
          /* Figure out what bash shell to use. If $NIX_BUILD_SHELL
             is not set, then build bashInteractive from
             <nixpkgs>. */
-@@ -497,6 +568,7 @@
+@@ -497,6 +572,7 @@
              }
          }
  
@@ -179,7 +180,7 @@
          auto accumDerivedPath = [&](this auto & self,
                                      ref<SingleDerivedPath> inputDrv,
                                      const DerivedPathMap<StringSet>::ChildNode & inputNode) -> void {
-@@ -532,17 +604,29 @@
+@@ -532,17 +608,29 @@
          if (dryRun)
              return;
  
@@ -209,7 +210,7 @@
          // Set the environment.
          auto env = getEnv();
  
-@@ -679,6 +763,7 @@
+@@ -679,6 +767,7 @@
          execvp(shell->c_str(), argPtrs.data());
  
          throw SysError("executing shell '%s'", *shell);
@@ -217,7 +218,7 @@
      }
  
      else {
-@@ -734,7 +819,10 @@
+@@ -734,7 +823,10 @@
                  std::string symlink = drvPrefix;
                  if (outputName != "out")
                      symlink += "-" + outputName;

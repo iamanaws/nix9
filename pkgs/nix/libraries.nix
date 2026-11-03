@@ -102,6 +102,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/meson.patch}
     patch -p1 < ${./patches/remote-build.patch}
     patch -p1 < ${./patches/shared-store.patch}
+    patch -p1 < ${./patches/shared-roots.patch}
     patch -p1 < ${./patches/connection-recovery.patch}
     cd ..
     nixSource="$PWD/nix-${version}"
@@ -116,6 +117,8 @@ runCommand "nix-${version}-9front-libraries"
     cp ${./filetransfer-platform.cc} "$nixSource/src/libstore/plan9/filetransfer-platform.cc"
     cp ${./cpu-store.cc} "$nixSource/src/libstore/plan9/cpu-store.cc"
     cp ${./daemon-store.cc} "$nixSource/src/libstore/plan9/daemon-store.cc"
+    cp ${./roots.cc} "$nixSource/src/libstore/plan9/roots.cc"
+    cp ${./roots.hh} "$nixSource/src/libstore/include/nix/store/plan9-roots.hh"
     mkdir "$nixSource/src/libfetchers/plan9"
     cp ${./eval-platform.cc} "$nixSource/src/libfetchers/plan9/eval-platform.cc"
     substitute ${cc9.meson} cross.ini \
@@ -130,6 +133,7 @@ runCommand "nix-${version}-9front-libraries"
     ninja -C meson-build -j "$NIX_BUILD_CORES"
     meson install -C meson-build --no-rebuild --destdir "$TMPDIR/install"
     cp -R "$TMPDIR/install/nix/"{include,lib} "$out/"
+    cp ${./roots.hh} "$out/include/nix/store/plan9-roots.hh"
     for pc in "$out"/lib/pkgconfig/*.pc; do
       substituteInPlace "$pc" --replace-fail 'prefix=/nix' "prefix=$out"
     done

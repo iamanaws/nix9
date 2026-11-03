@@ -10,6 +10,7 @@ import tempfile
 import time
 
 from guest import files_guest
+from shared_profiles import check_profiles
 
 
 def quote(value):
@@ -98,9 +99,17 @@ with tempfile.TemporaryDirectory() as directory:
                       "-w $nix9/bin/nix-daemon-worker </dev/null >/tmp/shared-service.log >[2=1] &")
         guest.command("sleep 1; cat /tmp/shared-service.log; netstat -n")
         guest.command("netstat -n | grep 'Listen *17051 '")
+        guest.command("fn as { auth/as $1 /bin/rc /usr/shared-client.rc /bin/rc -c $2 }")
 
         def user_command(user, command):
-            return guest.command("auth/as " + user + " /bin/rc /usr/shared-client.rc /bin/rc -c " + quote(command))
+            line = "as " + user + " " + quote(command)
+            if len(line) > 220:
+                # The serial console can drop a byte at its line-buffer boundary.
+                guest.command("echo -n > /tmp/shared-command; chmod 644 /tmp/shared-command")
+                for offset in range(0, len(command), 100):
+                    guest.command("echo -n " + quote(command[offset:offset + 100]) + " >> /tmp/shared-command")
+                line = "as " + user + " '. /tmp/shared-command'"
+            return guest.command(line)
 
         def rejected(user, command, reason):
             result = user_command(user, "rc -c " + quote(command) + "; echo SHARED-ERROR:$status")
@@ -130,6 +139,10 @@ with tempfile.TemporaryDirectory() as directory:
                           "echo $status >/tmp/" + name + ".status } &")
 
         try:
+            user_command("alice", "for(i in " + " ".join(str(i) for i in range(20)) + ") { "
+                         "r=`{nix-store --roots-dir}; "
+                         "~ $r /usr/local/nix/state/gcroots/per-user/alice || exit 'wrong roots'; "
+                         "nix-store --roots-dir || exit; }")
             first = user_command("alice", "package rc --max-jobs 0")
             compiler = output_path(first)
             if "copying path" not in first or "building '" in first:
@@ -198,8 +211,9 @@ with tempfile.TemporaryDirectory() as directory:
             guest.command(f"nix-store --verify-path {compiler}")
             clean_builds()
             print("PASS: separate build identity, protected shared packages and credentials, private output import and cleanup", flush=True)
+            check_profiles(guest, user_command, rejected, clean_builds)
         except Exception:
-            guest.command("cat /tmp/shared-service.log; echo")
+            guest.command("ps; cat /tmp/shared-service.log; echo")
             raise
 Path(output).mkdir(parents=True, exist_ok=True)
 Path(output, "results.json").write_text(json.dumps({"status": "passed", "users": ["alice", "bob"], "checks": [
@@ -209,4 +223,6 @@ Path(output, "results.json").write_text(json.dumps({"status": "passed", "users":
     "anonymous-process-permissions", "detached-writer-revocation",
     "queued-builds", "repeated-timeout-recovery", "cancellation-recovery", "disconnected-client-recovery",
     "repeated-client-death", "client-and-server-process-cleanup",
+    "user-roots", "independent-profiles", "profile-rollback", "concurrent-profile-updates", "shared-root-gc",
+    "root-access-policy", "consecutive-client-connections",
 ]}, indent=2) + "\n")

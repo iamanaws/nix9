@@ -44,7 +44,7 @@ void showManPage(const std::string &name)
                      "  --out-link PATH        Retain outputs in a root file\n"
                      "  --no-out-link          Leave no permanent output root\n"
                      "  --dry-run              Show what would be built\n"
-                     "The default root is STATE/gcroots/result.\n";
+                     "The default root is result below `nix-store --roots-dir`.\n";
         throw Exit();
     }
     if (name == "nix-instantiate") {
@@ -66,6 +66,8 @@ void showManPage(const std::string &name)
                  "  --export PATH...       Write store paths and metadata to stdout\n"
                  "  --import               Read a trusted export from stdin\n"
                  "  --check-validity PATH  Check store registration\n"
+                 "  --roots-dir            Print this user's permanent roots directory\n"
+                 "  --delete-root PATH     Release a permanent root file\n"
                  "  --version              Print the Nix version\n"
                  "Use --store /tmp/nix9 for a writable store in the guest.\n"
                  "Experimental 9front port: local builds are limited; indirect roots and symlinks are unsupported.\n";

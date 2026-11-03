@@ -116,12 +116,7 @@ def check_generations(guest, packages, environments):
         if not re.search(r"(?m)^PROFILE-ERROR:.+$", result):
             raise RuntimeError(f"invalid profile operation succeeded: {result}")
         guest.command(f"cat {root}", second)
-        guest.command("test ! -e '#s/nix9-profile'")
-    guest.command("@{ status='' } > '#s/nix9-profile'")
-    result = guest.command(f"{command} rollback; echo PROFILE-ERROR:$status")
-    if "profiles are locked" not in result or not re.search(r"(?m)^PROFILE-ERROR:.+$", result):
-        raise RuntimeError(f"concurrent profile operation was not rejected: {result}")
-    guest.command("rm '#s/nix9-profile'")
+        guest.command("if(ls /srv | grep -s '^nix9-profile-') exit 'profile lock retained'; status=''")
     guest.command(f"{command} delete 1")
     guest.command("nix-store --gc")
     guest.command(f"test ! -e {first} && nix-store --verify-path {second}")

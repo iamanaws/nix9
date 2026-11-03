@@ -11,6 +11,21 @@ static char *keys = "";
 static char *policy, *worker, *launcher;
 static char *builduser = "none";
 static char *clientpid;
+static int connectionctl = -1;
+
+static void
+closeclient(void)
+{
+	if(connectionctl >= 0)
+		fprint(connectionctl, "close");
+}
+
+static void
+closeconnection(void)
+{
+	if(connectionctl >= 0)
+		hangup(connectionctl);
+}
 
 typedef struct Input Input;
 struct Input {
@@ -158,7 +173,7 @@ writeall(int fd, char *data, long size)
 }
 
 static void
-watchclient(void)
+watchclient(int ctl)
 {
 	char *path, *end, byte;
 	long pid;
@@ -184,13 +199,15 @@ watchclient(void)
 		sysfatal("fork client monitor: %r");
 	case 0:
 		/* Orphaned cc9 threads may retain pipe descriptors after their main
-		 * process dies. Watch the process itself without retaining the pipes. */
+		 * process dies. Keep only the TCP control and process descriptors so we
+		 * can close the connection before killing helpers, without retaining pipes. */
+		dup(ctl, 0);
 		closeexcept(fd, owner);
-		close(0);
 		close(1);
 		close(2);
 		while(pread(fd, &byte, 1, 0) == 1 && pread(owner, &byte, 1, 0) == 1)
 			sleep(100);
+		fprint(0, "close");
 		postnote(PNGROUP, getpid(), "kill");
 		exits(nil);
 	default:
@@ -211,15 +228,19 @@ client(void)
 {
 	AuthInfo *ai;
 	TLSconn conn;
-	int fd;
+	int fd, ctl;
 
 	if(rfork(RFNOTEG) < 0)
 		sysfatal("client note group: %r");
 	atnotify(clientnote, 1);
-	watchclient();
-	fd = dial(address, nil, nil, nil);
+	/* Bound connection setup before the process watcher can take over. */
+	alarm(30000);
+	fd = dial(address, nil, nil, &ctl);
 	if(fd < 0)
 		sysfatal("dial store service: %r");
+	connectionctl = ctl;
+	atexit(closeclient);
+	watchclient(ctl);
 	ai = auth_proxy(fd, nil, "proto=p9any role=client %s", keys);
 	if(ai == nil)
 		sysfatal("store authentication: %r");
@@ -231,28 +252,33 @@ client(void)
 	auth_freeAI(ai);
 	if(fd < 0)
 		sysfatal("store TLS: %r");
+	alarm(0);
 	switch(rfork(RFPROC|RFFDG|RFNOWAIT)){
 	case -1:
 		sysfatal("fork transfer: %r");
 	case 0:
 		transfer(0, fd);
+		/* Wake the peer even when loopback TCP bypasses the packet path. */
+		fprint(ctl, "close");
 		break;
 	default:
 		transfer(fd, 1);
 		break;
 	}
+	hangup(ctl);
 	/* Stop both transfer directions and the watcher in our private group. */
 	postnote(PNGROUP, getpid(), "kill");
 	exits(nil);
 }
 
 static void
-connection(void)
+connection(int ctl)
 {
 	AuthInfo *ai;
 	TLSconn conn;
 	char *args[2], *dump;
-	int fd;
+	Waitmsg *w;
+	int fd, pid, exited;
 
 	alarm(30000);
 	ai = auth_proxy(0, nil, "proto=p9any role=server %s", keys);
@@ -268,6 +294,32 @@ connection(void)
 	if(fd < 0)
 		sysfatal("store TLS: %r");
 	alarm(0);
+	connectionctl = ctl;
+	atexit(closeconnection);
+	/* Keep the TCP control until the worker exits, then explicitly hang up.
+	 * Closing a spliced loopback conversation without hangup can close its
+	 * former peer after that slot has been reused by another connection. */
+	switch(pid = rfork(RFPROC|RFFDG)){
+	case -1:
+		sysfatal("fork daemon worker: %r");
+	case 0:
+		close(ctl);
+		connectionctl = -1;
+		break;
+	default:
+		closeexcept(ctl, -1);
+		close(0);
+		close(1);
+		for(;;){
+			w = wait();
+			if(w == nil)
+				sysfatal("wait for daemon worker: %r");
+			exited = w->pid;
+			free(w);
+			if(exited == pid)
+				exits(nil);
+		}
+	}
 	putenv("NIX9_CLIENT_USER", ai->cuid);
 	putenv("NIX9_BUILD_USER", builduser);
 	putenv("NIX9_BUILD_LAUNCHER", launcher);
@@ -566,8 +618,8 @@ main(int argc, char **argv)
 				sysfatal("accept store client: %r");
 			dup(fd, 0);
 			dup(fd, 1);
-			closeextra();
-			connection();
+			closeextraexcept(ctl);
+			connection(ctl);
 		default:
 			close(ctl);
 		}

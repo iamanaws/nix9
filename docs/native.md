@@ -5,7 +5,7 @@ Activate Nix and build a package from the bundled set:
 
 ```sh
 . /usr/local/pkg/nix9/activate
-roots=/usr/local/nix/state/gcroots
+roots=`{nix-store --roots-dir}
 nix-build $nix9/packages -A fortune --out-link $roots/package
 result=`{cat $roots/package}
 $result/bin/fortune
@@ -110,11 +110,26 @@ their outputs, then revokes that filesystem, including descriptors retained by
 detached processes. Builders cannot access the owner's credentials; the kernel
 also restricts the anonymous identity's access to other processes.
 
-The prototype supports `nix-build --no-out-link` through an explicitly selected
-daemon connection, with one build at a time per store. This is an ownership
-boundary, not a full sandbox. Profiles, development shells, managed startup and
-multi-CPU use are not integrated yet. The [test](../tests/native_shared_store.py)
-provisions disposable accounts and runtime keys.
+With an authenticated daemon connection selected, ordinary builds retain their
+results in `/usr/local/nix/state/gcroots/per-user/USER`. Each user has independent
+environment generations over the same package files:
+
+```sh
+roots=`{nix-store --roots-dir}
+nix-build environment.nix
+nix-profile $roots/environment set `{cat $roots/result}
+. $nix9/packages/profile $roots/environment
+```
+
+The service owns these root files and checks their authenticated owner on every
+change. Use `nix-store --delete-root $roots/result` to release a build result;
+`nix-profile` manages retained generations. GC keeps paths referenced by any user.
+Profile updates are serialized, including updates from separate sessions.
+
+There is one build at a time per store. This is an ownership boundary, not a full
+sandbox. Development shells, managed startup and multi-CPU use are not integrated
+yet. The [test](../tests/native_shared_store.py) provisions disposable accounts
+and runtime keys. Clients and services must both support shared roots and profiles.
 
 Recovery tests cover repeated timeouts, cancellation and killed clients, checking
 process cleanup and queued builds without restarting the listener. An earlier
@@ -123,13 +138,14 @@ malformed timeout reply has not recurred; its exact cause remains unconfirmed.
 ## Store maintenance
 
 The machine store is `/usr/local/nix/store`. Roots are files containing store paths,
-rather than symlinks. `nix-build` defaults to
-`/usr/local/nix/state/gcroots/result`; `--no-out-link` creates no permanent root.
+rather than symlinks. `nix-build` defaults to `result` below `nix-store --roots-dir`;
+`--no-out-link` creates no permanent root.
 Running programs outside a Nix build need an explicit root.
 
 | Task | Command |
 | --- | --- |
 | Retain an existing output | `nix-store --realise --add-root $roots/package $result` |
+| Release an output root | `nix-store --delete-root $roots/package` |
 | Compare a rebuild without replacing the output | `nix-build --check` |
 | Collect unused paths after removing their roots | `nix-store --gc` |
 | Check contents and remove missing, unreferenced registrations | `nix-store --verify --check-contents` |

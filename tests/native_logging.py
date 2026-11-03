@@ -131,11 +131,11 @@ with ExitStack() as stack:
         guest.command("cat /sys/log/nix9-test", "retained")
         guest.command("cat /sys/log/nix9-new", "previous-generation")
         guest.command("cp /sys/log/nix9 /tmp/before-rejected-selection")
-        guest.command("@{ status='' } > '#s/nix9-profile'")
-        reject(guest, "nix9-rebuild switch /tmp/one.nix", "profiles are locked")
+        guest.command(f"mkdir {SYSTEM}.generations/invalid")
+        reject(guest, "nix9-rebuild switch /tmp/one.nix", "invalid generation")
         if root(guest) != two:
             raise RuntimeError("failed selection changed the system")
-        guest.command("rm '#s/nix9-profile'; cmp /sys/log/nix9 /tmp/before-rejected-selection")
+        guest.command(f"rm {SYSTEM}.generations/invalid; cmp /sys/log/nix9 /tmp/before-rejected-selection")
         guest.command("nix9-rebuild rollback")
         if root(guest) != one:
             raise RuntimeError("rollback did not restore the first logging generation")

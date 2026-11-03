@@ -22,6 +22,7 @@
   native-shared-store-tests = vmTest "native-shared-store-tests" {
     script = ./native_shared_store.py;
     files = [
+      ./shared_profiles.py
       ./shared-store.nix
       ./shared-detached.c
       ./remote-delay.c

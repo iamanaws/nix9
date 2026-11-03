@@ -1,7 +1,9 @@
 #include "nix/store/remote-store.hh"
 #include "nix/store/remote-store-connection.hh"
+#include "nix/store/worker-protocol-impl.hh"
 #include "nix/store/local-fs-store.hh"
 #include "nix/store/store-registration.hh"
+#include "nix/store/plan9-roots.hh"
 #include "nix/util/current-process.hh"
 #include "nix/util/executable-path.hh"
 #include "nix/util/processes.hh"
@@ -41,7 +43,7 @@ struct Plan9DaemonConfig : LocalFSStoreConfig, RemoteStoreConfig,
     }
 };
 
-struct Plan9DaemonStore : LocalFSStore, RemoteStore
+struct Plan9DaemonStore : LocalFSStore, RemoteStore, Plan9RootStore
 {
     using Config = Plan9DaemonConfig;
     ref<const Config> config;
@@ -91,8 +93,25 @@ struct Plan9DaemonStore : LocalFSStore, RemoteStore
     void narFromPath(const StorePath & path, Sink & sink) override {
         Store::narFromPath(path, sink);
     }
-    std::filesystem::path addPermRoot(const StorePath &, const std::filesystem::path &) override {
-        throw Error("shared-store profiles are not implemented yet; use --no-out-link for the prototype");
+    void requireRoots(ConnectionHandle & connection) {
+        if (!connection->protoVersion.features.contains(plan9RootsFeature))
+            throw Error("the store service does not support shared roots and profiles; update it first");
+    }
+    std::filesystem::path addPermRoot(const StorePath & path, const std::filesystem::path & root) override {
+        auto connection(getConnection());
+        requireRoots(connection);
+        connection->to << WorkerProto::Op::AddPermRoot;
+        WorkerProto::write(*this, *connection, path);
+        connection->to << root.string();
+        connection.processStderr();
+        return readString(connection->from);
+    }
+    std::string rootOperation(std::string_view action, const Strings & args) override {
+        auto connection(getConnection());
+        requireRoots(connection);
+        connection->to << WorkerProto::Op::Plan9Roots << action << args;
+        connection.processStderr();
+        return readString(connection->from);
     }
 };
 

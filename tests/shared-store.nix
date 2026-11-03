@@ -21,8 +21,26 @@ let
         cat /dev/user > $out/identity
       '';
     };
+  environment =
+    version:
+    pkgs.buildEnv {
+      name = "shared-environment-${version}";
+      paths = [
+        (pkgs.mkDerivation {
+          name = "shared-choice-${version}";
+          buildCommand = ''
+            mkdir -p $out/bin
+            echo '#!/bin/rc' > $out/bin/shared-choice
+            echo 'echo ${version}' >> $out/bin/shared-choice
+            chmod 555 $out/bin/shared-choice
+          '';
+        })
+      ];
+    };
 in
 {
+  envOne = environment "one";
+  envTwo = environment "two";
   one = identity "shared-one";
   two = identity "shared-two";
   recovery = identity recoveryName;

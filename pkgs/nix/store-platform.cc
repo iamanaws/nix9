@@ -1,6 +1,8 @@
 #include "nix/store/build-result.hh"
 #include "nix/store/local-store.hh"
 #include "nix/store/local-settings.hh"
+#include "nix/store/plan9-roots.hh"
+#include "nix/util/environment-variables.hh"
 #include "nix/util/signals.hh"
 
 extern "C" long n9_create(const char *, int, unsigned long);
@@ -131,10 +133,8 @@ std::filesystem::path IndirectRootStore::addPermRoot(
     const StorePath &path, const std::filesystem::path &root)
 {
     auto &store = dynamic_cast<LocalStore &>(*this);
-    auto rootsDir = canonPath(store.config->stateDir.get() / "gcroots");
+    checkPlan9Root(store, root);
     auto target = canonPath(root);
-    if (!isInDir(target, rootsDir))
-        throw Error("9front permanent roots must be files below %s", PathFmt(rootsDir));
     auto storeLock = lockStoreAt(store.dbDir);
     addTempRoot(path);
     if (!isValidPath(path))
@@ -145,7 +145,7 @@ std::filesystem::path IndirectRootStore::addPermRoot(
     if (exists && readFile(target) == contents) return target;
     // The store gate excludes GC while create truncates and we write the root.
     // A failed write leaves no final newline, so later GC refuses to collect.
-    AutoCloseFD fd(n9_create(target.c_str(), 1 | 32 | (exists ? 0 : 0x1000), 0600));
+    AutoCloseFD fd(n9_create(target.c_str(), 1 | 32 | (exists ? 0 : 0x1000), getEnv("NIX9_CLIENT_USER") ? 0644 : 0600));
     if (!fd) throw SysError(cc9_errno_from_errstr_or(EIO), "writing root %s", PathFmt(target));
     writeFull(fd.get(), contents);
     return target;

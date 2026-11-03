@@ -1,0 +1,135 @@
+--- a/src/libstore/meson.build
++++ b/src/libstore/meson.build
+@@ -334,7 +334,7 @@
+ if host_machine.system() == 'plan9'
+   sources += files('plan9/store-platform.cc', 'plan9/build-platform.cc',
+     'plan9/filetransfer-platform.cc', 'plan9/cpu-store.cc',
+-    'plan9/daemon-store.cc', 'daemon.cc', 'remote-store.cc',
++    'plan9/daemon-store.cc', 'plan9/roots.cc', 'daemon.cc', 'remote-store.cc',
+     'worker-protocol-connection.cc',
+     'serve-protocol.cc', 'serve-protocol-connection.cc', 'http-binary-cache-store.cc')
+ else
+--- a/src/libstore/include/nix/store/worker-protocol.hh
++++ b/src/libstore/include/nix/store/worker-protocol.hh
+@@ -230,6 +230,9 @@
+     AddBuildLog = 45,
+     BuildPathsWithResults = 46,
+     AddPermRoot = 47,
++#ifdef __plan9__
++    Plan9Roots = 0x50395254, // P9RT; negotiated by nix9-roots-v1.
++#endif
+ };
+ 
+ struct WorkerProto::ClientHandshakeInfo
+--- a/src/libstore/worker-protocol.cc
++++ b/src/libstore/worker-protocol.cc
+@@ -20,6 +20,9 @@
+             .major = 1,
+             .minor = 38,
+         },
++#ifdef __plan9__
++    .features = {"nix9-roots-v1"},
++#endif
+ };
+ 
+ const WorkerProto::Version WorkerProto::minimum = {
+--- a/src/libstore/daemon.cc
++++ b/src/libstore/daemon.cc
+@@ -1,4 +1,8 @@
+ #include "nix/store/daemon.hh"
++#ifdef __plan9__
++#  include "nix/store/plan9-roots.hh"
++#  include "nix/util/environment-variables.hh"
++#endif
+ #include "nix/util/signals.hh"
+ #include "nix/store/worker-protocol.hh"
+ #include "nix/store/worker-protocol-connection.hh"
+@@ -677,7 +681,11 @@
+     }
+ 
+     case WorkerProto::Op::AddPermRoot: {
+-        if (!trusted)
++        if (!trusted
++#ifdef __plan9__
++            && !getEnv("NIX9_CLIENT_USER")
++#endif
++        )
+             throw Error(
+                 "you are not privileged to create perm roots\n\n"
+                 "hint: you can just do this client-side without special privileges, and probably want to do that instead.");
+@@ -690,6 +698,21 @@
+         conn.to << gcRoot.string();
+         break;
+     }
++
++#ifdef __plan9__
++    case WorkerProto::Op::Plan9Roots: {
++        auto action = readString(conn.from, 32);
++        auto count = readNum<unsigned>(conn.from);
++        if (count > 3) throw Error("too many root operation arguments");
++        Strings args;
++        while (count--) args.push_back(readString(conn.from, 4096));
++        logger->startWork();
++        auto result = plan9RootOperation(*store, action, args);
++        logger->stopWork();
++        conn.to << result;
++        break;
++    }
++#endif
+ 
+     case WorkerProto::Op::AddIndirectRoot: {
+         std::filesystem::path path = absPath(readString(conn.from));
+--- a/src/nix/nix-store/nix-store.cc
++++ b/src/nix/nix-store/nix-store.cc
+@@ -7,6 +7,9 @@
+ #include "nix/store/local-fs-store.hh"
+ #include "nix/store/log-store.hh"
+ #include "nix/store/local-store.hh"
++#ifdef __plan9__
++#  include "nix/store/plan9-roots.hh"
++#endif
+ #include "nix/store/serve-protocol.hh"
+ #include "nix/store/serve-protocol-connection.hh"
+ #include "nix/main/shared.hh"
+@@ -50,6 +53,26 @@
+ static int rootNr = 0;
+ static bool noOutput = false;
+ static std::shared_ptr<Store> store;
++
++#ifdef __plan9__
++static void opRootsDirectory(Strings flags, Strings args)
++{
++    if (!flags.empty() || !args.empty()) throw UsageError("--roots-dir takes no arguments");
++    cout << plan9RootsDirectory(*store).string() << '\n';
++}
++
++static void opDeleteRoot(Strings flags, Strings args)
++{
++    if (!flags.empty() || args.size() != 1) throw UsageError("--delete-root requires one root file");
++    plan9RootOperation(*store, "remove", args);
++}
++
++static void opProfile(Strings flags, Strings args)
++{
++    if (!flags.empty()) throw UsageError("unexpected profile flags");
++    cout << plan9RootOperation(*store, "profile", args);
++}
++#endif
+ 
+ ref<LocalStore> ensureLocalStore()
+ {
+@@ -1186,6 +1209,14 @@
+                 op = opRegisterValidity;
+             else if (*arg == "--check-validity")
+                 op = opCheckValidity;
++#ifdef __plan9__
++            else if (*arg == "--roots-dir")
++                op = opRootsDirectory;
++            else if (*arg == "--delete-root")
++                op = opDeleteRoot;
++            else if (*arg == "--profile")
++                op = opProfile;
++#endif
+             else if (*arg == "--gc") {
+                 op = opGC;
+                 opName = arg->substr(1);
