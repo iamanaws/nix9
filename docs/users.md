@@ -99,18 +99,9 @@ chmod 770 /n/projects/hello
 chmod 660 /n/projects/hello/*
 ```
 
-Either user can edit these sources. To build with Nix, select a
-[personal store](native.md#personal-stores), then run:
-
-```sh
-nix-build /n/projects/hello/environment.nix --option substitute false
-nix-profile $nixStore/state/gcroots/environment set `{cat $nixStore/state/gcroots/result}
-. $nix9/packages/profile $nixStore/state/gcroots/environment
-hello
-```
-
-Each user's package selection belongs to that CPU's store. Updating one CPU
-leaves the other CPU's selection and the shared homes in place.
+Both users can edit these sources on either CPU and run configured system
+packages such as `fortune`. [Shared-store user builds](native.md#shared-store-prototype)
+are experimental. Updating one CPU leaves the other CPU and shared homes in place.
 
 ## Changes and recovery
 

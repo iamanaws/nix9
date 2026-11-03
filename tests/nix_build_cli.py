@@ -60,8 +60,30 @@ def check_nix_build_cli(guest):
     guest.command("test ! -e $output")
     check_build_checks(guest)
     check_repairs(guest)
+    check_diverted_builds(guest)
     return ["evaluation and build", "reuse", "root replacement", "file roots", "arguments", "multiple outputs",
-            "dry run", "no output root", "failure status", "rebuild checks", "offline repair builds", "GC"]
+            "dry run", "no output root", "failure status", "rebuild checks", "offline repair builds",
+            "diverted stores", "GC"]
+
+
+def check_diverted_builds(guest):
+    guest.command("mkdir -p /tmp/n9-diverted/store /tmp/n9-diverted/private/store")
+    guest.command("echo machine > /tmp/n9-diverted/store/machine-only")
+    guest.command("diverted='local?store=/tmp/n9-diverted/store&real=/tmp/n9-diverted/private/store&state=/tmp/n9-diverted/private/state&log=/tmp/n9-diverted/private/log'")
+    guest.command("fn divertedBuild { /tmp/nix-build --store $diverted /tmp/nix-build.nix $* }")
+    guest.command("fn divertedStore { /tmp/nix-store --store $diverted $* }")
+    guest.command("rfork n; bind -bc /tmp/n9-diverted/private/store /tmp/n9-diverted/store")
+    guest.command("divertedBuild -A namespace")
+    guest.command("divertedRoot=/tmp/n9-diverted/private/state/gcroots/result; divertedOut=`{cat $divertedRoot}")
+    guest.command("grep '^dependency$' $divertedOut && grep '^'^$divertedOut^'$' $divertedOut")
+    guest.command("test -f /tmp/n9-diverted/private/store/`{basename $divertedOut}")
+    guest.command("divertedBuild -A namespace --check && divertedStore --verify-path $divertedOut")
+    guest.command("chmod +w $divertedOut && echo damaged > $divertedOut")
+    guest.command("divertedBuild -A namespace --repair --option substitute false")
+    guest.command("divertedStore --verify-path $divertedOut && grep '^dependency$' $divertedOut")
+    guest.command("rm $divertedRoot && divertedStore --gc")
+    guest.command("test ! -e $divertedOut && cat /tmp/n9-diverted/store/machine-only", "machine")
+    guest.command("unmount /tmp/n9-diverted/private/store /tmp/n9-diverted/store")
 
 
 def check_build_checks(guest):

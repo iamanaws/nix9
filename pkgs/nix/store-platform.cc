@@ -42,8 +42,8 @@ void recoverLocalStore(const LocalStoreConfig &config)
     auto gate = lockStoreAt(dbDir);
     if (pathExists(storeService(dbDir) + "-used"))
         throw Error("recovery requires a reboot before any client opens this store");
-    if (config.readOnly || config.realStoreDir.get().string() != config.storeDir)
-        throw Error("recovery requires a writable, non-diverted local store");
+    if (config.readOnly)
+        throw Error("recovery requires a writable local store");
     if (readFile(dbDir / "schema") != std::to_string(nixSchemaVersion))
         throw Error("unsupported store schema for recovery");
 
@@ -72,11 +72,11 @@ void recoverLocalStore(const LocalStoreConfig &config)
         if (name.starts_with("tmp-") && entry.is_directory()) {
             std::filesystem::remove(entry.path() / ".lock");
         } else if (name.ends_with(".lock") && entry.is_regular_file()
-                   && !valid.contains(entry.path().string())) {
+                   && !valid.contains(config.storeDir + "/" + name)) {
             // A registered output may itself end in .lock. Only remove an
             // empty, unregistered marker belonging to a syntactic store path.
             try {
-                config.parseStorePath(entry.path().string().substr(0, entry.path().string().size() - 5));
+                config.parseStorePath(config.storeDir + "/" + name.substr(0, name.size() - 5));
             } catch (const BadStorePath &) { continue; }
             if (entry.file_size() == 0) std::filesystem::remove(entry.path());
         }

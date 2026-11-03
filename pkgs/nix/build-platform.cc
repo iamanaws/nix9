@@ -31,6 +31,18 @@ class Plan9Builder : public DerivationBuilder, private DerivationBuilderParams {
     std::map<std::string, std::unique_ptr<AutoDelete>> cleanupOutputs;
     OutputPathMap outputPaths, scratchOutputs;
     StringMap inputRewrites, outputRewrites;
+    std::optional<std::filesystem::path> sharedBuild;
+    std::unique_ptr<PathLocks> buildLock;
+    std::string buildUser, buildLauncher, dumpProgram, ramfsProgram;
+    void removeSharedBuild() {
+        if (!sharedBuild) return;
+        // Cleanup must still revoke storage after a client disconnects.
+        auto interrupted = getInterrupted();
+        Finally restoreInterrupt([&] { setInterrupted(interrupted); });
+        setInterrupted(false);
+        runProgram2({.program = buildLauncher, .args = {"-R", buildUser, sharedBuild->string(), store.storeDir}});
+        sharedBuild.reset();
+    }
     void installRepairedOutputs(const ValidPathInfos &registrations) {
         auto gate = store.lockStore();
         store.requireExclusiveStore();
@@ -81,6 +93,7 @@ public:
         : DerivationBuilderParams(std::move(params)), store(store), callbacks(std::move(callbacks)) {}
     ~Plan9Builder() override {
         try { killChild(); } catch (...) { ignoreExceptionInDestructor(); }
+        try { removeSharedBuild(); } catch (...) { ignoreExceptionInDestructor(); }
     }
     const StorePathSet &originalPaths() override { return inputPaths; }
     bool isAllowed(const StorePath &p) override { return inputPaths.contains(p); }
@@ -108,15 +121,37 @@ public:
                 throw Error("9front builds require input-addressed or fixed outputs");
             outputPaths.emplace(name, *output.path(store, drv.name, name));
         }
-        if (store.storeDir != store.config->realStoreDir.get())
-            throw Error("building in a diverted store is not supported on 9front");
         if (store.config->getLocalSettings().sandboxMode != smDisabled)
             throw Error("sandboxed builds are not supported on 9front");
         if (!drvOptions.impureEnvVars.empty() || !drvOptions.impureHostDeps.empty() ||
             !drvOptions.additionalSandboxProfile.empty() || !drvOptions.unsafeDiscardReferences.empty())
             throw Error("unsupported 9front builder options");
-        auto directory = createTempDir("/tmp", "nix-build");
-        temp = std::make_unique<AutoDelete>(directory);
+        std::filesystem::path directory;
+        if (getEnv("NIX9_CLIENT_USER")) {
+            buildUser = getEnv("NIX9_BUILD_USER").value_or("");
+            buildLauncher = getEnv("NIX9_BUILD_LAUNCHER").value_or("");
+            dumpProgram = getEnv("NIX9_DUMP_PROGRAM").value_or("");
+            ramfsProgram = getEnv("NIX9_RAMFS").value_or("");
+            if (buildUser != "none" || buildLauncher.empty() || dumpProgram.empty() || ramfsProgram.empty())
+                throw Error("shared builds require a native build identity and launcher");
+            // Limit this first shared backend to one build per store. Each job
+            // has a separate, revocable filesystem and anonymous process group.
+            auto builds = store.config->stateDir.get() / "builds";
+            createDirs(builds);
+            buildLock = std::make_unique<PathLocks>();
+            if (!buildLock->lockPaths({builds / "slot"}, "", false)) return std::nullopt;
+            auto outer = createTempDir(builds, "build", 0700);
+            temp = std::make_unique<AutoDelete>(outer);
+            sharedBuild = outer / "view";
+            createDirs(*sharedBuild / "build");
+            directory = *sharedBuild / "build";
+            runProgram2({.program = buildLauncher,
+                .args = {"-P", sharedBuild->string(), ramfsProgram}});
+        } else {
+            directory = createTempDir("/tmp", "nix-build");
+            temp = std::make_unique<AutoDelete>(directory);
+        }
+        auto visibleDirectory = sharedBuild ? std::filesystem::path("/tmp/build") : directory;
         for (auto &[name, path] : outputPaths) {
             auto scratch = path;
             if (buildMode != bmNormal || store.isValidPath(path)) {
@@ -137,13 +172,15 @@ public:
             scratchOutputs.emplace(name, scratch);
         }
         StringMap env{{"PATH", "/path-not-set"}, {"HOME", "/homeless-shelter"},
-                      {"NIX_STORE", store.storeDir}, {"NIX_BUILD_TOP", directory.string()},
-                      {"TMPDIR", directory.string()}, {"TMP", directory.string()},
-                      {"TEMP", directory.string()}};
+                      {"NIX_STORE", store.storeDir}, {"NIX_BUILD_TOP", visibleDirectory.string()},
+                      {"TMPDIR", visibleDirectory.string()}, {"TMP", visibleDirectory.string()},
+                      {"TEMP", visibleDirectory.string()}};
         for (auto &[name, value] : desugaredEnv.variables)
-            env[name] = value.prependBuildDirectory ? (directory / value.value).string() : value.value;
-        for (auto &[name, value] : desugaredEnv.extraFiles)
+            env[name] = value.prependBuildDirectory ? (visibleDirectory / value.value).string() : value.value;
+        for (auto &[name, value] : desugaredEnv.extraFiles) {
             writeFile(directory / name, rewriteStrings(value, inputRewrites));
+            if (sharedBuild) chmod(directory / name, 0444);
+        }
         for (auto &[name, path] : scratchOutputs)
             env[name] = store.printStorePath(path);
         callbacks->openLogFile();
@@ -172,8 +209,27 @@ public:
             Strings args;
             for (auto &arg : drv.args) args.push_back(rewriteStrings(arg, inputRewrites));
             args.push_front(drv.builder);
+            auto executable = drv.builder;
+            if (sharedBuild) {
+                args.push_front(store.storeDir);
+                args.push_front(sharedBuild->string());
+                args.push_front(buildUser);
+                args.push_front("-B");
+                args.push_front(buildLauncher);
+                executable = buildLauncher;
+            } else if (store.storeDir != store.config->realStoreDir.get()) {
+                // Set up the private view in native rc, then replace it with the
+                // builder. Avoid another C++ fork/wait inside this forked child.
+                args.push_front(store.storeDir);
+                args.push_front(store.config->realStoreDir.get().string());
+                args.push_front("rfork n; /bin/bind -c $1 $2; shift 2; exec $*");
+                args.push_front("-c");
+                args.push_front("-e");
+                args.push_front("/bin/rc");
+                executable = "/bin/rc";
+            }
             restoreProcessContext();
-            execv(drv.builder.c_str(), stringsToCharPtrs(args).data());
+            execv(executable.c_str(), stringsToCharPtrs(args).data());
             throw SysError("executing builder '%s'", drv.builder);
         });
         ready.writeSide.close();
@@ -195,6 +251,25 @@ public:
         callbacks->closeLogFile();
         if (!statusOk(status))
             throw BuilderFailureError{BuildResult::Failure::PermanentFailure, status, ""};
+        if (sharedBuild) {
+            // Read outputs under the builder's identity. Restore them as the
+            // store owner; no chown or builder write access to the store is needed.
+            for (auto &[name, path] : scratchOutputs) {
+                // Spool through an owner-only archive. The native helper opens
+                // it before dropping identity, and only the trusted NAR reader
+                // inherits that write descriptor. Builders never see it.
+                runProgram2({.program = buildLauncher,
+                    .args = {"-D", buildUser, sharedBuild->string(), store.storeDir,
+                        dumpProgram, "--dump", store.printStorePath(path)}});
+                auto archive = *sharedBuild / "output.nar";
+                AutoCloseFD fd(open(archive.c_str(), O_RDONLY | O_CLOEXEC));
+                if (!fd) throw SysError("opening private build output");
+                FdSource source(fd.get());
+                restorePath(store.toRealPath(path), source);
+                fd.close();
+                deletePath(archive);
+            }
+        }
         auto references = inputPaths;
         for (auto &[name, path] : outputPaths) references.insert(path);
         std::map<std::string, ValidPathInfo> infos;

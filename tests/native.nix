@@ -19,6 +19,15 @@
   vmTest,
 }:
 {
+  native-shared-store-tests = vmTest "native-shared-store-tests" {
+    script = ./native_shared_store.py;
+    files = [
+      ./shared-store.nix
+      ./shared-detached.c
+      ./remote-delay.c
+    ];
+    args = "${nativeBootstrap} \"$out\"";
+  };
   native-user-tests = vmTest "native-user-tests" {
     nativeBuildInputs = [
       pkgs.netcat-openbsd

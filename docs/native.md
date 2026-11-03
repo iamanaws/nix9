@@ -100,34 +100,24 @@ release, run `nix-profile $roots/nix9 rollback` and source the activation file.
 Releases, environments and [system configurations](configuration.md) have
 separate profiles.
 
-## Personal stores
+## Shared-store prototype
 
-Each writable store has one native owner. Other users can run the packages in
-the selected system without opening its store database. For their own Nix builds
-on managed CPUs, select a separate store after system activation:
+`native-shared-store-tests` exercises two authenticated users sharing one CPU's
+store through Nix's worker protocol. A native listener uses factotum and TLS;
+the store remains writable only by its owner. Builds run as Plan 9's anonymous
+`none` identity in a fresh namespace with a private RAMFS. The owner imports
+their outputs, then revokes that filesystem, including descriptors retained by
+detached processes. Builders cannot access the owner's credentials; the kernel
+also restricts the anonymous identity's access to other processes.
 
-```sh
-. /usr/local/pkg/nix9/system
-nixStore=$home/nix/$nix9MachineId
-NIX_REMOTE='local?store='^$nixStore^'/store&state='^$nixStore^'/state&log='^$nixStore^'/log'
-```
+The prototype supports `nix-build --no-out-link` through an explicitly selected
+daemon connection, with one build at a time per store. This is an ownership
+boundary, not a full sandbox. Profiles, development shells, managed startup and
+multi-CPU use are not integrated yet. The [test](../tests/native_shared_store.py)
+provisions disposable accounts and runtime keys.
 
-Add these settings after system activation in `$home/lib/profile` for later
-logins. `nix9MachineId` must identify the current machine, and user builds need
-a writable `/tmp`, as declared in the shared-user example.
-Keep a separate store for each CPU even when the home is shared: native store
-locks do not coordinate different kernels.
-
-Build with `--option substitute false`. Personal stores use different absolute
-output paths, so the standard bootstrap cache cannot supply their packages and
-these stores cannot build for each other through the remote-builder interface.
-Run Nix on the chosen CPU with `rcpu`; use `--builders ''` if that machine has
-remote builders configured.
-Output roots and environment generations live under `$nixStore/state/gcroots`;
-the ordinary [environment commands](#generations-and-updates) apply there.
-See the [shared-user example](users.md#work-on-either-cpu).
-
-Refreshing `/usr/local/pkg/nix9/system` selects the machine store again.
+One timeout run returned a malformed protocol response; its cause remains
+unresolved, although the repeat and packaged suites passed.
 
 ## Store maintenance
 

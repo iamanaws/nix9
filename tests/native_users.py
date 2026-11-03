@@ -1,4 +1,4 @@
-"""Shared users on two CPUs, private Nix stores and CWFS account changes."""
+"""Shared users on two CPUs, protected machine stores and CWFS account changes."""
 
 from contextlib import ExitStack, contextmanager, nullcontext
 import functools
@@ -69,9 +69,6 @@ with ExitStack() as stack:
     work = Path(stack.enter_context(nullcontext(state) if state else tempfile.TemporaryDirectory())).resolve()
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
-    (work / "personal-store.rc").write_text(
-        "r=$home/nix/$nix9MachineId\n"
-        "NIX_REMOTE='local?store='^$r^'/store&state='^$r^'/state&log='^$r^'/log'\n")
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
     shutil.copyfile(Path(__file__).with_name("accounts.nix"), work / "accounts.nix")
     (work / "cwfs.setup").write_text("service files\nconfig /adm/storage/config\n"
@@ -120,7 +117,8 @@ with ExitStack() as stack:
     disk(foundation, image)
     with boot(qemu, foundation, snapshot=False) as guest:
         guest.child.timeout = 1200
-        guest.command(f"cd / && hget {base}/bootstrap.tar | tar x")
+        download(guest, "bootstrap.tar")
+        guest.command("cd / && tar xf /tmp/bootstrap.tar && rm /tmp/bootstrap.tar")
         guest.command(". /usr/local/pkg/nix9/activate")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb --out-link " + ROOTS + "/user-tools")
 
@@ -223,7 +221,6 @@ with ExitStack() as stack:
         files.command(f"rc {artifact}/prepare /n/site /tmp/node-bootstrap.tar")
         directory = "/n/site/machines/" + name
         download(files, name + ".keys", directory + "/adm/cpu.keys", private=True)
-        download(files, "personal-store.rc", directory + "/tmp/personal-store.rc")
         files.command(f"echo {systems[name]['first']} > {directory}/tmp/system-path")
         files.command(f"nix-store --export `{{nix-store -qR {systems[name]['first']}}} > {directory}/tmp/system.export")
         settings = files.command("cat " + artifact + "/plan9.ini")
@@ -297,62 +294,10 @@ with ExitStack() as stack:
     remote("alice", "mkdir -p /n/projects/hello && cp $nix9/packages/examples/workstation/project/* /n/projects/hello/")
     remote("alice", "chmod 770 /n/projects/hello && chmod 660 /n/projects/hello/*")
 
-    def personal(user, machine, command, expected=None):
-        return remote(user, ". /tmp/personal-store.rc; " + command, expected, machine=machine)
-
-    # Use a script to avoid long UART command lines and exercise independent
-    # user stores concurrently on both kernels. Keep each job's exit status.
-    jobs = [f"{user}-{machine}" for machine in CPUS for user in ("alice", "bob")]
-    commands = ["mkdir -p /tmp/user-builds", "chmod 700 /tmp/user-builds"]
-    for machine in CPUS:
-        for user in ("alice", "bob"):
-            job = f"{user}-{machine}"
-            command = (". /tmp/personal-store.rc && "
-                       "nix-build /n/projects/hello/environment.nix --option substitute false")
-            commands.extend([
-                "@{",
-                f"rcpu -u {user} -h {machine} -c {quote(command)} > /tmp/user-builds/{job}.out >[2] /tmp/user-builds/{job}.log",
-                f"echo -n $status > /tmp/user-builds/{job}.status",
-                f"if(test -s /tmp/user-builds/{job}.status) cat /tmp/user-builds/{job}.log /tmp/user-builds/{job}.out",
-                f"echo USER-BUILD-FINISHED {job}",
-                "} &",
-            ])
-    commands.extend(["wait", "failed=0"])
-    for job in jobs:
-        commands.extend([
-            f"if(! test -f /tmp/user-builds/{job}.status) failed=1",
-            f"if(test -s /tmp/user-builds/{job}.status) {{",
-            f"cat /tmp/user-builds/{job}.log /tmp/user-builds/{job}.out",
-            "failed=1",
-            "}",
-        ])
-    commands.append("if(~ $failed 1) exit 'personal builds failed'")
-    commands.append("exit ''")
-    (work / "build-users.rc").write_text("\n".join(commands) + "\n")
-    auth.command("webfs")
-    download(auth, "build-users.rc")
-    auth.child.timeout = 2400
-    auth.command("rc /tmp/build-users.rc")
-
-    environments = {}
-    for machine in CPUS:
-        for user in ("alice", "bob"):
-            result = personal(user, machine, "cat $r/state/gcroots/result")
-            prefix = f"/usr/{user}/nix/{machine}/store/"
-            outputs = re.findall(r"(?m)^" + re.escape(prefix) + r"[^\s]+$", result)
-            if len(outputs) != 1:
-                raise RuntimeError(f"missing personal environment for {user}@{machine}: {result}")
-            environment = outputs[0]
-            environments[user, machine] = environment
-            personal(user, machine, "nix-profile $r/state/gcroots/environment set `{cat $r/state/gcroots/result}")
-            personal(user, machine, ". $nix9/packages/profile $r/state/gcroots/environment && hello",
-                     "hello from the shared workspace")
-            personal(user, machine, f"nix-store --verify-path {environment}")
-    personal("alice", "build", "nix-store --gc")
-    personal("alice", "build", ". $nix9/packages/profile $r/state/gcroots/environment && hello",
-             "hello from the shared workspace")
-    rejected(auth, "rcpu -u bob -h batch -c 'cat /usr/alice/nix/build/state/gcroots/environment'", "")
-    print("PASS: both users build and activate personal Nix environments on both CPUs; shared system store remains protected", flush=True)
+    remote("alice", "echo alice > /n/projects/hello/participants && chmod 660 /n/projects/hello/participants")
+    remote("bob", "echo bob >> /n/projects/hello/participants", machine="batch")
+    remote("alice", "cat /n/projects/hello/participants", "bob")
+    print("PASS: both CPUs expose system packages and shared sources while protecting machine stores", flush=True)
 
     updated = path(files, "nix-build /tmp/accounts.nix -A updatedCpu --no-out-link")
     # The update adds a literal file; its dependencies are already on the CPU.
@@ -363,12 +308,10 @@ with ExitStack() as stack:
     cpus["build"] = stack.enter_context(start_cpu("build"))
     remote("alice", "cat /cfg/nix9/files/user-workflow", "updated")
     cpus["batch"].command(f"~ `{{cat {ROOTS}/machines/batch/system}} {systems['batch']['first']}")
-    personal("bob", "batch", ". $nix9/packages/profile $r/state/gcroots/environment && hello",
-             "hello from the shared workspace")
-    personal("alice", "build", ". $nix9/packages/profile $r/state/gcroots/environment && hello",
-             "hello from the shared workspace")
-    personal("alice", "build", f"nix-store --verify-path {environments['alice', 'build']}")
-    print("PASS: updating and rebooting one CPU preserves the other CPU, shared homes and personal package selections", flush=True)
+    remote("bob", "fortune > $home/fortune && test -s $home/fortune", machine="batch")
+    remote("alice", "cat /usr/alice/private", "alice-private")
+    remote("alice", "cat /n/projects/hello/participants", "bob")
+    print("PASS: updating and rebooting one CPU preserves the other CPU, shared homes and project edits", flush=True)
 
     files.command("cp /n/site/adm/users /tmp/users-before-check")
     for attribute, reason in (("conflicting", "existing name has another ID"), ("occupied", "ID belongs to another name"),
@@ -410,11 +353,8 @@ with ExitStack() as stack:
     Path(output, "results.json").write_text(json.dumps({
         "status": "passed", "machines": 4, "users": ["alice", "bob"], "fileServerBoots": 4,
         "cpuBoots": {"build": 6, "batch": 5},
-        "environments": {f"{user}@{machine}": environment
-                         for (user, machine), environment in environments.items()},
         "checks": ["missing-keys", "empty-keys", "disabled-keys", "expired-keys", "two-user-login",
-                   "two-cpu-homes", "system-packages", "private-stores", "personal-environments",
-                   "concurrent-store-initialization", "concurrent-user-builds", "personal-gc", "independent-cpu-update",
+                   "two-cpu-homes", "system-packages", "machine-store-permissions", "shared-source-editing", "independent-cpu-update",
                    "private-homes", "shared-project", "id-conflicts", "unknown-members", "directory-preflight",
                    "boot-policy", "group-revocation", "undeclared-accounts", "rollback", "delegated-authentication"],
     }, indent=2) + "\n")

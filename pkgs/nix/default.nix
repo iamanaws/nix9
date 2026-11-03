@@ -54,10 +54,11 @@ runCommand "nix-${version}"
     cp ${./meson.build} meson.build
     cp ${./main.cc} main.cc
     cp ${./shell.cc} shell.cc
+    cp ${./daemon-worker.cc} daemon-worker.cc
     export PKG_CONFIG_LIBDIR=${libraries}/lib/pkgconfig
     meson setup build --cross-file ${libraries}/cross.ini \
       --wrap-mode=nofallback -Dbuildtype=plain -Doptimization=2
     ninja -C build -j "$NIX_BUILD_CORES"
     mkdir -p "$out"
-    cp build/nix-{store,instantiate,build,build-remote}.elf "$out/"
+    cp build/nix-{store,instantiate,build,build-remote,daemon-worker}.elf "$out/"
   ''

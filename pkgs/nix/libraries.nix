@@ -101,6 +101,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/eval-fetch.patch}
     patch -p1 < ${./patches/meson.patch}
     patch -p1 < ${./patches/remote-build.patch}
+    patch -p1 < ${./patches/shared-store.patch}
     cd ..
     nixSource="$PWD/nix-${version}"
     mkdir -p library-project/subprojects
@@ -113,6 +114,7 @@ runCommand "nix-${version}-9front-libraries"
     cp ${./build-platform.cc} "$nixSource/src/libstore/plan9/build-platform.cc"
     cp ${./filetransfer-platform.cc} "$nixSource/src/libstore/plan9/filetransfer-platform.cc"
     cp ${./cpu-store.cc} "$nixSource/src/libstore/plan9/cpu-store.cc"
+    cp ${./daemon-store.cc} "$nixSource/src/libstore/plan9/daemon-store.cc"
     mkdir "$nixSource/src/libfetchers/plan9"
     cp ${./eval-platform.cc} "$nixSource/src/libfetchers/plan9/eval-platform.cc"
     substitute ${cc9.meson} cross.ini \

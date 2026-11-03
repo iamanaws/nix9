@@ -123,7 +123,7 @@
          }
  
          else if (*arg == "--check")
-@@ -312,12 +358,36 @@
+@@ -312,12 +358,39 @@
          return true;
      });
  
@@ -150,8 +150,11 @@
      auto store = openStore();
 +#ifdef __plan9__
 +    auto local = store.dynamic_pointer_cast<LocalStore>();
-+    if (!local) throw UsageError("nix-build requires a local store on Plan 9");
-+    auto roots = canonPath(local->config->stateDir.get() / "gcroots");
++    auto localFS = store.dynamic_pointer_cast<LocalFSStore>();
++    if (!localFS) throw UsageError("nix-build requires a filesystem store on Plan 9");
++    if (!local && (isNixShell || !explicitOutLink || !outLink.empty()))
++        throw UsageError("the shared-store prototype requires --no-out-link; profiles and development shells are not implemented yet");
++    auto roots = canonPath(localFS->config.stateDir.get() / "gcroots");
 +    if (isNixShell) outLink.clear();
 +    else if (!explicitOutLink) outLink = (roots / "result").string();
 +    if (!outLink.empty() && !isInDir(canonPath(absPath(outLink)), roots))

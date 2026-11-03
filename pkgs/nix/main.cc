@@ -10,6 +10,10 @@
 
 namespace nix {
 
+#ifdef NIX_DAEMON
+void runDaemonConnection();
+#endif
+
 #ifdef NIX_BUILD
 [[noreturn]] void runEnvironmentSession(int argc, char **argv);
 #endif
@@ -74,7 +78,10 @@ int main(int argc, char ** argv)
 {
     return nix::handleExceptions(argv[0], [&] {
         nix::initNix();
-#if defined(NIX_INSTANTIATE) || defined(NIX_BUILD)
+#ifdef NIX_DAEMON
+        if (argc != 1) throw nix::UsageError("the daemon worker takes no arguments");
+        nix::runDaemonConnection();
+#elif defined(NIX_INSTANTIATE) || defined(NIX_BUILD)
         nix::initGC();
 #ifdef NIX_BUILD
         if (argc > 1 && std::string_view(argv[1]) == "--run-session")

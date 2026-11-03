@@ -20,6 +20,12 @@ let
 in
 {
   inherit dependency;
+  namespace = mk "diverted-namespace" ''
+    /bin/test ! -e /tmp/n9-diverted/store/machine-only || exit 'machine store visible to builder'
+    /bin/cat $input > $out
+    /bin/echo $input >> $out
+    /bin/echo $out >> $out
+  '' { input = dependency; };
   hello = mk "cli-hello" "/bin/echo ran >> /tmp/nix9-cli-count; /bin/echo $message > $out" {
     inherit message;
   };

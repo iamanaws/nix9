@@ -1,0 +1,32 @@
+--- a/src/libstore/meson.build
++++ b/src/libstore/meson.build
+@@ -334,6 +334,8 @@
+ if host_machine.system() == 'plan9'
+   sources += files('plan9/store-platform.cc', 'plan9/build-platform.cc',
+     'plan9/filetransfer-platform.cc', 'plan9/cpu-store.cc',
++    'plan9/daemon-store.cc', 'daemon.cc', 'remote-store.cc',
++    'worker-protocol-connection.cc',
+     'serve-protocol.cc', 'serve-protocol-connection.cc', 'http-binary-cache-store.cc')
+ else
+   sources += files(
+--- a/src/libstore/remote-store.cc
++++ b/src/libstore/remote-store.cc
+@@ -20,7 +20,7 @@
+ #include "nix/util/signals.hh"
+ #include "nix/util/socket.hh"
+ 
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__plan9__)
+ #  include <sys/socket.h>
+ #endif
+ 
+@@ -816,7 +816,9 @@
+            reads/writes without actually closing the FD (which would cause
+            issues if the connection is still in use). This breaks circular
+            waits when the client disconnects during long-running operations. */
++#ifndef __plan9__
+         ::shutdown(toSocket(fd), SHUT_RDWR);
++#endif
+     }
+ }
+ 
