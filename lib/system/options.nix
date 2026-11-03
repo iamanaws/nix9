@@ -33,6 +33,10 @@ in
       enable = lib.mkDefault true;
       files.cwfs.mode = lib.mkDefault "0640";
     })
+    (lib.mkIf config.services.nixStore.enable {
+      enable = lib.mkDefault true;
+      files.nix9-store.mode = lib.mkDefault "0640";
+    })
   ];
   config.directories = lib.mkMerge (
     map (user: {
@@ -97,6 +101,7 @@ in
           }
           ./modules/auth.nix
           ./modules/cpu.nix
+          ./modules/nix-store.nix
           ./modules/exports.nix
           ./modules/cron.nix
           ./modules/cwfs.nix

@@ -27,3 +27,5 @@ if(~ $nix9AuthEnabled 1) {
   bind $nix9ListenStartSystem/services/auth-policy /lib/ndb/auth || exit 'cannot bind authentication policy'
   trust=($nix9ListenStartSystem/services/auth)
 }
+if(test -f $nix9ListenStartSystem/services/nix-store-start)
+  . $nix9ListenStartSystem/services/nix-store-start

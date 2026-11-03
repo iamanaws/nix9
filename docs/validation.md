@@ -29,6 +29,7 @@ with the Nix sandbox enabled.
 | `package-tests`, `guest-development-tests` | Archive installation and native/APE C builds, including Lua, with image headers and libraries hidden. |
 | `nix-core-tests` | Nix libraries, commands, NARs, process handling and store primitives. |
 | `native-shared-store-tests` | Two authenticated users on one CPU: package reuse and native C builds, root ownership, independent profiles, rollback, concurrent updates and GC; protected credentials, anonymous builders, private output import, detached-writer revocation, consecutive connections, process cleanup and queued builds after timeouts, cancellation or repeated client death. |
+| `store-service-tests`, `native-store-service-tests` | Shared-store module validation, runtime key permissions, manual port conflicts, CPU startup, login defaults, policy and port changes, rollback, disable and retained user profiles across reboot and GC. |
 | `nix-native-tests` | Toolchain bootstrap, dependency builds, fixed hashes, multiple outputs, partial rebuilds, rebuild comparisons, cancellation, profiles, roots and GC. |
 | `nix-fetch-tests` | Evaluator file/archive hashes, relative imports, executable bits, malformed archives, path confinement, pure evaluation and offline reuse. |
 | `nix-store-tests` | Signed caches, transfers, repair and recovery. Includes two-VM read-only 9P reuse after the server stops, and HTTP(S) failure cases. |

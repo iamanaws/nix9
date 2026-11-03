@@ -100,19 +100,36 @@ release, run `nix-profile $roots/nix9 rollback` and source the activation file.
 Releases, environments and [system configurations](configuration.md) have
 separate profiles.
 
-## Shared-store prototype
+## Shared store
 
-`native-shared-store-tests` exercises two authenticated users sharing one CPU's
-store through Nix's worker protocol. A native listener uses factotum and TLS;
-the store remains writable only by its owner. Builds run as Plan 9's anonymous
-`none` identity in a fresh namespace with a private RAMFS. The owner imports
-their outputs, then revokes that filesystem, including descriptors retained by
-detached processes. Builders cannot access the owner's credentials; the kernel
-also restricts the anonymous identity's access to other processes.
+Enable a shared store in a CPU server's [system configuration](configuration.md):
 
-With an authenticated daemon connection selected, ordinary builds retain their
-results in `/usr/local/nix/state/gcroots/per-user/USER`. Each user has independent
-environment generations over the same package files:
+```nix
+{
+  services.nixStore = {
+    enable = true;
+    allowedUsers = [ "alice" "bob" ];
+    keyFile = "/adm/nix-store.keys";
+    keyPattern = "dom=example.net user=build";
+  };
+}
+```
+
+The CPU boots as the store owner. Provision the users, their factotum credentials
+and native authentication discovery first, as for [CPU access](services.md#cpu-access-and-authentication).
+`keyFile` contains private factotum key commands and must be readable only by its
+owner; leave it unset to use already provisioned server keys. Keep secrets out of
+Nix expressions and the store.
+
+After selection and reboot, ordinary logins use the authenticated local service
+automatically. The store owner and `nix9` system-management commands use the local
+store directly. The listener binds `127.0.0.1` on port `17051`; `port` overrides
+it. Policy, port and enable changes apply at CPU reboot. Login or session refresh
+uses the booted service even when a different system generation is selected.
+Diagnostics go to `/sys/log/nix9-store`; `nix9 status --health` checks its listener.
+
+Users share package files, with independent roots and environment generations
+under `/usr/local/nix/state/gcroots/per-user/USER`:
 
 ```sh
 roots=`{nix-store --roots-dir}
@@ -126,14 +143,12 @@ change. Use `nix-store --delete-root $roots/result` to release a build result;
 `nix-profile` manages retained generations. GC keeps paths referenced by any user.
 Profile updates are serialized, including updates from separate sessions.
 
-There is one build at a time per store. This is an ownership boundary, not a full
-sandbox. Development shells, managed startup and multi-CPU use are not integrated
-yet. The [test](../tests/native_shared_store.py) provisions disposable accounts
-and runtime keys. Clients and services must both support shared roots and profiles.
-
-Recovery tests cover repeated timeouts, cancellation and killed clients, checking
-process cleanup and queued builds without restarting the listener. An earlier
-malformed timeout reply has not recurred; its exact cause remains unconfirmed.
+System rollback and disabling the service preserve user roots and profiles.
+Only the owner can write the store. Builds run one at a time as Plan 9's anonymous
+`none` identity in a private RAMFS; the owner imports outputs and revokes the
+filesystem afterward. This provides an ownership boundary, not a full sandbox.
+Shared-store development shells and multi-CPU use are not integrated yet.
+See [validation](validation.md) for lifecycle, access and recovery coverage.
 
 ## Store maintenance
 

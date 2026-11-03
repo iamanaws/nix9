@@ -28,7 +28,17 @@ rfork ne && {
         nix9System=$nix9NextSystem
         sysname=`{cat $nix9System/hostName}
         nix9NextSystem=()
-        . $nix9System/services/webfs.rc
+        . $nix9System/services/webfs.rc && {
+          # Clients follow the booted listener, independently of session selection.
+          NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'
+          if(~ $#nix9SystemRoot 1 && test -r $nix9SystemRoot^-boot && ! test -w /usr/local/nix/state/db/db.sqlite) {
+            nix9BootedSystem=`{cat $nix9SystemRoot^-boot}
+            if(test -f $nix9BootedSystem/services/nix-store-client)
+              . $nix9BootedSystem/services/nix-store-client
+            nix9BootedSystem=()
+          }
+          status=''
+        }
       }
   }
   }

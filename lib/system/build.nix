@@ -104,6 +104,7 @@ let
         ndb ? { },
         auth,
         cpu,
+        nixStore,
         exports,
         cron,
         cwfs,
@@ -161,6 +162,7 @@ let
             lib
             auth
             cpu
+            nixStore
             authPackage
             cpuPackage
             exportfsPackage
@@ -271,6 +273,20 @@ else if access != null && access.cpu.enable && listenScripts ? "17019" then
 else if access != null && access.auth.enable && listenScripts ? "567" then
   throw "mkSystem: services.auth owns TCP port 567"
 else if
+  services.nixStore.enable
+  && (
+    builtins.elem services.nixStore.port [
+      53
+      567
+      17019
+    ]
+    || builtins.hasAttr (toString services.nixStore.port) listenScripts
+    || builtins.hasAttr (toString services.nixStore.port) sharing.scripts
+    || (storage != null && services.cwfs.port == services.nixStore.port)
+  )
+then
+  throw "mkSystem: services.nixStore.port conflicts with another TCP service"
+else if
   ndb != null
   && ndb.dns.listenAddresses != [ ]
   && (listenScripts ? "53" || sharing.scripts ? "53" || (storage != null && services.cwfs.port == 53))
@@ -365,6 +381,22 @@ else
         ${write "services/webfs.rc" (builtins.readFile ./webfs.rc)}
         ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
         ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}
+        ${lib.optionalString services.nixStore.enable ''
+          ${write "services/nix-store-users" (
+            lib.concatStringsSep "\n" (lib.unique services.nixStore.allowedUsers) + "\n"
+          )}
+          ${write "services/nix-store-port" (toString services.nixStore.port + "\n")}
+          ${write "services/nix-store-start" (
+            ''
+              nix9StorePort=${toString services.nixStore.port}
+              nix9StoreKeyPattern=${quote services.nixStore.keyPattern}
+            ''
+            + builtins.readFile ./nix-store-start.rc
+          )}
+          ${write "services/nix-store-client" ''
+            NIX_REMOTE='daemon?address=tcp!127.0.0.1!${toString services.nixStore.port}&key-pattern=user='^`{cat /dev/user}
+          ''}
+        ''}
         ${write "namespace/config" sharing.configuration}
         ${write "services/namespace-mounts" (builtins.readFile ./namespace-mounts.rc)}
         echo 'nix9NamespaceNext='$out > $out/services/namespace.rc

@@ -30,6 +30,7 @@ case *
   fail 'unknown action:' $action '; see' $commandName help
 }
 if(! ~ $#nix9 1) fail 'activate a nix9 installation first'
+NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'
 path=($nix9/bin /$cputype/bin /rc/bin)
 . $nix9/packages/system/machine.rc || fail 'machine setup failed'
 . $nix9/packages/system/output.rc

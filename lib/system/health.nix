@@ -36,6 +36,9 @@ in
       ${listener "auth/listener" 567}
     ''}
     ${lib.optionalString services.cpu.enable (listener "cpu/listener" 17019)}
+    ${lib.optionalString services.nixStore.enable (
+      listener "nixStore/listener" services.nixStore.port
+    )}
     ${lib.optionalString services.cwfs.enable (listener "cwfs/listener" services.cwfs.port)}
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (name: export: ''

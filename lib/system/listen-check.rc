@@ -26,4 +26,9 @@ for(file in $nix9ListenCheckSystem/services/listen/tcp*) {
       fail 'a manual service or namespace already owns' $name 'in' $directory
   }
 }
+if(test -f $nix9ListenCheckSystem/services/nix-store-port) {
+  name=tcp^`{cat $nix9ListenCheckSystem/services/nix-store-port}
+  if(test -e $directory/$name || test -e $directory/$name^.namespace)
+    fail 'a manual service or namespace already owns' $name 'in' $directory
+}
 exit ''

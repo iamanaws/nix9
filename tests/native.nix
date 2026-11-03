@@ -19,6 +19,25 @@
   vmTest,
 }:
 {
+  native-store-service-tests = vmTest "native-store-service-tests" {
+    script = ./native_store_service.py;
+    files = [
+      ./store-service.nix
+      ./shared-store.nix
+    ];
+    args = "${
+      nativeBootstrap.override {
+        cachePackages = [
+          "auth"
+          "rc"
+          "rcpu"
+          "ndb"
+          "listen"
+          "namespaceTools"
+        ];
+      }
+    } \"$out\"";
+  };
   native-shared-store-tests = vmTest "native-shared-store-tests" {
     script = ./native_shared_store.py;
     files = [

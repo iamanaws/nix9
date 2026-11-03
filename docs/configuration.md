@@ -101,6 +101,7 @@ Selection and rollback apply settings at different times:
 | Ethernet and clock synchronization | Next boot. |
 | DHCP serving | Next boot. Dynamic leases persist across selection and rollback. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
+| [Shared Nix store](native.md#shared-store) access and port | Next CPU-server boot. Login defaults follow the booted service; user profiles persist. |
 | CWFS data service and daily dump policy | Next CPU-server boot. Project contents and historical dumps persist across system selections. |
 | Backup definitions | Next invocation in an activated system session. See [backups](backups.md). |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |
