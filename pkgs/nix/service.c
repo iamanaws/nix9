@@ -10,6 +10,7 @@ static char *address = "tcp!127.0.0.1!17051";
 static char *keys = "";
 static char *policy, *worker, *launcher;
 static char *builduser = "none";
+static char *clientpid;
 
 typedef struct Input Input;
 struct Input {
@@ -20,7 +21,7 @@ struct Input {
 static void
 usage(void)
 {
-	fprint(2, "usage: nix-store-service -c [-a address] [-k keypattern]\n"
+	fprint(2, "usage: nix-store-service -c [-a address] [-k keypattern] [-p client-pid]\n"
 		"       nix-store-service [-a address] [-k keypattern] -u allowed-users -w worker\n");
 	exits("usage");
 }
@@ -42,7 +43,7 @@ username(char *s)
 }
 
 static void
-closeextraexcept(int keep)
+closeexcept(int keep, int other)
 {
 	Dir *dirs;
 	int fd, i, n, value;
@@ -56,10 +57,16 @@ closeextraexcept(int keep)
 		sysfatal("read /fd: %r");
 	for(i = 0; i < n; i++){
 		value = atoi(dirs[i].name);
-		if(value > 2 && value != keep)
+		if(value > 2 && value != keep && value != other)
 			close(value);
 	}
 	free(dirs);
+}
+
+static void
+closeextraexcept(int keep)
+{
+	closeexcept(keep, -1);
 }
 
 static void
@@ -151,12 +158,65 @@ writeall(int fd, char *data, long size)
 }
 
 static void
+watchclient(void)
+{
+	char *path, *end, byte;
+	long pid;
+	int fd, owner;
+
+	if(clientpid == nil)
+		return;
+	pid = strtol(clientpid, &end, 10);
+	if(*end != 0 || pid <= 1)
+		sysfatal("invalid client pid");
+	path = smprint("/proc/%ld/status", pid);
+	fd = open(path, OREAD|OCEXEC);
+	free(path);
+	if(fd < 0)
+		sysfatal("open client process: %r");
+	path = smprint("/proc/%d/status", getpid());
+	owner = open(path, OREAD|OCEXEC);
+	free(path);
+	if(owner < 0)
+		sysfatal("open connection process: %r");
+	switch(rfork(RFPROC|RFFDG|RFNOWAIT)){
+	case -1:
+		sysfatal("fork client monitor: %r");
+	case 0:
+		/* Orphaned cc9 threads may retain pipe descriptors after their main
+		 * process dies. Watch the process itself without retaining the pipes. */
+		closeexcept(fd, owner);
+		close(0);
+		close(1);
+		close(2);
+		while(pread(fd, &byte, 1, 0) == 1 && pread(owner, &byte, 1, 0) == 1)
+			sleep(100);
+		postnote(PNGROUP, getpid(), "kill");
+		exits(nil);
+	default:
+		close(fd);
+		close(owner);
+	}
+}
+
+static int
+clientnote(void*, char *note)
+{
+	/* Let transfer() finish and stop both directions on a broken pipe. */
+	return strstr(note, "sys: write on closed pipe") != nil;
+}
+
+static void
 client(void)
 {
 	AuthInfo *ai;
 	TLSconn conn;
 	int fd;
 
+	if(rfork(RFNOTEG) < 0)
+		sysfatal("client note group: %r");
+	atnotify(clientnote, 1);
+	watchclient();
 	fd = dial(address, nil, nil, nil);
 	if(fd < 0)
 		sysfatal("dial store service: %r");
@@ -181,7 +241,7 @@ client(void)
 		transfer(fd, 1);
 		break;
 	}
-	/* The C++ client gives this helper its own note group. */
+	/* Stop both transfer directions and the watcher in our private group. */
 	postnote(PNGROUP, getpid(), "kill");
 	exits(nil);
 }
@@ -470,6 +530,7 @@ main(int argc, char **argv)
 	isclient = 0;
 	ARGBEGIN{
 	case 'c': isclient = 1; break;
+	case 'p': clientpid = EARGF(usage()); break;
 	case 'a': address = EARGF(usage()); break;
 	case 'k': keys = EARGF(usage()); break;
 	case 'u': policy = EARGF(usage()); break;

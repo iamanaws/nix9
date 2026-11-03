@@ -1,0 +1,59 @@
+--- a/poll.c
++++ b/poll.c
+@@ -194,7 +194,7 @@
+ static void tab_init(void){
+ 	/* runs under tab_lock */
+ 	if(tab_inited) return;
+-	for(int i = 0; i < PFD_MAX; i++) tab[i].fd = -1;
++	for(int i = 0; i < PFD_MAX; i++) tab[i].fd = tab[i].rfd = -1;
+ 	tab_inited = 1;
+ }
+ 
+@@ -308,8 +308,9 @@
+ 	/* dead (fd closed under us): the slot is freed by whoever set dead once
+ 	 * BOTH threads are gone; here just drop our claim. eof/err: keep the slot
+ 	 * so cc9_poll_read can report 0/-1 until close() reclaims it. */
+-	if(p->rfd >= 0 && p->rfd != p->fd) n9_close(p->rfd);   /* release the private dup we owned */
+ 	n9_semacquire(&tab_lock, 1);
++	/* Keep descriptor retirement atomic with the fork snapshot. */
++	if(p->rfd >= 0 && p->rfd != p->fd) n9_close(p->rfd);
+ 	p->reader = 0;
+ 	p->rfd = -1;
+ 	if(p->dead && !p->writer) p->fd = -1;
+@@ -599,13 +600,23 @@
+  * their numbers still mean what the table says, and clear the thread flags —
+  * a slot left claiming reader=1 has nobody filling its ring, so the first read
+  * would block forever. */
++void cc9_poll_fork_prepare(void){ n9_semacquire(&tab_lock, 1); }
++void cc9_poll_fork_parent(void){ n9_semrelease(&tab_lock, 1); }
++
+ void cc9_poll_child_reset(void){
++	/* fork holds tab_lock while the kernel copies descriptors and memory. The
++	 * child has no readers/writers to release any copied semaphore. */
++	tab_lock = 1;
++	poll_sem = poll_waiters = 0;
+ 	if(!tab_inited) return;
+ 	for(int i = 0; i < PFD_MAX; i++){
+ 		if(tab[i].rfd >= 0 && tab[i].rfd != tab[i].fd) n9_close(tab[i].rfd);
+ 		tab[i].rfd = -1;
+ 		tab[i].reader = 0;
+ 		tab[i].writer = 0;
++		tab[i].lock = tab[i].wlock = 1;
++		tab[i].space = tab[i].data = tab[i].wdata = tab[i].wdrain = 0;
++		if(tab[i].dead) tab[i].fd = -1;
+ 	}
+ }
+ 
+--- a/posix_llvm.c
++++ b/posix_llvm.c
+@@ -794,7 +794,10 @@
+ 			return -1;
+ 		}
+ 	}
++	extern void cc9_poll_fork_prepare(void), cc9_poll_fork_parent(void);
++	cc9_poll_fork_prepare();
+ 	int pid = (int)n9_rfork(N9_RFPROC|N9_RFFDG|N9_RFENVG);
++	if (pid != 0) cc9_poll_fork_parent();
+ 	if (pid > 0) cc9_reap_forked(pid);
+ 	else if (pid == 0) {
+ 		cc9_reap_child_reset();                  /* copied tables describe the parent's kids */

@@ -102,6 +102,7 @@ runCommand "nix-${version}-9front-libraries"
     patch -p1 < ${./patches/meson.patch}
     patch -p1 < ${./patches/remote-build.patch}
     patch -p1 < ${./patches/shared-store.patch}
+    patch -p1 < ${./patches/connection-recovery.patch}
     cd ..
     nixSource="$PWD/nix-${version}"
     mkdir -p library-project/subprojects

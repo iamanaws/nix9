@@ -12,6 +12,10 @@ extern "C" int cc9_errno_from_errstr_or(int);
 
 namespace nix {
 
+// cc9 gives each thread a kernel PID. Record the process before threads start,
+// so a connection opened by a short-lived worker still follows the client.
+static const pid_t clientProcess = getpid();
+
 struct Plan9DaemonConfig : LocalFSStoreConfig, RemoteStoreConfig,
     std::enable_shared_from_this<Plan9DaemonConfig>
 {
@@ -66,7 +70,8 @@ struct Plan9DaemonStore : LocalFSStore, RemoteStore
                 dup2(connection->output.writeSide.get(), 1) == -1)
                 throw SysError("connecting daemon pipes");
             restoreProcessContext();
-            Strings args{helper.string(), "-c", "-a", config->address, "-k", config->keyPattern};
+            Strings args{helper.string(), "-c", "-p", std::to_string(clientProcess),
+                "-a", config->address, "-k", config->keyPattern};
             execv(helper.c_str(), stringsToCharPtrs(args).data());
             throw SysError("starting daemon connection");
         });

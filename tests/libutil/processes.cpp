@@ -1,13 +1,39 @@
 #include "nix/util/processes.hh"
 #include "nix/util/signals.hh"
 #include "nix/util/muxable-pipe.hh"
+#include "nix/util/monitor-fd.hh"
 #include "nix/util/environment-variables.hh"
 #include "nix/util/file-system.hh"
 #include "nix/store/pathlocks.hh"
 #include <cstdlib>
+#include <atomic>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <iostream>
+
+extern "C" int __real_poll(struct pollfd *, nfds_t, int);
+extern "C" long __real_n9_pread(int, void *, long, long long);
+static std::atomic<int> monitoredFd{-1}, monitorOwner{-1};
+static std::atomic<bool> deferMonitor, interruptOnPoll;
+
+extern "C" int __wrap_poll(struct pollfd *fds, nfds_t count, int timeout) {
+    if (interruptOnPoll.exchange(false)) nix::setInterrupted(true);
+    for (nfds_t i = 0; i < count; ++i)
+        if (fds[i].fd == monitoredFd.load() && ::getpid() != monitorOwner.load() && deferMonitor.exchange(false))
+            ::usleep(200000); // Force the foreground reader to run before the monitor thread.
+    return __real_poll(fds, count, timeout);
+}
+
+extern "C" long __wrap_n9_pread(int fd, void *data, long size, long long offset) {
+    if (fd == monitoredFd.load() && ::getpid() == monitorOwner.load()) {
+        // A direct read here races the monitor's buffered reader. Make that
+        // unsafe ordering fail deterministically instead of stealing random bytes.
+        std::fputs("unbuffered protocol read raced monitor startup\n", stderr);
+        errno = EIO;
+        return -1;
+    }
+    return __real_n9_pread(fd, data, size, offset);
+}
 
 static void require(bool condition, const char *what) {
     if (!condition) throw std::runtime_error(what);
@@ -173,6 +199,70 @@ static void checkNotes(int mode) {
     require(!getInterrupted(), "child note interrupted parent");
 }
 
+static void checkConnectionMonitor() {
+    using namespace nix;
+    for (int mode = 0; mode < 4; ++mode) {
+        Pid child = startProcess([&] {
+            unix::startNoteHandler();
+            Pipe connection;
+            connection.create();
+            if (mode == 3) {
+                // Deliver an interrupt between the worker's check and poll.
+                // Its persistent state must still stop the wait.
+                MuxablePipePollState state;
+                state.pollStatus.push_back({connection.readSide.get(), POLLIN, 0});
+                interruptOnPoll.store(true);
+                bool interrupted = false;
+                try { state.poll(std::nullopt); }
+                catch (const Interrupted &) { interrupted = true; }
+                setInterrupted(false);
+                require(interrupted, "pending disconnect was lost before poll");
+            } else if (mode == 2) {
+                connection.readSide.close();
+                require(::write(connection.writeSide.get(), "x", 1) == -1,
+                        "broken pipe did not return an I/O error");
+            } else {
+                if (mode == 0) {
+                    monitorOwner.store(::getpid());
+                    monitoredFd.store(connection.readSide.get());
+                    deferMonitor.store(true);
+                }
+                MonitorFdHup monitor(connection.readSide.get());
+                // The monitor must leave every protocol byte for its consumer.
+                std::string payload("protocol\0bytes", 14), received(payload.size(), '\0');
+                writeFull(connection.writeSide.get(), payload);
+                readFull(connection.readSide.get(), received.data(), received.size());
+                require(received == payload, "connection monitor consumed protocol bytes");
+                if (mode == 1) {
+                    Pipe blocked;
+                    blocked.create();
+                    connection.writeSide.close();
+                    MuxablePipePollState state;
+                    state.pollStatus.push_back({blocked.readSide.get(), POLLIN, 0});
+                    bool interrupted = false;
+                    try { state.poll(3000); }
+                    catch (const Interrupted &) { interrupted = true; }
+                    require(interrupted, "disconnect did not interrupt a blocked worker");
+                    setInterrupted(false);
+                }
+                // Mode 0 destroys a monitor while its connection remains open.
+            }
+            _exit(0);
+        });
+        int status = 0;
+        bool finished = false;
+        for (int i = 0; i < 100; ++i) {
+            if (::waitpid(static_cast<pid_t>(child), &status, WNOHANG) > 0) {
+                child.release();
+                finished = true;
+                break;
+            }
+            ::usleep(50000);
+        }
+        require(finished && statusOk(status), "connection monitor or broken-pipe recovery failed");
+    }
+}
+
 void checkProcesses(const char *executable) {
     using namespace nix;
     checkFileCopies();
@@ -253,6 +343,7 @@ void checkProcesses(const char *executable) {
             "empty poll did not time out");
     // Read, finite/infinite libc poll, then finite/infinite Nix poll.
     for (int mode = 0; mode < 5; ++mode) checkNotes(mode);
+    checkConnectionMonitor();
 }
 
 void checkLocks() {

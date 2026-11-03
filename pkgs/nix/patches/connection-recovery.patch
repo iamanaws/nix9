@@ -1,0 +1,119 @@
+--- a/src/libutil/unix/include/nix/util/monitor-fd.hh
++++ b/src/libutil/unix/include/nix/util/monitor-fd.hh
+@@ -6,6 +6,9 @@
+ 
+ #include <poll.h>
+ #include <errno.h>
++#ifdef __plan9__
++#  include <fcntl.h>
++#endif
+ 
+ #ifdef __APPLE__
+ #  include <sys/types.h>
+@@ -22,6 +25,9 @@
+ private:
+     std::thread thread;
+     Pipe notifyPipe;
++#ifdef __plan9__
++    AutoCloseFD interruptFd;
++#endif
+ 
+     void runThread(int watchFd, int notifyFd);
+ 
+@@ -125,15 +131,25 @@
+             }
+         }
+ 
+-        if (fds[0].revents & POLLHUP) {
++        if (fds[0].revents & (POLLHUP | POLLERR)) {
+             unix::triggerInterrupt();
++#ifdef __plan9__
++            // pthread_kill cannot deliver Nix's wakeup signal on cc9. Wake the
++            // owning process's blocking poll with a native interrupt note.
++            (void) ::write(interruptFd.get(), "interrupt", 9);
++#endif
+             break;
+         }
+ 
+-        if (fds[1].revents & POLLHUP) {
++        if (fds[1].revents & (POLLHUP | POLLERR)) {
+             // Notify pipe closed, exit thread
+             break;
+         }
++#ifdef __plan9__
++        // Protocol bytes belong to the foreground reader. Avoid spinning while
++        // it consumes a readable buffer; neither monitor may consume them.
++        if (fds[0].revents & POLLIN) ::usleep(10000);
++#endif
+     }
+ }
+ #endif
+@@ -142,6 +158,15 @@
+ {
+     notifyPipe.create();
+     int notifyFd = notifyPipe.readSide.get();
++#ifdef __plan9__
++    auto notePath = "/proc/" + std::to_string(::getpid()) + "/note";
++    interruptFd = AutoCloseFD(::open(notePath.c_str(), O_WRONLY | O_CLOEXEC));
++    if (!interruptFd) throw SysError("opening connection interrupt descriptor");
++    // Install cc9's reader before foreground I/O starts. Starting it later in
++    // the monitoring thread would race a direct read on the same connection.
++    struct pollfd fds[] = {{fd, POLLIN, 0}, {notifyFd, POLLIN, 0}};
++    if (::poll(fds, 2, 0) < 0) throw SysError("starting connection monitor");
++#endif
+     thread = std::thread([this, fd, notifyFd]() { this->runThread(fd, notifyFd); });
+ };
+ 
+--- a/src/libutil/unix/signals.cc
++++ b/src/libutil/unix/signals.cc
+@@ -103,6 +103,11 @@
+     for (int sig : {SIGINT, SIGHUP})
+         if (sigaction(sig, &act, nullptr))
+             throw SysError("installing note handler");
++    // A disconnected protocol peer must return an error so stack unwinding can
++    // stop builders and revoke their private filesystems.
++    act.sa_handler = SIG_IGN;
++    if (sigaction(SIGPIPE, &act, nullptr))
++        throw SysError("ignoring broken pipe notes");
+ }
+ #endif
+ 
+--- a/src/libutil/unix/muxable-pipe.cc
++++ b/src/libutil/unix/muxable-pipe.cc
+@@ -1,4 +1,9 @@
+ #include <poll.h>
++#ifdef __plan9__
++#  include <algorithm>
++#  include <chrono>
++#  include "nix/util/signals.hh"
++#endif
+ 
+ #include "nix/util/logging.hh"
+ #include "nix/util/util.hh"
+@@ -8,11 +13,26 @@
+ 
+ void MuxablePipePollState::poll(std::optional<unsigned int> timeout)
+ {
++#ifdef __plan9__
++    // A note can arrive between checking cancellation and entering the kernel
++    // wait. Recheck the persistent flag even when that wakeup was missed.
++    using Clock = std::chrono::steady_clock;
++    auto deadline = timeout ? Clock::now() + std::chrono::milliseconds(*timeout) : Clock::time_point::max();
++    while (true) {
++        checkInterrupt();
++        auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
++        auto ready = ::poll(pollStatus.data(), pollStatus.size(), std::clamp<int64_t>(left, 0, 100));
++        if (ready == -1 && errno != EINTR) throw SysError("waiting for input");
++        checkInterrupt();
++        if (ready != 0 || Clock::now() >= deadline) return;
++    }
++#else
+     if (::poll(pollStatus.data(), pollStatus.size(), timeout ? *timeout : -1) == -1) {
+         if (errno == EINTR)
+             return;
+         throw SysError("waiting for input");
+     }
++#endif
+ }
+ 
+ void MuxablePipePollState::iterate(

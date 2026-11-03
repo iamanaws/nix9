@@ -8,7 +8,18 @@
  extern long n9_errstr(char *, unsigned long);
  extern int strncmp(const char *, const char *, unsigned long);
  extern char *strstr(const char *, const char *);
-@@ -678,8 +679,9 @@
+@@ -474,7 +475,9 @@
+ 		if(eof){ trace("eof", fd, 0); return 0; }
+ 		if(err){ trace("err", fd, -1); errno = EIO; return -1; }
+ 		if(p->flags & O_NONBLOCK){ trace("again", fd, -1); errno = EAGAIN; return -1; }
+-		n9_semacquire(&p->data, 1);        /* blocking: wait for the reader */
++		/* Return notes to the caller, just as an interrupted direct read does. */
++		long got = n9_tsemacquire(&p->data, POLL_RESCAN_MS);
++		if(got < 0){ errno = cc9_errno_from_errstr_or(EIO); return -1; }
+ 	}
+ }
+ 
+@@ -678,8 +681,9 @@
  		if(ready || timeout == 0) return ready;
  		if(timeout < 0){
  			__sync_fetch_and_add(&poll_waiters, 1);
@@ -19,7 +30,7 @@
  		} else {
  			long left = deadline - now_ms();       /* stale tokens re-loop; keep the true deadline */
  			if(left <= 0) return 0;
-@@ -692,6 +694,7 @@
+@@ -692,6 +696,7 @@
  			__sync_fetch_and_add(&poll_waiters, 1);
  			long got = n9_tsemacquire(&poll_sem, nap);
  			__sync_fetch_and_sub(&poll_waiters, 1);

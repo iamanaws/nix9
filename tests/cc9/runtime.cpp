@@ -19,7 +19,31 @@
 
 extern "C" long __real_n9_create(const char *, int, unsigned long);
 extern "C" long n9_close(int);
+extern "C" long __real_n9_close(int);
+extern "C" long __real_n9_dup(int, int);
+static std::atomic<int> watchedPollFd{-1}, retiringPollFd{-1};
+static std::atomic<bool> pollFdRetired, releasePollReader;
 static const char *mkdirRacePath;
+
+extern "C" long __wrap_n9_dup(int from, int to) {
+    long fd = __real_n9_dup(from, to);
+    if (from == watchedPollFd.load() && to == -1 && fd >= 0)
+        retiringPollFd.store(fd);
+    return fd;
+}
+
+extern "C" long __wrap_n9_close(int fd) {
+    int expected = fd;
+    bool pause = fd >= 0 && retiringPollFd.compare_exchange_strong(expected, -1);
+    long result = __real_n9_close(fd);
+    if (pause) {
+        // Hold the reader between closing its private fd and clearing its table
+        // entry. Another thread can reuse that number and fork in this window.
+        pollFdRetired.store(true);
+        while (!releasePollReader.load()) usleep(1000);
+    }
+    return result;
+}
 
 extern "C" long __wrap_n9_create(const char *path, int mode, unsigned long permissions) {
     if (mkdirRacePath && std::strcmp(path, mkdirRacePath) == 0) {
@@ -259,7 +283,7 @@ static void onNote(int) { noted = 1; }
 
 static void polling() {
     check(poll(nullptr, 0, 0) == 0 && poll(nullptr, 0, 20) == 0, "poll timeout");
-    for (int timeout : {3000, -1}) for (const char *note : {"interrupt", "hangup"}) {
+    for (int timeout : {3000, -1, 0}) for (const char *note : {"interrupt", "hangup"}) {
         int ready[2], blocked[2];
         check(pipe(ready) == 0 && pipe(blocked) == 0, "poll pipes");
         pid_t child = fork();
@@ -270,10 +294,12 @@ static void polling() {
             check(sigaction(SIGINT, &action, nullptr) == 0 && sigaction(SIGHUP, &action, nullptr) == 0,
                   "install note handlers");
             noted = 0;
-            check(write(ready[1], "r", 1) == 1, "signal poll readiness");
             struct pollfd fd{blocked[0], POLLIN, 0};
-            int result = poll(&fd, 1, timeout);
-            check(result == -1 && errno == EINTR && noted, "poll interrupted by note");
+            if (timeout == 0) check(poll(&fd, 1, 0) == 0, "start buffered reader");
+            check(write(ready[1], "r", 1) == 1, "signal poll readiness");
+            char byte;
+            int result = timeout == 0 ? read(blocked[0], &byte, 1) : poll(&fd, 1, timeout);
+            check(result == -1 && errno == EINTR && noted, "poll or buffered read interrupted by note");
             _exit(0);
         }
         check(child > 0, "fork poll child");
@@ -285,9 +311,73 @@ static void polling() {
         int fd = open(path.c_str(), O_WRONLY);
         check(fd >= 0 && write(fd, note, std::strlen(note)) == static_cast<ssize_t>(std::strlen(note)), "post note");
         close(fd);
-        waitFor(child, 0);
+        int status = 0;
+        bool finished = false;
+        for (int i = 0; i < 500; ++i) {
+            if (waitpid(child, &status, WNOHANG) == child) { finished = true; break; }
+            usleep(10000);
+        }
+        if (!finished) { kill(child, SIGKILL); waitpid(child, &status, 0); }
+        check(finished && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+              "interrupted poll or buffered read returned promptly");
         close(ready[0]); close(blocked[0]); close(blocked[1]);
     }
+}
+
+static void forkDescriptors() {
+    writeFile("fork-input", "inherited-input");
+    int savedInput = dup(STDIN_FILENO);
+    int input = open("fork-input", O_RDONLY | O_CLOEXEC);
+    check(savedInput >= 0 && input >= 0, "open fork input");
+    check(dup2(input, STDIN_FILENO) == STDIN_FILENO, "install fork input");
+    close(input);
+    pid_t child = fork();
+    if (!child) {
+        char contents[32];
+        ssize_t n = read(STDIN_FILENO, contents, sizeof(contents));
+        check(n == 15 && std::memcmp(contents, "inherited-input", 15) == 0,
+              "fork preserves standard input after poll table initialization");
+        _exit(0);
+    }
+    waitFor(child, 0);
+    check(dup2(savedInput, STDIN_FILENO) == STDIN_FILENO, "restore standard input");
+    close(savedInput);
+    check(unlink("fork-input") == 0, "remove fork input");
+}
+
+static void forkPollReader() {
+    writeFile("fork-sentinel", "sentinel");
+    int sentinel = open("fork-sentinel", O_RDONLY);
+    int stream[2];
+    check(sentinel >= 0 && pipe(stream) == 0, "fork race fixtures");
+    watchedPollFd.store(stream[0]);
+    struct pollfd fd{stream[0], POLLIN, 0};
+    check(poll(&fd, 1, 0) == 0, "start poll reader");
+    int retired = retiringPollFd.load();
+    check(retired >= 0, "capture private reader descriptor");
+    watchedPollFd.store(-1);
+    close(stream[1]);
+    for (int i = 0; i < 5000 && !pollFdRetired.load(); ++i) usleep(1000);
+    check(pollFdRetired.load(), "reader reached descriptor retirement");
+    check(__real_n9_dup(sentinel, retired) == retired, "reuse retired descriptor");
+    pthread_t release;
+    check(pthread_create(&release, nullptr, [](void *) -> void * {
+        usleep(200000);
+        releasePollReader.store(true);
+        return nullptr;
+    }, nullptr) == 0, "release reader thread");
+    pid_t child = fork();
+    if (!child) {
+        char contents[8];
+        check(read(retired, contents, sizeof(contents)) == 8 &&
+              std::memcmp(contents, "sentinel", 8) == 0,
+              "fork does not close a reused poll descriptor");
+        _exit(0);
+    }
+    waitFor(child, 0);
+    check(pthread_join(release, nullptr) == 0, "join reader release");
+    close(retired); close(sentinel); close(stream[0]);
+    check(unlink("fork-sentinel") == 0, "remove fork sentinel");
 }
 
 int main(int argc, char **argv) {
@@ -299,6 +389,7 @@ int main(int argc, char **argv) {
     bool matched = false;
     for (auto [name, test] : {std::pair{"allocation", allocations}, {"threads", threadAllocations}, {"environment", environment},
                             {"path", execPath}, {"copy", copies}, {"mkdir", directories}, {"poll", polling},
+                            {"fork", forkDescriptors}, {"fork-race", forkPollReader},
                             {"math", math}, {"exceptions", exceptions}}) {
         if (std::strcmp(selected, "all") && std::strcmp(selected, name)) continue;
         matched = true;
@@ -315,7 +406,7 @@ int main(int argc, char **argv) {
         waitFor(child, 42);
         std::puts("PASS: exit");
     }
-    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, mkdir, poll, math, exceptions, exit, all)");
+    check(matched && argc <= 2, "unknown test (allocation, threads, environment, path, copy, mkdir, poll, fork, fork-race, math, exceptions, exit, all)");
     check(chdir("/tmp") == 0 && rmdir(scratch.c_str()) == 0, "remove test directory");
     std::puts("cc9 runtime tests PASS");
 }

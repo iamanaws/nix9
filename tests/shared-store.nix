@@ -1,3 +1,6 @@
+{
+  recoveryName ? "shared-recovery",
+}:
 let
   pkgs = import <nix9>;
   identity =
@@ -22,9 +25,10 @@ in
 {
   one = identity "shared-one";
   two = identity "shared-two";
+  recovery = identity recoveryName;
   queued = [
-    (identity "shared-queued-one")
-    (identity "shared-queued-two")
+    (identity "${recoveryName}-queued-one")
+    (identity "${recoveryName}-queued-two")
   ];
   largeInput = pkgs.mkDerivation {
     name = "shared-large-input";
@@ -57,6 +61,7 @@ in
     buildCommand = ''
       6c -o delay.6 $delaySource
       6l -o delay delay.6
+      echo SHARED-WAITING >[1=2]
       ./delay 60
       echo unexpected > $out
     '';

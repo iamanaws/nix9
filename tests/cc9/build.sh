@@ -20,7 +20,7 @@ flags=(
 startup=()
 # Releases keep crt0 in the archive; a locally rebuilt object takes precedence.
 if [[ -f "$runtime/crt0.o" ]]; then startup=("$runtime/crt0.o"); fi
-"${LD:-ld.lld}" --gc-sections --wrap=n9_create -static -nostdlib -T "$runtime/plan9.ld" \
+"${LD:-ld.lld}" --gc-sections --wrap=n9_create --wrap=n9_close --wrap=n9_dup -static -nostdlib -T "$runtime/plan9.ld" \
   -o "$output/runtime.elf" --start-group "${startup[@]}" "$output/runtime.o" \
   "$runtime/libcc9cxx.a" "$runtime/libcc9m.a" --end-group
 "${PYTHON:-python3}" "$converter" "$output/runtime.elf" "$output/runtime-tests"

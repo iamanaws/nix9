@@ -26,7 +26,14 @@
       ./shared-detached.c
       ./remote-delay.c
     ];
-    args = "${nativeBootstrap} \"$out\"";
+    args = "${
+      nativeBootstrap.override {
+        cachePackages = [
+          "auth"
+          "rc"
+        ];
+      }
+    } \"$out\"";
   };
   native-user-tests = vmTest "native-user-tests" {
     nativeBuildInputs = [

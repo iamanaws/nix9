@@ -116,8 +116,10 @@ boundary, not a full sandbox. Profiles, development shells, managed startup and
 multi-CPU use are not integrated yet. The [test](../tests/native_shared_store.py)
 provisions disposable accounts and runtime keys.
 
-One timeout run returned a malformed protocol response; its cause remains
-unresolved, although the repeat and packaged suites passed.
+Recovery tests cover repeated timeouts, cancellation, killed clients and queued
+builds without restarting the listener. Forced client kills can still leave an
+orphaned cc9 bookkeeping process. An earlier malformed timeout reply has not
+recurred; its exact cause remains unconfirmed.
 
 ## Store maintenance
 

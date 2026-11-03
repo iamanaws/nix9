@@ -7,6 +7,7 @@ import secrets
 import subprocess
 import sys
 import tempfile
+import time
 
 from guest import files_guest
 
@@ -42,6 +43,10 @@ with tempfile.TemporaryDirectory() as directory:
                       "fn environment { nix-build $nix9/packages/examples/workstation/project/environment.nix --no-out-link }\n"
                       "$*\n")
     fixtures[client.name] = client
+    job = work / "shared-job.rc"
+    job.write_text("name=$1\nshift\necho $pid > $home/$name.pid\n"
+                   "exec nix-build /usr/shared-store.nix --no-out-link $*\n")
+    fixtures[job.name] = job
     for user in ("nixhost", "alice", "bob", "carol"):
         key = secrets.token_bytes(16)
         role = "server" if user == "nixhost" else "client"
@@ -68,6 +73,7 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("cp /tmp/shared-detached.c /usr/shared-detached.c && chmod 444 /usr/shared-detached.c")
         guest.command("cp /tmp/remote-delay.c /usr/remote-delay.c && chmod 444 /usr/remote-delay.c")
         guest.command("cp /tmp/shared-client.rc /usr/shared-client.rc && chmod 444 /usr/shared-client.rc")
+        guest.command("cp /tmp/shared-job.rc /usr/shared-job.rc && chmod 444 /usr/shared-job.rc")
         for user in ("alice", "bob", "carol"):
             guest.command("echo 'newuser " + user + "' >> /srv/hjfs.cmd")
         guest.command("echo disallow >> /srv/hjfs.cmd")
@@ -100,6 +106,25 @@ with tempfile.TemporaryDirectory() as directory:
             result = user_command(user, "rc -c " + quote(command) + "; echo SHARED-ERROR:$status")
             if not re.search(r"(?m)^SHARED-ERROR:.+", result) or reason.lower() not in result.lower():
                 raise RuntimeError(f"unexpected shared-store rejection: {result}")
+
+        def until(command, description, timeout=30):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                result = guest.command("if(" + command + ") echo SHARED-READY; status=''")
+                if re.search(r"(?m)^SHARED-READY$", result):
+                    return
+                time.sleep(0.1)
+            raise RuntimeError("timed out waiting for " + description)
+
+        def clean_builds():
+            until("test `{ls /usr/local/nix/state/builds | wc -l} -eq 0", "build directory cleanup")
+            guest.command("if(ls /srv | grep -s 'nix9-build-') exit 'build filesystem was retained'; status=''")
+            until("test `{ls /usr/local/nix/state/db/clients | wc -l} -eq 0", "daemon worker exit")
+
+        def start_job(user, name, args):
+            guest.command("@{ auth/as " + user + " /bin/rc /usr/shared-client.rc /bin/rc /usr/shared-job.rc "
+                          + name + " " + args + " >/tmp/" + name + ".log >[2=1]; "
+                          "echo $status >/tmp/" + name + ".status } &")
 
         try:
             first = user_command("alice", "package rc --max-jobs 0")
@@ -143,10 +168,31 @@ with tempfile.TemporaryDirectory() as directory:
             if output_path(reused) != environment or "building '" in reused:
                 raise RuntimeError("Bob rebuilt the shared C environment: " + reused)
             rejected("alice", "shared failure", "intentional shared build failure")
-            rejected("bob", "shared timeout --timeout 1", "timed out")
+            for iteration in range(5):
+                rejected("bob", "shared timeout --timeout 1", "timed out")
+                clean_builds()
+                recovered = output_path(user_command("alice", "shared recovery --argstr recoveryName timeout-recovery-" + str(iteration)))
+                guest.command("nix-store --verify-path " + recovered)
+            print("PASS: repeated timeouts return valid errors and another user can build afterward", flush=True)
+
+            for name, note in (("cancel", "interrupt"), ("disconnect", "kill")):
+                start_job("alice", name, "-A timeout")
+                until("grep -s '^SHARED-WAITING$' /tmp/" + name + ".log", name + " build start")
+                start_job("bob", name + "-queued", "-A queued --max-jobs 2 --argstr recoveryName " + name)
+                until("grep -s 'waiting for a free build user ID' /tmp/" + name + "-queued.log", "second user's queued build")
+                user_command("alice", "job=`{cat $home/" + name + ".pid}; echo " + note + " > /proc/$job/note")
+                until("test -f /tmp/" + name + ".status", name + " client exit", timeout=10)
+                guest.command("test `{wc -c </tmp/" + name + ".status} -gt 1")
+                until("test -f /tmp/" + name + "-queued.status", "queued builds after " + name, timeout=20)
+                log = guest.command("cat /tmp/" + name + "-queued.log")
+                if len(re.findall(r"(?m)^/usr/local/nix/store/[^\s]+$", log)) != 2:
+                    raise RuntimeError("queued builds failed after " + name + ": " + log)
+                guest.command("test `{wc -c </tmp/" + name + "-queued.status} -eq 1")
+                clean_builds()
+                output_path(user_command("alice", "shared recovery --argstr recoveryName " + name + "-reconnected"))
+            print("PASS: cancellation and client death release the build slot for another user", flush=True)
             guest.command(f"nix-store --verify-path {compiler}")
-            guest.command("test `{ls /usr/local/nix/state/builds | wc -l} -eq 0")
-            guest.command("if(ls /srv | grep -s 'nix9-build-') exit 'build filesystem was retained'; status=''")
+            clean_builds()
             print("PASS: separate build identity, protected shared packages and credentials, private output import and cleanup", flush=True)
         except Exception:
             guest.command("cat /tmp/shared-service.log; echo")
@@ -157,5 +203,5 @@ Path(output, "results.json").write_text(json.dumps({"status": "passed", "users":
     "authenticated-identity-policy", "separate-builder-identity", "protected-inputs", "protected-credentials",
     "private-output-import", "native-c-build", "shared-environment-reuse", "failed-build-cleanup",
     "anonymous-process-permissions", "detached-writer-revocation",
-    "queued-builds", "timeout-cleanup",
+    "queued-builds", "repeated-timeout-recovery", "cancellation-recovery", "disconnected-client-recovery",
 ]}, indent=2) + "\n")
