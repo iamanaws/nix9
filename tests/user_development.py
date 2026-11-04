@@ -40,7 +40,7 @@ def check_profiles(remote, environments):
                 raise RuntimeError(f"{machine}: {user}'s profile changed")
 
 
-def check_development(auth, cpus, remote):
+def check_development(auth, cpus, remote, measure):
     environments = {}
     for machine, cpu in cpus.items():
         cpu.command("nix9 status --health", machine + " health nix/daemon ok")
@@ -48,7 +48,8 @@ def check_development(auth, cpus, remote):
             remote(user, "echo `{cat /dev/user}", user, machine=machine)
             remote(user, "echo $NIX_REMOTE",
                    "daemon?address=tcp!127.0.0.1!17051&key-pattern=user=" + user, machine=machine)
-            result = remote(user, "nix-build /n/projects/hello/environment.nix", machine=machine)
+            result = measure(machine + "/environment-" + user, lambda: remote(
+                user, "nix-build /n/projects/hello/environment.nix", machine=machine))
             environment = output_path(result)
             if user == "alice":
                 environments[machine] = environment
@@ -109,3 +110,50 @@ def check_development(auth, cpus, remote):
     check_profiles(remote, environments)
     print("PASS: four simultaneous user shells compile C, retain dependencies through GC and release roots on logout", flush=True)
     return environments
+
+
+def benchmark_development(remote, measure):
+    # Every sample includes a fresh authenticated CPU login, as a terminal user
+    # would invoke it. Measure that baseline separately; do not subtract it.
+    # The preceding GC can collect build inputs. The first shell restores them;
+    # subsequent samples measure reuse, with no further GC during measurement.
+    for machine in ("build", "batch"):
+        def sample(name, command, expected=None):
+            return measure(machine + "/" + name, lambda: remote("alice", command, expected, machine=machine))
+
+        for _ in range(3):
+            sample("login", "echo ready", "ready")
+            sample("eval-constant", "nix-instantiate --eval --expr 42", "42")
+            sample("eval-packages", "nix-instantiate --eval --expr '(import <nix9>).stdenv.cc.name'", '"cc"')
+            sample("source-import", "nix-store --add /n/projects/hello/hello.c")
+            sample("query-profile", "nix-store -qR `{" + SCRIPT + "path}")
+            result = sample("cached-build", "nix-build /n/projects/hello/environment.nix")
+            if "building '" in result or "copying path" in result:
+                raise RuntimeError(machine + ": warm build did not reuse the environment")
+            sample("shell-startup", "cd /n/projects/hello && nix-shell --run 'echo ready'", "ready")
+            sample("shell-compile", "cd /n/projects/hello && nix-shell --run '6c -o $home/hello.6 $src && "
+                   "6l -o $home/hello $home/hello.6 && $home/hello'", HELLO)
+
+
+def check_source_edits(remote, measure):
+    original = "/usr/alice/hello-original.c"
+    source = "/n/projects/hello/hello.c"
+    remote("alice", f"cp {source} {original}")
+    try:
+        remote("alice", f"sed 's/shared workspace/edited workspace/' {original} > {source}")
+        for machine in ("build", "batch"):
+            result = measure(machine + "/source-edit-build", lambda: remote(
+                "alice", "nix-build /n/projects/hello/environment.nix", machine=machine))
+            environment = output_path(result)
+            if "building '" not in result:
+                raise RuntimeError(machine + ": changed source did not rebuild")
+            remote("alice", ". " + environment + "/activate && hello",
+                   "hello from the edited workspace", machine=machine)
+    finally:
+        remote("alice", f"cp {original} {source} && rm {original}")
+    for machine in ("build", "batch"):
+        result = measure(machine + "/restored-source-build", lambda: remote(
+            "alice", "nix-build /n/projects/hello/environment.nix", machine=machine))
+        if "building '" in result or "copying path" in result:
+            raise RuntimeError(machine + ": restored source was not reused")
+    print("PASS: shared source edits rebuild on both CPUs and restored sources reuse their environments", flush=True)

@@ -1,0 +1,30 @@
+#!/bin/rc
+rfork ne
+fn fail {
+  echo 'nix9: finish network root:' $* >[1=2]
+  exit 'initial system selection failed'
+}
+if(! ~ $#* 0) fail 'usage: rc /cfg/nix9/initial/finish'
+initial=/cfg/nix9/initial
+. /usr/local/pkg/nix9/activate || fail 'cannot activate Nix'
+NIX_REMOTE='local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log'
+identity=`{cat $initial/machine-id}
+~ $#identity 1 && ~ $identity $nix9MachineId || fail 'prepared state belongs to another machine'
+if(test -f $initial/complete) {
+  echo 'Initial installation is complete; use nix9 deploy or nix9 select for updates.'
+  exit ''
+}
+. $nix9/packages/system/output.rc || fail 'cannot read output resolver'
+system=`{resolveOutput system $initial/system}
+boot=`{resolveOutput boot $initial/boot}
+~ $#system 1 && ~ $#boot 1 || fail 'invalid initial paths'
+if(test -f $nix9SystemRoot) {
+  ~ `{cat $nix9SystemRoot} $system || fail 'another system is already selected'
+}
+nix-store --import < $initial/closure || fail 'cannot import initial closure'
+nix-store --option substitute false --realise $boot --add-root $nix9SystemRoot^-initial-boot ||
+  fail 'cannot retain initial boot artifact'
+nix9 select $system || fail 'cannot select initial system; correct the reported prerequisite and retry'
+echo $system > $initial/complete || fail 'cannot record completed installation'
+rm $initial/closure || fail 'selected system, but could not remove the imported archive'
+echo 'Initial system selected. Reboot with fshalt -r, then run nix9 status --health.'

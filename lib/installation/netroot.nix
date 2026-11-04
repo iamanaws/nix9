@@ -87,6 +87,8 @@ in
       echo -n ${quote init} > $out/init
       echo -n ${quote configuration} > $out/configuration.rc
       cp ${./netroot-prepare.rc} $out/prepare
+      cp ${./netroot-finish.rc} $out/finish
+      cp ${../system/output.rc} $out/output.rc
       cp ${./netroot-select.rc} $out/select
       cp ${./netroot-check.rc} $out/check-root.rc
       cp ${./netroot-check-select.rc} $out/check-select.rc

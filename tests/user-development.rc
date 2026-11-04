@@ -4,6 +4,8 @@ action=$1
 shift
 roots=`{nix-store --roots-dir}
 switch($action) {
+case path
+  cat $roots/environment
 case install
   nix-profile $roots/environment set `{cat $roots/result}
   test ! -w $roots/environment

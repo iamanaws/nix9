@@ -60,7 +60,7 @@ loader versions.
 
 Enable PXE boot in the CPU's firmware. The loader reads `/cfg/pxe/MAC` and fetches
 the selected kernel. At the first console, import and select the staged Nix
-system as described in [network-root boot](netroot.md#boot-and-select), then
+system with the finish command in [network-root boot](netroot.md#boot-and-select), then
 reboot. There is no local `plan9.ini` to merge.
 
 ## Upgrade and roll back

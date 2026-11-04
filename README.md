@@ -46,6 +46,9 @@ Run `fshalt` before stopping QEMU with Ctrl-C. Keep `result-vm` to retain the
 disk's backing image. See [VM details](docs/vm.md) for later boots, other disks
 and a C development example.
 
+To connect auth, file and CPU servers, follow the
+[development installation walkthrough](docs/install.md).
+
 ## Documentation
 
 | Guide | Contents |
@@ -54,6 +57,7 @@ and a C development example.
 | [Native Nix](docs/native.md) | Builds, environments, updates, releases and store maintenance. |
 | [Package development](docs/development.md) | Toolchains, recipes, development shells and native Go. |
 | [System configuration](docs/configuration.md) | Machine settings, switching, rollback and boot hooks. |
+| [Set up an installation](docs/install.md) | Provision the four-machine development example, boot it and start using it. |
 | [Installation inventory](docs/installation.md) | Machines, shared discovery, provider references and system closures. |
 | [Users and groups](docs/users.md) | Native file-server identities, shared homes, group membership and authentication prerequisites. |
 | [Deployment](docs/deployment.md) | Inspect an installation, prepare systems and shared roots, select machines and check status. |

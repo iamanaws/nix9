@@ -53,7 +53,12 @@
           })
           {
             inherit (project.flakePackages) setup-vm run-vm;
-            inherit (tests.packages) smoke-test smoke-test-c-cross benchmark-native;
+            inherit (tests.packages)
+              smoke-test
+              smoke-test-c-cross
+              benchmark-native
+              benchmark-users
+              ;
           };
       checks.${system} = tests.checks;
       devShells.${system} = {

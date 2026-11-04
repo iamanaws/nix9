@@ -41,6 +41,23 @@ rcpu -u glenda -h cpu1 -c 'nix-build /mnt/term/path/to/project'
 The server module selects its packaged TLS server. Early-boot factotum remains
 part of native startup.
 
+## Runtime key files
+
+A key file contains factotum control commands. For a CPU named `build`, these
+entries allow server authentication and delegated file access:
+
+```text
+key proto=dp9ik dom=nix9.netroot user=build role=server !password='ACCOUNT-PASSWORD'
+key proto=dp9ik dom=nix9.netroot user=build role=speakfor !password='ACCOUNT-PASSWORD'
+```
+
+Replace the identity, domain and password with the provisioned account's values.
+Keep the file outside the store, owned by the host owner with mode `0600`.
+The `server` entry is sufficient for a file server; CPUs also use `speakfor` for
+users' filesystem authentication. The auth server must grant the corresponding
+delegation in `services.auth.speaksFor`. See native
+[factotum key management](https://github.com/9front/9front/blob/602faae9a52f342a40b086d10b23c71c82dd52d7/sys/man/4/factotum).
+
 ## Authentication server
 
 ```nix

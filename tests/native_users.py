@@ -18,7 +18,7 @@ import time
 
 from boot_medium import boot_medium
 from guest import boot
-from user_development import check_development, check_profiles
+from user_development import benchmark_development, check_development, check_profiles, check_source_edits
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
@@ -65,9 +65,27 @@ def nvram(key):
 
 
 qemu, image, archive, output = sys.argv[1:]
+benchmark = os.environ.get("NIX9_USERS_BENCHMARK") == "1"
+timings = {}
+if benchmark:
+    Path(output).mkdir()
+
+
+def measure(name, operation):
+    start = time.monotonic()
+    result = operation()
+    if benchmark:
+        seconds = round(time.monotonic() - start, 3)
+        timings.setdefault(name, []).append(seconds)
+        Path(output, "timings.json").write_text(json.dumps(timings, indent=2) + "\n")
+        print(f"TIMING {name}: {seconds}s", flush=True)
+    return result
+
+
 state = os.environ.get("NIX9_USERS_TEST_STATE")
 with ExitStack() as stack:
-    work = Path(stack.enter_context(nullcontext(state) if state else tempfile.TemporaryDirectory())).resolve()
+    work = Path(stack.enter_context(nullcontext(state) if state else
+        tempfile.TemporaryDirectory(dir=output if benchmark else None))).resolve()
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
@@ -120,8 +138,10 @@ with ExitStack() as stack:
     with boot(qemu, foundation, snapshot=False) as guest:
         guest.child.timeout = 1200
         download(guest, "bootstrap.tar")
-        guest.command("cd / && tar xf /tmp/bootstrap.tar && rm /tmp/bootstrap.tar")
+        guest.command("cd / && tar xf /tmp/bootstrap.tar")
         guest.command(". /usr/local/pkg/nix9/activate")
+        guest.command("{ echo 'status=()'; echo exit; cat $nix9/packages/installation/*.rc; } > /tmp/installation-syntax.rc")
+        guest.command("rc -b /tmp/installation-syntax.rc")
         guest.command("nix-build '<nix9>' -A cwfs -A auth -A rcpu -A ndb --out-link " + ROOTS + "/user-tools")
 
     drives = []
@@ -215,18 +235,24 @@ with ExitStack() as stack:
     files.command("cat /n/site/adm/users | grep '^1010:alice:alice:$'")
     files.command("cat /n/site/adm/users | grep '^1012:project:alice:alice,bob$'")
     root = path(files, f"cat {bundles['first']}/roots/stable")
-    files.command(f"rc {root}/publish /n/site")
-    download(files, "bootstrap.tar", "/tmp/node-bootstrap.tar")
+    measure("setup/publish-root", lambda: files.command(f"rc {root}/publish /n/site"))
+    # The foundation already has the archive needed to seed CPU state.
+    files.command("installation=" + bundles["first"])
     cpu_networks = {}
     for name, address in zip(CPUS, ("10.0.2.102", "10.0.2.103")):
         artifact = path(files, f"cat {bundles['first']}/boot/{name}/path")
-        files.command(f"rc {artifact}/prepare /n/site /tmp/node-bootstrap.tar")
+        files.command("boot=" + artifact)
         directory = "/n/site/machines/" + name
+        rejected(files, "rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/files",
+                 "system belongs to another machine")
+        files.command("test ! -e " + directory)
+        measure("setup/prepare-" + name, lambda: files.command(
+            f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}"))
+        rejected(files, f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}",
+                 "machine state already exists")
         download(files, name + ".keys", directory + "/adm/cpu.keys", private=True)
         download(files, "user-development.rc", directory + "/usr/user-development.rc")
         files.command("chmod 444 " + directory + "/usr/user-development.rc")
-        files.command(f"echo {systems[name]['first']} > {directory}/tmp/system-path")
-        files.command(f"nix-store --export `{{nix-store -qR {systems[name]['first']}}} > {directory}/tmp/system.export")
         settings = files.command("cat " + artifact + "/plan9.ini")
         configuration = "\n".join(line for line in settings.splitlines() if re.match(r"^[a-z0-9]+=", line)) + "\n"
         disks[name] = work / (name + ".qcow2")
@@ -240,8 +266,19 @@ with ExitStack() as stack:
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False, prompt=PROMPT,
                   boot_prompt=False, guest_forwards=peers, network_options=network) as cpu:
             cpu.child.timeout = 1200
-            cpu.command(". /usr/local/pkg/nix9/activate && nix-store --import < /tmp/system.export")
-            cpu.command("nix9 select `{cat /tmp/system-path}")
+            cpu.command(". /usr/local/pkg/nix9/activate")
+            if name == "build":
+                cpu.command("mv /adm/cpu.keys /adm/cpu.keys.saved")
+                measure("setup/finish-missing-key", lambda: rejected(
+                    cpu, "rc /cfg/nix9/initial/finish", "cannot select initial system"))
+                cpu.command(f"test ! -e {ROOTS}/machines/build/system && test -f /cfg/nix9/initial/closure")
+                cpu.command("mv /adm/cpu.keys.saved /adm/cpu.keys")
+            measure("setup/finish-" + name + ("-retry" if name == "build" else ""),
+                    lambda: cpu.command("rc /cfg/nix9/initial/finish"))
+            cpu.command("test ! -e /cfg/nix9/initial/closure && test -f /cfg/nix9/initial/complete")
+            cpu.command(f"nix-store --verify-path `{{cat {ROOTS}/machines/{name}/system-initial-boot}}")
+            cpu.command("rc /cfg/nix9/initial/finish",
+                        "Initial installation is complete; use nix9 deploy or nix9 select for updates.")
 
     @contextmanager
     def start_cpu(name):
@@ -302,7 +339,10 @@ with ExitStack() as stack:
     remote("bob", "echo bob >> /n/projects/hello/participants", machine="batch")
     remote("alice", "cat /n/projects/hello/participants", "bob")
     print("PASS: both CPUs expose system packages and shared sources while protecting machine stores", flush=True)
-    environments = check_development(auth, cpus, remote)
+    environments = check_development(auth, cpus, remote, measure)
+    if benchmark:
+        benchmark_development(remote, measure)
+    check_source_edits(remote, measure)
 
     updated = path(files, "nix-build /tmp/accounts.nix -A updatedCpu --no-out-link")
     # The update adds a literal file; its dependencies are already on the CPU.
@@ -312,6 +352,8 @@ with ExitStack() as stack:
     stop(cpus["build"])
     cpus["build"] = stack.enter_context(start_cpu("build"))
     remote("alice", "cat /cfg/nix9/files/user-workflow", "updated")
+    cpus["build"].command("rc /cfg/nix9/initial/finish")
+    cpus["build"].command(f"~ `{{cat {ROOTS}/machines/build/system}} {updated}")
     cpus["batch"].command(f"~ `{{cat {ROOTS}/machines/batch/system}} {systems['batch']['first']}")
     remote("bob", "fortune > $home/fortune && test -s $home/fortune", machine="batch")
     remote("alice", "cat /usr/alice/private", "alice-private")
@@ -376,5 +418,7 @@ with ExitStack() as stack:
                    "boot-policy", "group-revocation", "undeclared-accounts", "rollback", "delegated-authentication",
                    "shared-store-cpu-logins", "shared-build-reuse", "independent-user-profiles", "user-profile-rollback",
                    "independent-machine-roots", "concurrent-development-shells", "shell-native-c", "shell-caller-identity",
-                   "shell-gc", "logout-root-cleanup", "cpu-rollback", "profiles-across-provider-reboots"],
+                   "shell-gc", "logout-root-cleanup", "cpu-rollback", "profiles-across-provider-reboots",
+                   "initial-system-identity", "initial-selection-retry", "initial-boot-root", "initial-selection-complete",
+                   "source-edit-builds", "restored-source-reuse"],
     }, indent=2) + "\n")

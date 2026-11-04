@@ -63,7 +63,7 @@ with the Nix sandbox enabled.
 | `network-tests`, `native-network-tests` | Host/native validation, DHCP, DNS override, static IPv4, multiple interfaces, primary-interface discovery, loopbacks, native NDB, gateway routing, interface removal, reboot and rollback. Configured boots run without harness networking. Host validation also runs in `nix flake check`. |
 | `native-network-server-tests` | Five machines with an isolated Ethernet link, authenticated network-tree exports, terminal and delegated CPU access to a lab service, failed direct access, export permissions, read-only control rejection, provider address changes, reboot, rollback and recovery. |
 | `storage-tests`, `native-storage-tests` | CWFS configuration validation and a five-machine workspace: independent storage boot, native 9P authentication, TLS export regression, builds on two CPU servers, dump history, file restoration, reboot persistence and policy rollback. Host validation runs in `nix flake check`. |
-| `user-tests`, `native-user-tests` | Native user-table validation and two users on two network-root CPUs: real CPU logins, shared-store builds, independent profiles, concurrent development shells, native C, GC and logout cleanup. Covers shared homes and sources, private files, delegated authentication, group revocation, ID conflicts, retained profiles across CPU rollback and storage reboots. Host validation runs in `nix flake check`. |
+| `user-tests`, `native-user-tests` | Native user-table validation and two users on two network-root CPUs: initial preparation, wrong-machine rejection, first-boot selection and retry, real CPU logins, shared-store builds, independent profiles, concurrent development shells, native C, GC and logout cleanup. Covers shared homes, source edits and restored-source reuse, private files, delegated authentication, group revocation, ID conflicts, retained profiles across CPU rollback and storage reboots. Host validation runs in `nix flake check`. |
 | `backup-tests`, `native-backup-tests` | Backup configuration validation and a six-machine installation: scheduled remote archives, native metadata, completed generations, overlap exclusion, failed runs, provider loss, checksum rejection and restoration onto empty replacement storage with the original server offline. Host validation runs in `nix flake check`. |
 | `native-services-tests` | Webfs startup, idempotence, HTTP/HTTPS, pin changes, session isolation, disable and boot without manual setup. |
 | `native-timesync-tests` | RTC UTC/local time, NTP correction through a local fixture, one client, append-only correction logs, rollback and native startup restoration. |
@@ -95,3 +95,20 @@ A temporary VM disk lives on that filesystem and is removed on exit.
 `timings.json` retains completed measurements; `results.json` appears only after
 all checks pass. Stop other VM tests when comparing runs. Timing runs use an app
 rather than nondeterministic Nix build outputs.
+
+For the four-machine [development installation](install.md):
+
+```sh
+nix run .#benchmark-users -- nix9-users-performance
+```
+
+This provisions auth, CWFS and two CPUs, runs the user integration checks, and
+measures initial CPU preparation, first environments, logins, evaluation, source
+imports, cached builds, shells and source edits on both CPUs. Everyday operations
+include a fresh `rcpu` login; the separate login measurement provides context.
+Operations have three samples after GC. The first shell may restore collected
+build inputs; use later samples for warm startup timings. The VMs use two
+virtual CPUs and 2 GiB RAM each, with TCP relays between their user networks.
+Timings describe this VM setup, not a physical network. Temporary disks are
+removed on exit; `timings.json`
+survives a failed run and `results.json` records completed validation.

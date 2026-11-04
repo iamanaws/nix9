@@ -18,6 +18,25 @@
   webfs,
   vmTest,
 }:
+let
+  userFiles = [
+    ./accounts.nix
+    ./boot_medium.py
+    ./user_development.py
+    ./user-development.rc
+  ];
+  userBootstrap = nativeBootstrap.override {
+    cachePackages = [
+      "auth"
+      "cwfs"
+      "rcpu"
+      "ndb"
+      "rc"
+      "namespaceTools"
+      "listen"
+    ];
+  };
+in
 {
   native-store-service-tests = vmTest "native-store-service-tests" {
     script = ./native_store_service.py;
@@ -63,26 +82,22 @@
       pkgs.mtools
     ];
     script = ./native_users.py;
-    files = [
-      ./accounts.nix
-      ./boot_medium.py
-      ./user_development.py
-      ./user-development.rc
-    ];
+    files = userFiles;
     env.NIX9_USERS_TEST_STATE = "user-state";
-    args = "${
-      nativeBootstrap.override {
-        cachePackages = [
-          "auth"
-          "cwfs"
-          "rcpu"
-          "ndb"
-          "rc"
-          "namespaceTools"
-          "listen"
-        ];
-      }
-    } \"$out\"";
+    args = "${userBootstrap} \"$out\"";
+  };
+  benchmark-users = pkgs.writeShellApplication {
+    name = "benchmark-users";
+    runtimeInputs = [
+      pkgs.netcat-openbsd
+      pkgs.mtools
+    ];
+    text = ''
+      export NIX9_USERS_BENCHMARK=1
+      exec ${python}/bin/python ${testSupport ([ ./native_users.py ] ++ userFiles)}/native_users.py \
+        ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
+        ${userBootstrap} "''${1:-nix9-users-performance}"
+    '';
   };
   native-health-tests = vmTest "native-health-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];

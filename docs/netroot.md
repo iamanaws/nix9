@@ -44,54 +44,24 @@ Installations with declared [shared homes](users.md) also append the provider's
 
 ## Prepare the file server
 
-Provision CWFS, filesystem accounts and authentication as described in
-[storage](storage.md) and [access](access.md). The example needs `files`, `build`
-and `glenda` in the auth database and `glenda` in the filesystem's user table.
-The CPU's NVRAM root-login key uses `glenda` in `nix9.netroot`; its separate
-CPU-service key belongs to `build`.
-
-On the file server with native Nix, copy the example's `.nix` files into a
-writable directory and adjust addresses and devices for the site:
-
-```sh
-nix-build default.nix -A build --out-link /usr/local/nix/state/gcroots/netroot
-installation=`{cat /usr/local/nix/state/gcroots/netroot}
-```
-
-Mount `main` with an authorized client key. Provision writable `/systems` and
-`/machines` parents for the operator, then publish the built root:
-
-```sh
-mount -c /srv/cwfs-nix9 /n/site main
-root=`{cat $installation/roots/stable}
-rc $root/publish /n/site
-```
-
-The shared tree contains OS files. Machine keys belong in the per-CPU tree.
-Keep a bootstrap archive available, for example `/tmp/bootstrap.tar` from the
-[quick start](../README.md#quick-start). Prepare the CPU once:
+Follow the [installation walkthrough](install.md) to provision authentication,
+CWFS and keys, publish a shared root and boot the CPUs. With the filesystem
+mounted at `/n/site`, the root published and the installation in `$installation`,
+the preparation interface is:
 
 ```sh
 boot=`{cat $installation/boot/build/path}
-rc $boot/prepare /n/site /tmp/bootstrap.tar
-cp /adm/build.keys /n/site/machines/build/adm/cpu.keys
-chmod 600 /n/site/machines/build/adm/cpu.keys
+rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/build
 ```
 
 `prepare` seeds each machine's Nix files and initial Glenda home, initializes its
-identity and refuses existing state. The root bundle already contains
+identity and refuses existing state. The optional system argument accepts a
+store path or a file containing one. It must belong to this CPU. Preparation
+stages that system and its boot closure under `/cfg/nix9/initial`; omitting the
+argument prepares only the machine state for manual import and selection.
+The root bundle already contains
 `/cfg/nix9/boot/MACHINE-ID/{namespace,init}` and the common namespace include.
 Additional native namespace rules can use `/cfg/HOST/namespace`.
-
-Stage the CPU's system and boot instructions. Full root bundles stay on the
-file server:
-
-```sh
-system=`{cat $installation/systems/build}
-nix-store --export `{nix-store -qR $system $boot} > /n/site/machines/build/tmp/initial.export
-echo $system > /n/site/machines/build/tmp/system-path
-echo $boot > /n/site/machines/build/tmp/boot-path
-```
 
 ## Boot and select
 
@@ -103,12 +73,15 @@ network configuration, so root mounting does not depend on Nix or DNS.
 Start authentication and storage before the CPU. At its first console:
 
 ```sh
-. /usr/local/pkg/nix9/activate
-nix-store --import < /tmp/initial.export
-nix-store --realise `{cat /tmp/boot-path} --add-root /usr/local/nix/state/gcroots/boot-stable
-nix9 select /tmp/system-path
+rc /cfg/nix9/initial/finish
 fshalt -r
 ```
+
+The finish command imports the staged closure, retains the initial boot artifact
+at `system-initial-boot` beside the machine's system root, and checks and selects
+the system. Correct any reported prerequisite and retry. After success it removes
+the archive and records completion; later invocations do not select an old system.
+Full root bundles stay on the file server.
 
 After reboot, the selected system starts CPU access. Ordinary
 [deployment](deployment.md), builds, generation selection and rollback work.

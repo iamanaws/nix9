@@ -4,12 +4,30 @@ fn fail {
   echo 'nix9: prepare network root:' $* >[1=2]
   exit 'network root preparation failed'
 }
-if(! ~ $#* 2) fail 'usage: prepare ROOT-MOUNT BOOTSTRAP-TAR'
+if(! ~ $#* 2 3) fail 'usage: prepare ROOT-MOUNT BOOTSTRAP-TAR [SYSTEM]'
 bundle=`{basename -d $0}
 rootMount=$1
 . $bundle/check-root.rc || fail 'cannot check published root'
 test -r $2 || fail 'cannot read bootstrap archive'
 if(test -e $node) fail 'machine state already exists:' $node
+system=()
+if(~ $#* 3) {
+  . $bundle/output.rc || fail 'cannot read output resolver'
+  system=`{resolveOutput system $3}
+  ~ $#system 1 || fail 'cannot resolve initial system'
+  test -f $system/system && ~ `{cat $system/system} nix9-system-2 || fail 'expected a built nix9 system'
+  test -f $system/machine-id && ~ `{cat $system/machine-id} $machineId || fail 'system belongs to another machine'
+  boot=$bundle
+  if(test -f $bundle/path) boot=$bundle/path
+  boot=`{resolveOutput boot $boot}
+  ~ $#boot 1 || fail 'cannot resolve boot artifact'
+  closure=`{nix-store --query --requisites $system $boot && echo nix9-closure-ready}
+  ~ $#closure 0 && fail 'cannot query initial closure'
+  ~ $closure($#closure) nix9-closure-ready || fail 'cannot query initial closure'
+  objects=()
+  for(item in $closure)
+    if(! ~ $item nix9-closure-ready) objects=($objects $item)
+}
 mkdir -p $node || fail 'cannot create machine directory'
 chmod 755 $node || fail 'cannot set machine directory permissions'
 @{ cd $node && tar x } < $2 || fail 'cannot unpack bootstrap'
@@ -40,4 +58,15 @@ for(hook in rc/bin/cpurc.local rc/bin/termrc.local rc/lib/rcmain.local) {
   . /usr/local/pkg/nix9/activate &&
   nix9 init $machineId
 } || fail 'cannot initialize machine identity'
+if(~ $#system 1) {
+  initial=$node/cfg/nix9/initial
+  mkdir -m 700 $initial || fail 'cannot create initial installation directory'
+  nix-store --export $objects > $initial/closure.partial || fail 'cannot export initial closure'
+  mv $initial/closure.partial $initial/closure || fail 'cannot finish initial closure'
+  echo $machineId > $initial/machine-id &&
+  echo $system > $initial/system &&
+  echo $boot > $initial/boot &&
+  cp $bundle/finish $initial/finish || fail 'cannot stage initial selection'
+  echo 'At the first CPU console, run: rc /cfg/nix9/initial/finish'
+}
 echo 'Prepared network-root machine:' $machineId

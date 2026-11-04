@@ -37,15 +37,54 @@ filsys main cw0fw1
 filsys dump o
 ```
 
-For the example, provision the filesystem's `glenda` account and a writable
-`/projects` directory. Filesystem accounts are separate from authentication-server
-accounts. On a freshly reamed volume, initialize the console's user table with
-`users default` and create `/adm/users` before adding accounts. Keep
-authentication enabled in the on-disk CWFS configuration.
+Filesystem accounts are separate from authentication-server accounts. For an
+existing filesystem, keep its assigned IDs and authentication enabled.
 Selection rejects unformatted configuration blocks, `noauth`, `readonly`,
 missing devices and unsafe key-file permissions before changing generations.
 The key file contains native factotum commands and stays outside Nix expressions
 and the store. See [authentication](access.md).
+
+### Initialize empty storage
+
+This creates a new filesystem, erasing the chosen cache and worm devices.
+Use empty devices and a new configuration file. The device names below match
+the [installation walkthrough](install.md); replace them for your machine.
+
+```sh
+nix-build '<nix9>' -A cwfs --out-link /usr/local/nix/state/gcroots/cwfs-tools
+cwfs=`{cat /usr/local/nix/state/gcroots/cwfs-tools}
+mkdir -p /adm/storage
+chmod 700 /adm/storage
+dd -if /dev/zero -of /adm/storage/config -bs 16384 -count 1
+chmod 600 /adm/storage/config
+echo 'w0 /dev/sdG0/data' > /adm/storage/devices
+echo 'w1 /dev/sdH0/data' >> /adm/storage/devices
+$cwfs/bin/cwfs64x -c -f /adm/storage/config -m /adm/storage/devices -n provision <<'end'
+service files
+config /adm/storage/config
+filsys main cw0fw1
+filsys dump o
+ream main
+end
+```
+
+Initialize the account table and directories through the provisioning console:
+
+```sh
+for(command in 'users default' 'create /adm adm adm 775 d' \
+    'create /adm/users adm adm 664' 'create /usr adm adm 775 d' \
+    'newuser glenda' 'create /systems glenda glenda 775 d' \
+    'create /machines glenda glenda 775 d')
+  echo $command >> /srv/provision.cmd
+echo halt >> /srv/provision.cmd
+while(test -e /srv/provision.cmd) sleep 1
+```
+
+The managed service can now start at boot. The users example declares homes and
+`/projects`; for other configurations, declare the needed directories or create
+them through native administration. See [users and groups](users.md).
+
+## Running service
 
 `port` defaults to 564. `cachePercent` defaults to 10, with a range of 1 to 80.
 The server posts `/srv/cwfs-nix9` and its owner-only administrative console
