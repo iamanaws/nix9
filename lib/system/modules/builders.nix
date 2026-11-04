@@ -6,66 +6,66 @@
 }:
 let
   configuration = config.nix;
+  explicitBuilders = configuration.settings.builders or null;
   field = values: if values == [ ] then "-" else lib.concatStringsSep "," values;
   builderLine =
-    _: builder:
+    builder:
     lib.concatStringsSep " " [
       (
-        "cpu://"
+        builder.protocol
+        + "://"
         + lib.optionalString (builder.user != null) (builder.user + "@")
-        + builder.host
+        + builder.hostName
         + lib.optionalString (builder.keyPattern != "") ("?key-pattern=" + lib.escapeURL builder.keyPattern)
       )
-      (field builder.systems)
+      (field (if builder.system != null then [ builder.system ] else builder.systems))
       "-"
       (toString builder.maxJobs)
       (toString builder.speedFactor)
-      (field builder.supportedFeatures)
+      (field (lib.unique (builder.supportedFeatures ++ builder.mandatoryFeatures)))
       (field builder.mandatoryFeatures)
     ];
-  configured =
-    configuration.builders != { }
-    || configuration.maxJobs != null
-    || configuration.systemFeatures != [ ];
 in
 {
   options.nix = {
-    builders = lib.mkOption {
-      default = { };
+    distributedBuilds = lib.mkEnableOption "distributed Nix builds on the declared build machines";
+    buildMachines = lib.mkOption {
+      default = [ ];
       description = "Remote Nix builders reached through authenticated CPU sessions.";
-      type = lib.types.attrsOf (
+      type = lib.types.listOf (
         lib.types.submodule {
           options = (import ./builder.nix { inherit lib; }) // {
-            host = lib.mkOption {
+            hostName = lib.mkOption {
               type = lib.types.strMatching "[a-zA-Z0-9][a-zA-Z0-9_.-]*";
               description = "CPU server hostname or IPv4 address.";
+            };
+            protocol = lib.mkOption {
+              type = lib.types.enum [ "cpu" ];
+              default = "cpu";
+              description = "Native authenticated CPU transport. SSH transports are not ported.";
             };
           };
         }
       );
     };
-    maxJobs = lib.mkOption {
-      type = lib.types.nullOr lib.types.ints.unsigned;
-      default = null;
-      description = "Concurrent local builds; zero requires a remote builder. Null uses Nix's default.";
-    };
-    systemFeatures = lib.mkOption {
-      type = lib.types.listOf (lib.types.strMatching "[a-zA-Z0-9_+.-]+");
-      default = [ ];
-      description = "System features available to builds on this machine.";
-    };
   };
-  config = lib.mkIf configured {
-    packages = lib.optional (configuration.builders != { }) pkgs.rcpu;
-    files."nix.conf" =
-      "builders = "
-      + lib.concatStringsSep " ; " (lib.mapAttrsToList builderLine configuration.builders)
-      + "\n"
-      + lib.optionalString (
-        configuration.maxJobs != null
-      ) "max-jobs = ${toString configuration.maxJobs}\n"
-      + lib.optionalString (
-        configuration.systemFeatures != [ ]
-      ) "system-features = ${lib.concatStringsSep " " configuration.systemFeatures}\n";
+  config = {
+    packages = lib.optional (
+      configuration.buildMachines != [ ] || (explicitBuilders != null && explicitBuilders != "")
+    ) pkgs.rcpu;
+    nix.settings.builders = lib.mkDefault (
+      if configuration.distributedBuilds then
+        lib.concatMapStringsSep " ; " builderLine configuration.buildMachines
+      else
+        ""
+    );
+    assertions = [
+      {
+        assertion = builtins.deepSeq configuration.buildMachines (
+          builtins.all (builder: builder.system != null || builder.systems != [ ]) configuration.buildMachines
+        );
+        message = "nix.buildMachines requires system or a nonempty systems list for each builder";
+      }
+    ];
   };
 }

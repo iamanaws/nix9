@@ -52,7 +52,9 @@ in
         + lib.optionalString binding.create ", create"
         + ", ${availability binding.required}"
       ) configs.${name}.namespace.binds
-      ++ lib.mapAttrsToList (builder: settings: "  builder ${builder}: ${settings.host}") machine.builders
+      ++ lib.mapAttrsToList (
+        builder: settings: "  builder ${builder}: ${settings.hostName}"
+      ) machine.builders
       ++ lib.optionals (machine.boot != null) [
         "  boot: ${machine.boot.provider} attach main, root ${machine.boot.root}"
         "  state: ${machine.boot.stateDirectory}"

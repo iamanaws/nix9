@@ -2,7 +2,7 @@
   lib,
   auth,
   cpu,
-  nixStore,
+  daemon,
   exports,
   cronKeyFile ? null,
   cwfsEnabled ? false,
@@ -16,12 +16,11 @@ let
   inherit (import ./modules/types.nix { inherit lib; }) userName;
   error = message: throw "mkSystem: ${message}";
   exportList = builtins.attrValues exports;
-  needsFactotum =
-    cpu.enable || nixStore.enable || exports != { } || cronKeyFile != null || cwfsEnabled;
+  needsFactotum = cpu.enable || daemon.enable || exports != { } || cronKeyFile != null || cwfsEnabled;
   keys = lib.unique (
     builtins.filter (key: key != null) (
       (lib.optional cpu.enable cpu.keyFile)
-      ++ (lib.optional nixStore.enable nixStore.keyFile)
+      ++ (lib.optional daemon.enable daemon.keyFile)
       ++ map (item: item.keyFile) exportList
       ++ [
         cronKeyFile
@@ -34,20 +33,6 @@ if cpu.enable && cpu.allowedUsers == [ ] then
   error "services.cpu.allowedUsers must name at least one user"
 else if !cpu.enable && (cpu.allowedUsers != [ ] || cpu.keyFile != null || cpu.keyPattern != "") then
   error "CPU settings require services.cpu.enable"
-else if
-  nixStore.enable && (nixStore.allowedUsers == [ ] || builtins.elem "none" nixStore.allowedUsers)
-then
-  error "services.nixStore.allowedUsers must name users other than the anonymous build identity none"
-else if
-  !nixStore.enable
-  && (
-    nixStore.allowedUsers != [ ]
-    || nixStore.keyFile != null
-    || nixStore.keyPattern != ""
-    || nixStore.port != 17051
-  )
-then
-  error "shared-store settings require services.nixStore.enable"
 else if !builtins.all userName.check (builtins.attrNames auth.speaksFor) then
   error "services.auth.speaksFor contains an invalid identity"
 else if

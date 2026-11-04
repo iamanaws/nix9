@@ -31,8 +31,8 @@ def login(guest, user, command, expected=None):
     return guest.command(line, expected)
 
 
-def denied(guest, user):
-    result = login(guest, user, "nix-store --roots-dir || echo STORE-ERROR:$status")
+def denied(guest, user, prefix=""):
+    result = login(guest, user, prefix + "nix-store --roots-dir || echo STORE-ERROR:$status")
     if not re.search(r"(?m)^STORE-ERROR:.+", result) or "cannot open connection" not in result:
         raise RuntimeError("store policy did not reject the user: " + result)
 
@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory() as directory:
         listening(guest, 17051)
         guest.command(". /usr/local/pkg/nix9/system")
         guest.command("echo $NIX_REMOTE", "local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log")
-        guest.command("nix9 status --health", "store health nixStore/listener ok")
+        guest.command("nix9 status --health", "store health nix/daemon ok")
         for user in ("alice", "bob"):
             login(guest, user, "echo $NIX_REMOTE", "daemon?address=tcp!127.0.0.1!17051&key-pattern=user=" + user)
             login(guest, user, "test ! -w /usr/local/nix/store && test ! -w /usr/local/nix/state/db/db.sqlite")
@@ -154,6 +154,8 @@ with tempfile.TemporaryDirectory() as directory:
         login(guest, "bob", "echo $NIX_REMOTE", "daemon?address=tcp!127.0.0.1!17052&key-pattern=user=bob")
         check_profile(guest, "bob", "one")
         denied(guest, "alice")
+        denied(guest, "alice", "NIX_CONFIG='allowed-users = *'; ")
+        guest.command("grep 'allowed-users = bob' /cfg/nix9/files/nix.conf")
         guest.command("nix9-rebuild rollback")
         denied(guest, "alice")
         check_profile(guest, "bob", "one")
@@ -186,6 +188,6 @@ with tempfile.TemporaryDirectory() as directory:
 Path(output).mkdir(parents=True, exist_ok=True)
 Path(output, "results.json").write_text(json.dumps({"status": "passed", "checks": [
     "private-runtime-keys", "manual-port-collision", "managed-startup", "ordinary-login",
-    "owner-local-store", "protected-store", "native-client-identity", "booted-client-defaults", "policy-and-port-reboot",
+    "owner-local-store", "protected-store", "native-client-identity", "booted-client-defaults", "policy-and-port-reboot", "server-owned-nix-settings",
     "policy-rollback", "retained-user-profiles", "user-profile-rollback", "gc", "disable",
 ]}, indent=2) + "\n")

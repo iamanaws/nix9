@@ -8,12 +8,10 @@ endforeach
 command_deps = [nix_libraries['main']]
 
 foreach command : ['store', 'instantiate', 'build', 'build-remote', 'daemon-worker']
-  sources = ['main.cc']
-  if command == 'daemon-worker'
-    sources += ['daemon-worker.cc']
-  elif command == 'build-remote'
+  sources = ['main.cc', 'daemon-worker.cc']
+  if command == 'build-remote'
     sources += ['src/nix/build-remote/build-remote.cc']
-  else
+  elif command != 'daemon-worker'
     sources += ['src/nix/nix-' + command + '/nix-' + command + '.cc']
   endif
   args = []

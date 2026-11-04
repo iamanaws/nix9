@@ -20,14 +20,19 @@ in
     description = "Concurrent build slots on this builder, counted on the client machine.";
   };
   speedFactor = lib.mkOption {
-    type = lib.types.ints.positive;
+    type = lib.types.numbers.nonnegative;
     default = 1;
     description = "Relative preference when choosing between available builders.";
   };
   systems = lib.mkOption {
-    type = lib.types.nonEmptyListOf feature;
+    type = lib.types.listOf feature;
     default = [ "x86_64-plan9" ];
     description = "Nix platforms supported by the builder.";
+  };
+  system = lib.mkOption {
+    type = lib.types.nullOr feature;
+    default = null;
+    description = "Single Nix platform supported by the builder; takes precedence over systems.";
   };
   supportedFeatures = lib.mkOption {
     type = lib.types.listOf feature;

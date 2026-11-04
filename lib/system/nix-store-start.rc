@@ -3,9 +3,16 @@ netstat -n | awk -v 'port='^$nix9StorePort '$1 == "tcp" && $4 == "Listen" && $5 
   exit 'shared-store TCP port is already occupied'
 if(! grep -s '127.0.0.1' /net/ipselftab)
   ip/ipconfig -P loopback /dev/null 127.1 || exit 'cannot configure store loopback'
-$nix9/bin/nix-store-service -a tcp!127.0.0.1!^$nix9StorePort -k $nix9StoreKeyPattern \
-  -u $nix9ListenStartSystem/services/nix-store-users -w $nix9/bin/nix-daemon-worker \
-  </dev/null >>/sys/log/nix9-store >[2=1] &
+@{
+  rfork ne
+  # Keep the release's cache settings and its include of the booted nix.conf.
+  bind $nix9ListenStartSystem/files /cfg/nix9/files || exit 'cannot bind daemon configuration'
+  NIX_CONF_DIR=$nix9
+  NIX_USER_CONF_FILES=/dev/null
+  NIX_CONFIG=()
+  exec $nix9/bin/nix-store-service -a tcp!127.0.0.1!^$nix9StorePort -k $nix9StoreKeyPattern \
+    -w $nix9/bin/nix-daemon-worker
+} </dev/null >>/sys/log/nix9-store >[2=1] &
 attempts=0
 while(! netstat -n | awk -v 'port='^$nix9StorePort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit !found}') {
   if(~ $attempts 5) exit 'shared store did not become ready; see /sys/log/nix9-store'

@@ -1,14 +1,13 @@
 /* Native authentication, TLS and identity changes for Nix's worker protocol. */
 #include <u.h>
 #include <libc.h>
-#include <bio.h>
 #include <auth.h>
 #include <mp.h>
 #include <libsec.h>
 
 static char *address = "tcp!127.0.0.1!17051";
 static char *keys = "";
-static char *policy, *worker, *launcher;
+static char *worker, *launcher;
 static char *builduser = "none";
 static char *clientpid;
 static int connectionctl = -1;
@@ -37,7 +36,7 @@ static void
 usage(void)
 {
 	fprint(2, "usage: nix-store-service -c [-a address] [-k keypattern] [-p client-pid]\n"
-		"       nix-store-service [-a address] [-k keypattern] -u allowed-users -w worker\n");
+		"       nix-store-service [-a address] [-k keypattern] -w worker\n");
 	exits("usage");
 }
 
@@ -109,39 +108,6 @@ standardfds(void)
 		if(fd != i)
 			close(fd);
 	}
-}
-
-static int
-allowed(char *user)
-{
-	Biobuf *b;
-	Dir *d;
-	char *line, *words[64];
-	int i, n, ok;
-
-	b = Bopen(policy, OREAD);
-	if(b == nil)
-		return 0;
-	d = dirfstat(Bfildes(b));
-	if(d == nil || (d->mode & DMDIR) || strcmp(d->uid, getuser()) != 0 || (d->mode & 022) != 0){
-		free(d);
-		Bterm(b);
-		return 0;
-	}
-	free(d);
-	ok = 0;
-	while(line = Brdstr(b, '\n', 1)){
-		char *comment;
-		if(comment = strchr(line, '#'))
-			*comment = 0;
-		n = tokenize(line, words, nelem(words));
-		for(i = 0; i < n; i++)
-			if(strcmp(words[i], user) == 0 || strcmp(words[i], "*") == 0)
-				ok = 1;
-		free(line);
-	}
-	Bterm(b);
-	return ok;
 }
 
 static void
@@ -284,7 +250,7 @@ connection(int ctl)
 	ai = auth_proxy(0, nil, "proto=p9any role=server %s", keys);
 	if(ai == nil)
 		sysfatal("store authentication: %r");
-	if(!username(ai->cuid) || strcmp(ai->cuid, builduser) == 0 || !allowed(ai->cuid))
+	if(!username(ai->cuid) || strcmp(ai->cuid, builduser) == 0)
 		sysfatal("store access denied");
 	memset(&conn, 0, sizeof conn);
 	conn.pskID = "p9secret";
@@ -585,7 +551,6 @@ main(int argc, char **argv)
 	case 'p': clientpid = EARGF(usage()); break;
 	case 'a': address = EARGF(usage()); break;
 	case 'k': keys = EARGF(usage()); break;
-	case 'u': policy = EARGF(usage()); break;
 	case 'w': worker = EARGF(usage()); break;
 	default: usage();
 	}ARGEND
@@ -595,7 +560,7 @@ main(int argc, char **argv)
 		sysfatal("key pattern must contain public factotum attributes only");
 	if(isclient)
 		client();
-	if(policy == nil || worker == nil || worker[0] != '/' || strrchr(worker, '/') == nil ||
+	if(worker == nil || worker[0] != '/' || strrchr(worker, '/') == nil ||
 	   launcher[0] != '/' || !username(builduser) || strcmp(builduser, getuser()) == 0)
 		usage();
 	if(rfork(RFNAMEG|RFENVG|RFFDG|RFNOTEG) < 0)

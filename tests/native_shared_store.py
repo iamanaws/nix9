@@ -94,8 +94,9 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("echo 'exec '^$authpkg^'/bin/auth/authsrv -N $3' >> /adm/shared-auth/tcp567")
         guest.command("chmod 755 /adm/shared-auth/tcp567")
         guest.command("aux/listen -q -t /adm/shared-auth -d /adm/shared-empty tcp")
-        guest.command("echo alice bob > /adm/shared-allowed; chmod 644 /adm/shared-allowed")
-        guest.command("$nix9/bin/nix-store-service -k 'dom=nix9.shared user=nixhost' -u /adm/shared-allowed "
+        guest.command("echo 'allowed-users = alice bob' > /adm/shared-nix.conf; chmod 644 /adm/shared-nix.conf")
+        guest.command("echo '!include /adm/shared-nix.conf' >> $nix9/nix.conf")
+        guest.command("$nix9/bin/nix-store-service -k 'dom=nix9.shared user=nixhost' "
                       "-w $nix9/bin/nix-daemon-worker </dev/null >/tmp/shared-service.log >[2=1] &")
         guest.command("sleep 1; cat /tmp/shared-service.log; netstat -n")
         guest.command("netstat -n | grep 'Listen *17051 '")
@@ -156,12 +157,24 @@ with tempfile.TemporaryDirectory() as directory:
                 rejected(user, "machine --check-validity " + compiler, "permission denied")
             query = "nix-store -q --hash " + compiler
             rejected("carol", query, "cannot open connection")
-            guest.command("chmod 666 /adm/shared-allowed")
-            rejected("alice", query, "cannot open connection")
-            guest.command("chmod 644 /adm/shared-allowed")
-            guest.command("echo bob > /adm/shared-allowed")
+            # The worker reads ordinary nix.conf settings; clients cannot widen access.
+            guest.command("echo 'allowed-users = bob' > /adm/shared-nix.conf")
             rejected("alice", "user=bob; " + query, "cannot open connection")
-            guest.command("echo alice bob > /adm/shared-allowed")
+            rejected("alice", "NIX_CONFIG='allowed-users = *'; " + query, "cannot open connection")
+            guest.command("echo 'allowed-users =' > /adm/shared-nix.conf")
+            rejected("bob", query, "cannot open connection")
+            # The upstream wildcard default also applies without a managed system.
+            guest.command("echo -n > /adm/shared-nix.conf")
+            user_command("carol", query)
+            guest.command("echo 'allowed-users = *' > /adm/shared-nix.conf")
+            user_command("alice", query)
+            guest.command("echo 'extra-allowed-users = @users' >> /adm/shared-nix.conf")
+            rejected("alice", query, "cannot open connection")
+            guest.command("grep '@group selectors are not yet supported' /tmp/shared-service.log")
+            guest.command("echo 'trusted-users = alice' > /adm/shared-nix.conf")
+            rejected("alice", query, "cannot open connection")
+            guest.command("grep 'privileged daemon connections are not yet supported' /tmp/shared-service.log")
+            guest.command("echo 'allowed-users = alice bob' > /adm/shared-nix.conf")
             print("PASS: authenticated users reuse one signed package without private stores or database access", flush=True)
 
             for user, attribute in (("alice", "one"), ("bob", "two")):

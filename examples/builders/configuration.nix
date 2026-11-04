@@ -30,7 +30,7 @@
       builders.build = { };
       configuration = {
         networking.enable = true;
-        nix.maxJobs = 0;
+        nix.settings.max-jobs = 0;
       };
     };
   };

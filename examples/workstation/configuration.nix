@@ -46,7 +46,7 @@
       builders.build.maxJobs = 2;
       configuration = {
         networking.enable = true;
-        nix.maxJobs = 0;
+        nix.settings.max-jobs = 0;
         services.plumber.enable = true;
         programs = {
           rio.enable = true;

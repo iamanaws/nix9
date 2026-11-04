@@ -3,7 +3,7 @@
 See [service discovery](discovery.md) for generated NDB records and packaged cs/DNS.
 See [DHCP](dhcp.md) for serving addresses and network defaults from NDB.
 See [PXE](netboot.md) for native TFTP serving and CPU boot files.
-See [shared stores](native.md#shared-store) for `services.nixStore` and user builds.
+See [shared stores](native.md#shared-store) for `nix.daemon` and user builds.
 
 These options belong inside [mkSystem](configuration.md) and are disabled by
 default. See its [activation table](configuration.md#generations) for when

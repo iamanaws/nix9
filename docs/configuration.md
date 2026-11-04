@@ -37,6 +37,25 @@ Use [an installation inventory](installation.md) to describe several machines,
 generate their discovery records and connect session mounts to declared exports.
 It can also select [remote Nix builders](builders.md) by CPU machine name.
 
+## Nix settings
+
+Use `nix.settings` for `nix.conf` options, as on NixOS:
+
+```nix
+{
+  nix.settings = {
+    max-jobs = 1;
+    system-features = [ "batch" ];
+    keep-failed = true;
+  };
+}
+```
+
+Values may be strings, numbers, booleans, paths or lists; `null` omits a setting.
+Module overrides and list merging apply normally. Configure
+[shared-store access](native.md#shared-store) with `nix.settings.allowed-users`
+and the native listener through `nix.daemon`.
+
 ## Generations
 
 | Command | Effect |
@@ -94,14 +113,14 @@ Selection and rollback apply settings at different times:
 | --- | --- |
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
-| Nix builders and build settings | Next Nix invocation after login or session refresh. |
+| Nix settings and builders | Local clients: next invocation after login or session refresh. Daemon: next CPU-server boot. |
 | Rio, Acme and plumbing settings | Next native program start after sourcing the generated program defaults. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |
 | Ethernet and clock synchronization | Next boot. |
 | DHCP serving | Next boot. Dynamic leases persist across selection and rollback. |
 | CPU TCP scripts, CPU access, file exports and authentication policy | Next CPU-server boot. Running services and connections retain the booted generation. |
-| [Shared Nix store](native.md#shared-store) access and port | Next CPU-server boot. Login defaults follow the booted service; user profiles persist. |
+| [Shared Nix store](native.md#shared-store) enable and port | Next CPU-server boot. Login defaults follow the booted service; user profiles persist. |
 | CWFS data service and daily dump policy | Next CPU-server boot. Project contents and historical dumps persist across system selections. |
 | Backup definitions | Next invocation in an activated system session. See [backups](backups.md). |
 | Log files and permissions | Selection and boot. Login and refresh leave them alone. |

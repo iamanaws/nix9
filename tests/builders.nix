@@ -30,7 +30,7 @@ in
       ip = "10.0.2.103";
       configuration.networking.enable = true;
       configuration.services.ndb.dns.enable = false;
-      configuration.nix.systemFeatures = [ "batch" ];
+      configuration.nix.settings.system-features = [ "batch" ];
       configuration.services.cpu = {
         enable = true;
         allowedUsers = [ "glenda" ];
@@ -47,55 +47,89 @@ in
   };
   renamed = make { machines.build.hostName = "compile"; };
   standalone = system {
-    nix.builders.build = {
-      host = "cpu.example";
-      keyPattern = "dom=example user=glenda";
-    };
+    nix.distributedBuilds = true;
+    nix.buildMachines = [
+      {
+        hostName = "cpu.example";
+        keyPattern = "dom=example user=glenda";
+      }
+    ];
+  };
+  extended = make {
+    machines.terminal.configuration.nix.buildMachines = [ { hostName = "external"; } ];
+  };
+  stopped = make { machines.terminal.configuration.nix.distributedBuilds = false; };
+  singular = system {
+    nix.buildMachines = [
+      {
+        hostName = "build";
+        system = "x86_64-plan9";
+        systems = [ ];
+      }
+    ];
   };
   invalid = {
+    removedBuilders = system { nix.builders.build.host = "build"; };
     unknown = (make { machines.terminal.builders.missing = { }; }).build;
     disabledCPU =
       (make ({ lib, ... }: { machines.build.configuration.services.cpu.enable = lib.mkForce false; }))
       .build;
     deniedUser = (make { machines.terminal.builders.build.user = "nobody"; }).build;
-    overrideHost = (make { machines.terminal.configuration.nix.builders.build.host = "other"; }).build;
+    overrideHost =
+      (make (
+        { lib, ... }: {
+          machines.terminal.configuration.nix.buildMachines = lib.mkForce [ { hostName = "other"; } ];
+        }
+      )).build;
     zeroJobs = system {
-      nix.builders.build = {
-        host = "build";
-        maxJobs = 0;
-      };
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          maxJobs = 0;
+        }
+      ];
     };
-    invalidHost = system { nix.builders.build.host = "build; reboot"; };
+    invalidHost = system { nix.buildMachines = [ { hostName = "build; reboot"; } ]; };
     invalidUser = system {
-      nix.builders.build = {
-        host = "build";
-        user = "user name";
-      };
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          user = "user name";
+        }
+      ];
     };
     secret = system {
-      nix.builders.build = {
-        host = "build";
-        keyPattern = "!password=secret";
-      };
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          keyPattern = "!password=secret";
+        }
+      ];
     };
     newline = system {
-      nix.builders.build = {
-        host = "build";
-        keyPattern = "dom=test\n";
-      };
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          keyPattern = "dom=test\n";
+        }
+      ];
     };
-    negativeLocalJobs = system { nix.maxJobs = -1; };
+    negativeLocalJobs = system { nix.settings.max-jobs = -1; };
     invalidFeature = system {
-      nix.builders.build = {
-        host = "build";
-        supportedFeatures = [ "bad feature" ];
-      };
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          supportedFeatures = [ "bad feature" ];
+        }
+      ];
     };
     noSystem = system {
-      nix.builders.build = {
-        host = "build";
-        systems = [ ];
-      };
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          systems = [ ];
+        }
+      ];
     };
   };
 }

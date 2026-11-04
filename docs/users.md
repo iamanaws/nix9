@@ -101,7 +101,7 @@ chmod 660 /n/projects/hello/*
 
 Both users can edit these sources on either CPU and run configured system
 packages such as `fortune`. Enable [shared-store user builds](native.md#shared-store)
-on an individual CPU through `services.nixStore`. Updating one CPU leaves the
+on an individual CPU through `nix.daemon`. Updating one CPU leaves the
 other CPU and shared homes in place.
 
 ## Changes and recovery

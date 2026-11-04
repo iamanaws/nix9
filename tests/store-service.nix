@@ -26,49 +26,62 @@ let
           "bob"
         ];
       };
-      services.nixStore = settings;
+      nix = settings;
     };
   settings = {
-    enable = true;
-    allowedUsers = [
+    daemon = {
+      enable = true;
+      keyFile = "/adm/nix-store.keys";
+      keyPattern = "dom=nix9.shared user=nixhost";
+    };
+    settings.allowed-users = [
       "alice"
       "bob"
     ];
-    keyFile = "/adm/nix-store.keys";
-    keyPattern = "dom=nix9.shared user=nixhost";
   };
   invalid =
     extra:
     pkgs.mkSystem {
       hostName = "store";
-      services.nixStore = settings;
+      nix = settings;
       imports = [ extra ];
     };
 in
 {
   initial = make settings;
   moved = make (
-    settings
-    // {
-      port = 17052;
-      allowedUsers = [ "bob" ];
+    pkgs.lib.recursiveUpdate settings {
+      daemon.port = 17052;
+      settings.allowed-users = [ "bob" ];
     }
   );
   disabled = make { };
-  provisioned = make (settings // { keyFile = null; });
+  provisioned = make (pkgs.lib.recursiveUpdate settings { daemon.keyFile = null; });
+  wildcard = make { daemon = settings.daemon; };
+  empty = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ ]; });
   invalid = {
-    empty = make (settings // { allowedUsers = [ ]; });
-    anonymous = make (settings // { allowedUsers = [ "none" ]; });
-    wildcard = make (settings // { allowedUsers = [ "*" ]; });
-    badUser = make (settings // { allowedUsers = [ "bad user" ]; });
-    disabledPolicy = make (settings // { enable = false; });
-    secretPattern = make (settings // { keyPattern = "!password=secret"; });
-    storeKey = make (settings // { keyFile = "/usr/local/nix/store/secret"; });
-    pathKey = make (settings // { keyFile = ./store-service.nix; });
-    traversal = make (settings // { keyFile = "/adm/../secret"; });
-    portRange = make (settings // { port = 65536; });
-    zeroPort = make (settings // { port = 0; });
-    cpuPort = make (settings // { port = 17019; });
+    anonymous = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ "none" ]; });
+    group = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ "@wheel" ]; });
+    trusted = make (pkgs.lib.recursiveUpdate settings { settings.trusted-users = [ "alice" ]; });
+    badUser = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ "bad user" ]; });
+    disabledTransport = make (pkgs.lib.recursiveUpdate settings { daemon.enable = false; });
+    secretPattern = make (
+      pkgs.lib.recursiveUpdate settings { daemon.keyPattern = "!password=secret"; }
+    );
+    storeKey = make (
+      pkgs.lib.recursiveUpdate settings { daemon.keyFile = "/usr/local/nix/store/secret"; }
+    );
+    pathKey = make (pkgs.lib.recursiveUpdate settings { daemon.keyFile = ./store-service.nix; });
+    traversal = make (pkgs.lib.recursiveUpdate settings { daemon.keyFile = "/adm/../secret"; });
+    portRange = make (pkgs.lib.recursiveUpdate settings { daemon.port = 65536; });
+    zeroPort = make (pkgs.lib.recursiveUpdate settings { daemon.port = 0; });
+    cpuPort = make (pkgs.lib.recursiveUpdate settings { daemon.port = 17019; });
+    negativeJobs = make { settings.max-jobs = -1; };
+    multiline = make { settings.cores = "1\nallowed-users = *"; };
+    comment = make { settings.builders = "cpu://build # ignored"; };
+    invalidName = make { settings."include /tmp/policy" = ""; };
+    manualConfig = invalid { files."nix.conf" = "allowed-users = *"; };
+    removedJobs = make { maxJobs = 1; };
     scriptPort = invalid {
       services.listen = {
         enable = true;

@@ -17,7 +17,7 @@ in
 {
   imports = [
     ./modules/directories.nix
-    ./modules/builders.nix
+    ./modules/nix.nix
     ./modules/programs.nix
   ];
   config.logging = lib.mkMerge [
@@ -33,7 +33,7 @@ in
       enable = lib.mkDefault true;
       files.cwfs.mode = lib.mkDefault "0640";
     })
-    (lib.mkIf config.services.nixStore.enable {
+    (lib.mkIf config.nix.daemon.enable {
       enable = lib.mkDefault true;
       files.nix9-store.mode = lib.mkDefault "0640";
     })
@@ -101,7 +101,6 @@ in
           }
           ./modules/auth.nix
           ./modules/cpu.nix
-          ./modules/nix-store.nix
           ./modules/exports.nix
           ./modules/cron.nix
           ./modules/cwfs.nix

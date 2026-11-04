@@ -159,7 +159,12 @@ let
   builderConfigurations = lib.mapAttrs (
     _: machine:
     lib.mapAttrs (
-      provider: builder: builder // { host = machines.${provider}.hostName; }
+      provider: builder:
+      builder
+      // {
+        hostName = machines.${provider}.hostName;
+        protocol = "cpu";
+      }
     ) machine.builders
   ) machines;
   configs = lib.mapAttrs (
@@ -174,7 +179,8 @@ let
         inherit (machine) hostName machineId;
         services.ndb = { ... }: { imports = ndbModules; };
         namespace.mounts = mountConfigurations.${machineName};
-        nix.builders = builderConfigurations.${machineName};
+        nix.buildMachines = builtins.attrValues builderConfigurations.${machineName};
+        nix.distributedBuilds = lib.mkIf (machine.builders != { }) (lib.mkDefault true);
         services.cron = lib.mkIf (scheduledJobs machineName != { }) {
           enable = true;
           jobs = scheduledJobs machineName;
@@ -201,7 +207,8 @@ let
           {
             assertion = builtins.all (
               provider:
-              configs.${machineName}.nix.builders.${provider} == builderConfigurations.${machineName}.${provider}
+              builtins.elem builderConfigurations.${machineName}.${provider}
+                configs.${machineName}.nix.buildMachines
             ) (builtins.attrNames machine.builders);
             message = "installation inventory owns named builders for ${machineName}";
           }
@@ -290,7 +297,8 @@ let
       let
         clientMounts = builtins.attrValues configs.${consumer}.namespace.mounts;
         servesUsers = serves consumer "cpu" || serves consumer "fs";
-        hasBuilders = configs.${consumer}.nix.builders != { };
+        hasBuilders =
+          configs.${consumer}.nix.distributedBuilds && configs.${consumer}.nix.buildMachines != [ ];
       in
       lib.optional
         (
@@ -395,7 +403,8 @@ let
         ;
       ether = discovery.hosts.${machine.hostName}.ether;
       deployment = deployment.${machineName};
-      builders = configs.${machineName}.nix.builders;
+      builders = builderConfigurations.${machineName};
+      buildMachines = configs.${machineName}.nix.buildMachines;
       boot =
         if machine.boot == null then
           null

@@ -15,14 +15,15 @@ in the [installation inventory](installation.md):
   machines.terminal = {
     builders.build = { maxJobs = 2; };
     builders.batch = { };
-    configuration.nix.maxJobs = 0;
+    configuration.nix.settings.max-jobs = 0;
   };
 }
 ```
 
-`nix.maxJobs = 0` disables local compilation. Omit it to allow local builds too.
+`nix.settings.max-jobs = 0` disables local compilation. Omit it to allow local builds too.
 The inventory derives hostnames and the authentication domain. It rejects
 unknown providers, disabled CPU services and explicitly denied login users.
+It populates `nix.buildMachines` and enables `nix.distributedBuilds` by default.
 
 The three-machine [example](../examples/builders/configuration.nix) contains an
 auth server, one build CPU and a terminal:
@@ -63,13 +64,33 @@ after the builder disconnects. Repeating the build reuses valid local outputs.
 | `systems` | `[ "x86_64-plan9" ]`. |
 | `supportedFeatures`, `mandatoryFeatures` | Empty lists. Mandatory features must be requested by the derivation. |
 
-Set `configuration.nix.systemFeatures` on a builder to match the capabilities
+Set `configuration.nix.settings.system-features` on a builder to match the capabilities
 advertised in its `supportedFeatures`. Slot accounting coordinates build clients
 on one submitting machine. Separate terminals count their slots independently.
 Builders run as the authenticated user; choosing a builder trusts its outputs.
 
-For a standalone `mkSystem`, use `nix.builders.NAME` with the same settings and
-an explicit `host`. Its `keyPattern` defaults to an empty string.
+For a standalone `mkSystem`, use the NixOS-style builder list:
+
+```nix
+{
+  nix.distributedBuilds = true;
+  nix.buildMachines = [
+    {
+      hostName = "cpu.example.net";
+      user = "glenda";
+      keyPattern = "dom=example.net";
+      systems = [ "x86_64-plan9" ];
+    }
+  ];
+}
+```
+
+The native `protocol` defaults to `"cpu"`; `user` and `keyPattern` select CPU
+credentials instead of SSH credentials. `system` can specify a single platform
+and takes precedence over `systems`. Mandatory features are also included in
+the advertised supported features. Setting `nix.distributedBuilds = false`
+disables the declared builders; explicit `nix.settings.builders` or command-line
+settings can override that choice.
 
 ## Commands and failures
 
