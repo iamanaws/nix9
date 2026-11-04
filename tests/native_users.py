@@ -1,4 +1,4 @@
-"""Shared users on two CPUs, protected machine stores and CWFS account changes."""
+"""Shared development on two CPUs, protected machine stores and CWFS accounts."""
 
 from contextlib import ExitStack, contextmanager, nullcontext
 import functools
@@ -18,6 +18,7 @@ import time
 
 from boot_medium import boot_medium
 from guest import boot
+from user_development import check_development, check_profiles
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
@@ -71,6 +72,7 @@ with ExitStack() as stack:
     work.chmod(0o700)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
     shutil.copyfile(Path(__file__).with_name("accounts.nix"), work / "accounts.nix")
+    shutil.copyfile(Path(__file__).with_name("user-development.rc"), work / "user-development.rc")
     (work / "cwfs.setup").write_text("service files\nconfig /adm/storage/config\n"
                                     "filsys main cw0fw1\nfilsys dump o\nream main\nend\n")
     keys = {name: secrets.token_bytes(16) for name in ("glenda", "alice", "bob", "files", *CPUS)}
@@ -221,6 +223,8 @@ with ExitStack() as stack:
         files.command(f"rc {artifact}/prepare /n/site /tmp/node-bootstrap.tar")
         directory = "/n/site/machines/" + name
         download(files, name + ".keys", directory + "/adm/cpu.keys", private=True)
+        download(files, "user-development.rc", directory + "/usr/user-development.rc")
+        files.command("chmod 444 " + directory + "/usr/user-development.rc")
         files.command(f"echo {systems[name]['first']} > {directory}/tmp/system-path")
         files.command(f"nix-store --export `{{nix-store -qR {systems[name]['first']}}} > {directory}/tmp/system.export")
         settings = files.command("cat " + artifact + "/plan9.ini")
@@ -246,6 +250,7 @@ with ExitStack() as stack:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/system")
             listening(guest, 17019)
+            listening(guest, 17051)
             try:
                 yield guest
             finally:
@@ -289,8 +294,7 @@ with ExitStack() as stack:
         for user in ("alice", "bob"):
             remote(user, f"cat /usr/{user}/private", user + "-private", machine=name)
             remote(user, "fortune > $home/fortune && test -s $home/fortune", machine=name)
-            remote(user, "test ! -w /usr/local/nix/store && test ! -w /usr/local/nix/state/db", machine=name)
-    rejected(auth, "rcpu -u alice -h build -c 'nix-build $nix9/packages -A fortune'", "permission denied")
+            remote(user, "test ! -w /usr/local/nix/state/db/db.sqlite", machine=name)
     remote("alice", "mkdir -p /n/projects/hello && cp $nix9/packages/examples/workstation/project/* /n/projects/hello/")
     remote("alice", "chmod 770 /n/projects/hello && chmod 660 /n/projects/hello/*")
 
@@ -298,6 +302,7 @@ with ExitStack() as stack:
     remote("bob", "echo bob >> /n/projects/hello/participants", machine="batch")
     remote("alice", "cat /n/projects/hello/participants", "bob")
     print("PASS: both CPUs expose system packages and shared sources while protecting machine stores", flush=True)
+    environments = check_development(auth, cpus, remote)
 
     updated = path(files, "nix-build /tmp/accounts.nix -A updatedCpu --no-out-link")
     # The update adds a literal file; its dependencies are already on the CPU.
@@ -311,7 +316,17 @@ with ExitStack() as stack:
     remote("bob", "fortune > $home/fortune && test -s $home/fortune", machine="batch")
     remote("alice", "cat /usr/alice/private", "alice-private")
     remote("alice", "cat /n/projects/hello/participants", "bob")
+    check_profiles(remote, environments)
     print("PASS: updating and rebooting one CPU preserves the other CPU, shared homes and project edits", flush=True)
+
+    cpus["build"].command("nix9-rebuild rollback")
+    stop(cpus["build"])
+    cpus["build"] = stack.enter_context(start_cpu("build"))
+    cpus["build"].command(f"~ `{{cat {ROOTS}/machines/build/system}} {systems['build']['first']}")
+    for cpu in cpus.values():
+        cpu.command("nix-store --gc")
+    check_profiles(remote, environments)
+    print("PASS: CPU system rollback and GC retain both users' development profiles", flush=True)
 
     files.command("cp /n/site/adm/users /tmp/users-before-check")
     for attribute, reason in (("conflicting", "existing name has another ID"), ("occupied", "ID belongs to another name"),
@@ -327,6 +342,7 @@ with ExitStack() as stack:
     rejected(auth, "rcpu -u bob -h build -c 'cat /n/projects/message'", "")
     remote("bob", "cat /usr/bob/private", "bob-private")
     remote("alice", "cat /n/projects/message")
+    check_profiles(remote, environments)
     print("PASS: read-only preflight rejects ID and directory conflicts; group changes apply at file-server boot", flush=True)
 
     files.command("nix9 select " + systems["files"]["third"])
@@ -340,6 +356,7 @@ with ExitStack() as stack:
     remote("bob", "cat /n/projects/message")
     remote("alice", "cat /usr/alice/private", "alice-private")
     remote("alice", "grep '^1013:carol:carol:$' /root/adm/users", "1013:carol:carol:")
+    check_profiles(remote, environments)
     records = auth.command("cat /sys/log/auth")
     for user in ("alice", "bob"):
         if not re.search(r"tr-ok " + user + r"@glenda.* -> " + user + r"@glenda", records):
@@ -352,9 +369,12 @@ with ExitStack() as stack:
     Path(output).mkdir(parents=True, exist_ok=True)
     Path(output, "results.json").write_text(json.dumps({
         "status": "passed", "machines": 4, "users": ["alice", "bob"], "fileServerBoots": 4,
-        "cpuBoots": {"build": 6, "batch": 5},
+        "cpuBoots": {"build": 7, "batch": 5},
         "checks": ["missing-keys", "empty-keys", "disabled-keys", "expired-keys", "two-user-login",
                    "two-cpu-homes", "system-packages", "machine-store-permissions", "shared-source-editing", "independent-cpu-update",
                    "private-homes", "shared-project", "id-conflicts", "unknown-members", "directory-preflight",
-                   "boot-policy", "group-revocation", "undeclared-accounts", "rollback", "delegated-authentication"],
+                   "boot-policy", "group-revocation", "undeclared-accounts", "rollback", "delegated-authentication",
+                   "shared-store-cpu-logins", "shared-build-reuse", "independent-user-profiles", "user-profile-rollback",
+                   "independent-machine-roots", "concurrent-development-shells", "shell-native-c", "shell-caller-identity",
+                   "shell-gc", "logout-root-cleanup", "cpu-rollback", "profiles-across-provider-reboots"],
     }, indent=2) + "\n")

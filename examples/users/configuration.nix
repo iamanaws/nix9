@@ -11,6 +11,16 @@ let
       keyFile = "/adm/cpu.keys";
       keyPattern = "dom=nix9.netroot user=${config.hostName}";
     };
+    nix = {
+      daemon = {
+        enable = true;
+        keyPattern = config.services.cpu.keyPattern;
+      };
+      settings.allowed-users = [
+        "alice"
+        "bob"
+      ];
+    };
     namespace.binds = [
       {
         source = "/root/projects";

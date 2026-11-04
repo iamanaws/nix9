@@ -231,7 +231,7 @@ client(void)
 		transfer(fd, 1);
 		break;
 	}
-	hangup(ctl);
+	fprint(ctl, "close");
 	/* Stop both transfer directions and the watcher in our private group. */
 	postnote(PNGROUP, getpid(), "kill");
 	exits(nil);
@@ -242,9 +242,9 @@ connection(int ctl)
 {
 	AuthInfo *ai;
 	TLSconn conn;
-	char *args[2], *dump;
+	char *args[2], *dump, drain[8192];
 	Waitmsg *w;
-	int fd, pid, exited;
+	int fd, pid, exited, raw;
 
 	alarm(30000);
 	ai = auth_proxy(0, nil, "proto=p9any role=server %s", keys);
@@ -256,24 +256,28 @@ connection(int ctl)
 	conn.pskID = "p9secret";
 	conn.psk = ai->secret;
 	conn.psklen = ai->nsecret;
+	raw = dup(0, -1);
+	if(raw < 0)
+		sysfatal("retain store connection: %r");
 	fd = tlsServer(0, &conn);
 	if(fd < 0)
 		sysfatal("store TLS: %r");
 	alarm(0);
 	connectionctl = ctl;
 	atexit(closeconnection);
-	/* Keep the TCP control until the worker exits, then explicitly hang up.
-	 * Closing a spliced loopback conversation without hangup can close its
-	 * former peer after that slot has been reused by another connection. */
+	/* Keep the TCP slot until the client closes, even after the worker exits.
+	 * Otherwise a delayed close from a client helper can reach a new peer
+	 * reusing this slot in a spliced loopback connection. */
 	switch(pid = rfork(RFPROC|RFFDG)){
 	case -1:
 		sysfatal("fork daemon worker: %r");
 	case 0:
 		close(ctl);
+		close(raw);
 		connectionctl = -1;
 		break;
 	default:
-		closeexcept(ctl, -1);
+		closeexcept(ctl, raw);
 		close(0);
 		close(1);
 		for(;;){
@@ -282,8 +286,11 @@ connection(int ctl)
 				sysfatal("wait for daemon worker: %r");
 			exited = w->pid;
 			free(w);
-			if(exited == pid)
+			if(exited == pid){
+				while(read(raw, drain, sizeof drain) > 0)
+					;
 				exits(nil);
+			}
 		}
 	}
 	putenv("NIX9_CLIENT_USER", ai->cuid);
@@ -410,7 +417,7 @@ revoke(char *stage)
 static void
 build(int argc, char **argv)
 {
-	char *mode, *user, *stage, *store, *path, *service;
+	char *mode, *user, *stage, *store, *path, *service, machine[65];
 	Dir *files;
 	Input *inputs;
 	int fd, storage, i, n;
@@ -431,6 +438,25 @@ build(int argc, char **argv)
 		sysfatal("private build groups: %r");
 	if(strcmp(mode, "-B") != 0 && rfork(RFNOTEG) < 0)
 		sysfatal("private output-reader note group: %r");
+	/* Derivation environments omit boot variables and may supply their own.
+	 * Recover the network-root namespace selector from the owner's store. */
+	machine[0] = 0;
+	if(access("/usr/local/nix/state/machine-id", AEXIST) == 0){
+		fd = open("/usr/local/nix/state/machine-id", OREAD);
+		if(fd < 0)
+			sysfatal("open build machine identity: %r");
+		n = readn(fd, machine, sizeof machine);
+		close(fd);
+		if(n < 2 || n == sizeof machine || machine[n-1] != '\n')
+			sysfatal("invalid build machine identity");
+		machine[--n] = 0;
+		for(i = 0; i < n; i++)
+			if(!((machine[i] >= 'a' && machine[i] <= 'z') ||
+			     (machine[i] >= '0' && machine[i] <= '9') ||
+			     (machine[i] == '-' && i > 0 && i < n-1)))
+				sysfatal("invalid build machine identity");
+	}
+	putenv("nix9machine", machine);
 	service = jobservice(stage);
 	storage = open(service, ORDWR|OCEXEC);
 	if(storage < 0)

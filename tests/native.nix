@@ -66,9 +66,23 @@
     files = [
       ./accounts.nix
       ./boot_medium.py
+      ./user_development.py
+      ./user-development.rc
     ];
     env.NIX9_USERS_TEST_STATE = "user-state";
-    args = "${nativeBootstrap} \"$out\"";
+    args = "${
+      nativeBootstrap.override {
+        cachePackages = [
+          "auth"
+          "cwfs"
+          "rcpu"
+          "ndb"
+          "rc"
+          "namespaceTools"
+          "listen"
+        ];
+      }
+    } \"$out\"";
   };
   native-health-tests = vmTest "native-health-tests" {
     nativeBuildInputs = [ pkgs.netcat-openbsd ];

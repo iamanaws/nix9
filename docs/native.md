@@ -156,7 +156,8 @@ Only the owner can write the store. Builds run one at a time as Plan 9's anonymo
 `none` identity in a private RAMFS; the owner imports outputs and revokes the
 filesystem afterward. This provides an ownership boundary, not a full sandbox.
 Development shells use ordinary [`nix-shell`](development.md#development-shells).
-Shared-store use across multiple CPUs is not integrated yet.
+For shared homes and projects on multiple CPUs, see the
+[distributed user setup](users.md#work-on-either-cpu).
 See [validation](validation.md) for lifecycle, access and recovery coverage.
 
 ## Store maintenance

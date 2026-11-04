@@ -32,7 +32,8 @@ can extend it. CPU login and export policies still declare their allowed users.
 See the [four-machine example](../examples/users/configuration.nix): an
 authentication server, a file server and two network-root CPUs, `build` and
 `batch`. Both CPUs expose the same private homes and `/n/projects`, and make
-the declared packages available to Alice and Bob.
+the declared packages available to Alice and Bob. Each CPU runs a shared Nix
+store for their builds, development shells and individual environment profiles.
 
 ## File-server identities
 
@@ -78,7 +79,7 @@ Native root mounts also need delegation for their NVRAM identity. The example
 uses `glenda` for root boot, so its authentication policy lets `glenda` and
 the CPU service identities `build` and `batch` represent Alice and Bob. A CPU
 service's `keyPattern` selects its login key; it does not select the key for native
-root mounts.
+root mounts. The example's Nix daemon uses the same provisioned CPU server key.
 
 ## Work on either CPU
 
@@ -99,10 +100,28 @@ chmod 770 /n/projects/hello
 chmod 660 /n/projects/hello/*
 ```
 
-Both users can edit these sources on either CPU and run configured system
-packages such as `fortune`. Enable [shared-store user builds](native.md#shared-store)
-on an individual CPU through `nix.daemon`. Updating one CPU leaves the
-other CPU and shared homes in place.
+Both users can edit these sources and develop on either CPU:
+
+```sh
+cd /n/projects/hello
+nix-build
+nix-shell
+```
+
+Inside the shell, compile with `6c -o hello.6 $src`, then
+`6l -o hello hello.6` and `./hello`. The shell runs as the logged-in user and
+keeps its dependencies available through GC. Exit it with `exit`.
+
+To retain the project's commands across logins, build `environment.nix` and
+[select it in your user profile](native.md#shared-store). Each user has their
+own profile on each CPU. Users reuse packages built on that CPU;
+homes and sources are shared through CWFS, while each CPU keeps its own store
+and database. Updating or rolling back one CPU preserves user profiles and
+leaves the other CPU and shared files in place.
+
+`nix.daemon` enables the [shared store](native.md#shared-store), and
+`nix.settings.allowed-users` controls who can use it. File-server groups still
+govern access to project sources; CPU login policy controls access to each CPU.
 
 ## Changes and recovery
 

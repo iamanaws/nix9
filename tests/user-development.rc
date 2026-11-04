@@ -1,0 +1,42 @@
+# Run through an ordinary CPU login, using its configured store and namespace.
+flag e +
+action=$1
+shift
+roots=`{nix-store --roots-dir}
+switch($action) {
+case install
+  nix-profile $roots/environment set `{cat $roots/result}
+  test ! -w $roots/environment
+  test ! -w /usr/local/nix/state/db/db.sqlite
+  test ! -w `{cat $roots/environment}^/activate
+case profile rollback
+  if(~ $action rollback) nix-profile $roots/environment rollback
+  cat $roots/environment
+  . $nix9/packages/profile $roots/environment
+  hello
+case tools
+  cd /n/projects/hello
+  echo 'let pkgs = import <nix9>; in pkgs.buildEnv { paths = [ pkgs.fortune ]; }' > tools.nix
+  nix-build tools.nix
+  nix-profile $roots/environment set `{cat $roots/result}
+  . $nix9/packages/profile $roots/environment
+  fortune > $home/fortune
+  test -s $home/fortune
+case hold
+  cd /n/projects/hello
+  mkdir $home/development-$1
+  nix-shell default.nix --run 'rc /usr/user-development.rc child '^$1
+case child
+  directory=$home/development-$1
+  ~ `{cat /dev/sysname} $1
+  ~ $IN_NIX_SHELL impure
+  echo `{cat /dev/user} > $directory/identity
+  6c -o $directory/hello.6 $src
+  6l -o $directory/hello $directory/hello.6
+  $directory/hello
+  echo ready > $directory/ready
+  while(! test -e $directory/stop) sleep 1
+  $directory/hello
+case *
+  exit 'unknown development test action'
+}
