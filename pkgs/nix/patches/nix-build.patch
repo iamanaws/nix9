@@ -18,7 +18,7 @@
 +
 +#ifdef __plan9__
 +namespace nix {
-+[[noreturn]] void runDevelopmentShell(LocalStore &, const Derivation &, const StorePathSet &,
++[[noreturn]] void runDevelopmentShell(Store &, const Derivation &, const StorePathSet &,
 +    const std::filesystem::path &, const std::filesystem::path &, const std::optional<std::string> &,
 +    bool, const StringSet &);
 +}
@@ -124,7 +124,7 @@
          }
  
          else if (*arg == "--check")
-@@ -312,12 +359,39 @@
+@@ -312,12 +359,36 @@
          return true;
      });
  
@@ -150,11 +150,8 @@
 +#endif
      auto store = openStore();
 +#ifdef __plan9__
-+    auto local = store.dynamic_pointer_cast<LocalStore>();
 +    auto localFS = store.dynamic_pointer_cast<LocalFSStore>();
 +    if (!localFS) throw UsageError("nix-build requires a filesystem store on Plan 9");
-+    if (!local && isNixShell)
-+        throw UsageError("development shells are not supported by the shared store yet");
 +    auto roots = plan9RootsDirectory(*store);
 +    if (isNixShell) outLink.clear();
 +    else if (!explicitOutLink) outLink = (roots / "result").string();
@@ -164,7 +161,7 @@
      auto evalStore = myArgs.evalStoreUrl ? openStore(StoreReference{*myArgs.evalStoreUrl}) : store;
  
      auto state = std::make_shared<EvalState>(myArgs.lookupPath, evalStore, fetchSettings, evalSettings, store);
-@@ -463,6 +537,7 @@
+@@ -463,6 +534,7 @@
          std::vector<DerivedPath> pathsToBuild;
          RealisedPath::Set pathsToCopy;
  
@@ -172,7 +169,7 @@
          /* Figure out what bash shell to use. If $NIX_BUILD_SHELL
             is not set, then build bashInteractive from
             <nixpkgs>. */
-@@ -497,6 +572,7 @@
+@@ -497,6 +569,7 @@
              }
          }
  
@@ -180,7 +177,7 @@
          auto accumDerivedPath = [&](this auto & self,
                                      ref<SingleDerivedPath> inputDrv,
                                      const DerivedPathMap<StringSet>::ChildNode & inputNode) -> void {
-@@ -532,17 +608,29 @@
+@@ -532,17 +605,29 @@
          if (dryRun)
              return;
  
@@ -204,13 +201,13 @@
 +                for (const auto & [name, output] : resolveDerivedPath(*store, *built, &*evalStore))
 +                    inputs.insert(output);
 +        }
-+        runDevelopmentShell(*local, drv, inputs, tmpDir.path(), roots / tmpDir.path().filename(),
++        runDevelopmentShell(*store, drv, inputs, tmpDir.path(), roots / tmpDir.path().filename(),
 +            shellCommand, pure, keepVars);
 +#else
          // Set the environment.
          auto env = getEnv();
  
-@@ -679,6 +767,7 @@
+@@ -679,6 +764,7 @@
          execvp(shell->c_str(), argPtrs.data());
  
          throw SysError("executing shell '%s'", *shell);
@@ -218,7 +215,7 @@
      }
  
      else {
-@@ -734,7 +823,10 @@
+@@ -734,7 +820,10 @@
                  std::string symlink = drvPrefix;
                  if (outputName != "out")
                      symlink += "-" + outputName;

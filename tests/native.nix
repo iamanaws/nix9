@@ -42,9 +42,11 @@
     script = ./native_shared_store.py;
     files = [
       ./shared_profiles.py
+      ./shared_shells.py
       ./shared-store.nix
       ./shared-detached.c
       ./remote-delay.c
+      ./shell-lifetime.c
     ];
     args = "${
       nativeBootstrap.override {
@@ -444,9 +446,7 @@
       ./inputs.nix
       ./pure-shell.rc
     ];
-    args = ''
-      ${nativeBootstrap} "$out"
-    '';
+    args = "${nativeBootstrap.override { cachePackages = [ ]; }} \"$out\"";
   };
   native-patch-tests = vmTest "native-patch-tests" {
     script = ./native_patches.py;

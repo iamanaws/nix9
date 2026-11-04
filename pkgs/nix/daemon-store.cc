@@ -10,6 +10,7 @@
 #include "nix/util/strings.hh"
 
 extern "C" long n9_rfork(int);
+extern "C" long n9_open(const char *, int);
 extern "C" int cc9_errno_from_errstr_or(int);
 
 namespace nix {
@@ -112,6 +113,24 @@ struct Plan9DaemonStore : LocalFSStore, RemoteStore, Plan9RootStore
         connection->to << WorkerProto::Op::Plan9Roots << action << args;
         connection.processStderr();
         return readString(connection->from);
+    }
+    AutoCloseFD shellRoot(const StorePath & path, const std::filesystem::path & root) override {
+        auto connection(getConnection());
+        if (!connection->protoVersion.features.contains(plan9ShellRootFeature))
+            throw Error("the store service does not support development shells; update it first");
+        connection->to << WorkerProto::Op::Plan9ShellRoot << printStorePath(path) << root.string();
+        connection.processStderr();
+        auto service = readString(connection->from, 4096);
+        // The same kernel service namespace is required by the native store.
+        // The lease survives exec without retaining a daemon connection or
+        // exposing a filesystem descriptor authenticated as the store owner.
+        AutoCloseFD fd(n9_open(service.c_str(), 0));
+        auto error = fd ? 0 : cc9_errno_from_errstr_or(EIO);
+        connection->to << 1;
+        connection->to.flush();
+        if (readInt(connection->from) != 1) throw Error("invalid shell root acknowledgement");
+        if (!fd) throw SysError(error, "receiving shell root");
+        return fd;
     }
 };
 

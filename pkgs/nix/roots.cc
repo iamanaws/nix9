@@ -2,9 +2,14 @@
 #include "nix/store/local-store.hh"
 #include "nix/util/environment-variables.hh"
 #include "nix/util/strings.hh"
+#include "nix/util/processes.hh"
 
 #include <limits>
 #include <map>
+
+extern "C" long n9_create(const char *, int, unsigned long);
+extern "C" long n9_open(const char *, int);
+extern "C" int cc9_errno_from_errstr_or(int);
 
 namespace nix {
 
@@ -32,6 +37,63 @@ void checkPlan9Root(Store & store, const std::filesystem::path & root)
     if (!root.is_absolute() || root.string().find('\0') != std::string::npos
         || !isInDir(canonPath(root), roots))
         throw Error("root access denied: roots must be files below %s", PathFmt(roots));
+}
+
+AutoCloseFD createPlan9ShellRoot(Store & store, const StorePath & path, const std::filesystem::path & root)
+{
+    if (auto remote = dynamic_cast<Plan9RootStore *>(&store))
+        return remote->shellRoot(path, root);
+    checkPlan9Root(store, root);
+    store.addTempRoot(path);
+    if (!store.isValidPath(path))
+        throw InvalidPath("cannot root invalid path '%s'", store.printStorePath(path));
+    createDirs(root.parent_path());
+    // The active store client excludes GC through the handoff. Never replace
+    // an existing root, and give the shell only a read-only descriptor.
+    // Create with OREAD | ORCLOSE | OEXCL so failure or worker death at any point
+    // removes the root. A separate, short-lived descriptor fills its contents.
+    // Omit OCEXEC on the read descriptor: the shell's descendants inherit it.
+    AutoCloseFD fd(n9_create(root.c_str(), 64 | 0x1000, 0600));
+    if (!fd) throw SysError(cc9_errno_from_errstr_or(EIO), "creating shell root");
+    AutoCloseFD writer(n9_open(root.c_str(), 1 | 32));
+    if (!writer) throw SysError(cc9_errno_from_errstr_or(EIO), "writing shell root");
+    writeFull(writer.get(), store.printStorePath(path) + '\n');
+    return fd;
+}
+
+Plan9ShellRootTransfer postPlan9ShellRoot(Store & store, const StorePath & path, const std::filesystem::path & root)
+{
+    auto fd = createPlan9ShellRoot(store, path, root);
+    auto user = getEnv("NIX9_CLIENT_USER");
+    if (!user) throw Error("shell root transfer requires an authenticated user");
+    // Keep the owner's filesystem descriptor in a private board. Even an
+    // OREAD descriptor could carry its owner's wstat privileges over 9P.
+    // Give the client only this board's lease: it cannot be written or wstatted.
+    AutoCloseFD keeper(n9_open("#s/clone", 32 /* OREAD | OCEXEC */));
+    if (!keeper) throw SysError(cc9_errno_from_errstr_or(EIO), "creating shell root lease");
+    // Clone leases support reads, but have no directory entry to stat.
+    auto privateBoard = "#s/" + drainFD(keeper.get());
+    chmod(privateBoard, 0700);
+    AutoCloseFD held(n9_create((privateBoard + "/root").c_str(), 1 | 32 | 0x1000, 0600));
+    if (!held) throw SysError(cc9_errno_from_errstr_or(EIO), "holding shell root");
+    writeFull(held.get(), std::to_string(fd.get()));
+    held.close();
+    // Closing the clone lease removes every entry even after ownership changes,
+    // including if the worker dies before the client acknowledges the handoff.
+    AutoCloseFD lease(n9_open("#s/clone", 32 /* OREAD | OCEXEC */));
+    if (!lease) throw SysError(cc9_errno_from_errstr_or(EIO), "creating shell root transfer");
+    auto board = "#s/" + drainFD(lease.get());
+    chmod(board, 0700);
+    auto service = board + "/nix-shell";
+    AutoCloseFD posted(n9_create(service.c_str(), 1 | 32 | 0x1000, 0444));
+    if (!posted) throw SysError(cc9_errno_from_errstr_or(EIO), "posting shell root");
+    writeFull(posted.get(), std::to_string(keeper.get()));
+    posted.close();
+    // Only the authenticated user can receive the posted lifetime handle.
+    // Native srv permits its owner to assign the directory to another user.
+    chmod(board, 0500);
+    runProgram("/bin/chgrp", false, {"-u", *user, board});
+    return {std::move(lease), std::move(service)};
 }
 
 static StorePath environmentPath(Store & store, const std::string & path)

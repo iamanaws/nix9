@@ -11,12 +11,13 @@
  else
 --- a/src/libstore/include/nix/store/worker-protocol.hh
 +++ b/src/libstore/include/nix/store/worker-protocol.hh
-@@ -230,6 +230,9 @@
+@@ -230,6 +230,10 @@
      AddBuildLog = 45,
      BuildPathsWithResults = 46,
      AddPermRoot = 47,
 +#ifdef __plan9__
 +    Plan9Roots = 0x50395254, // P9RT; negotiated by nix9-roots-v1.
++    Plan9ShellRoot = 0x50395352, // P9SR; negotiated by nix9-shell-root-v1.
 +#endif
  };
  
@@ -28,7 +29,7 @@
              .minor = 38,
          },
 +#ifdef __plan9__
-+    .features = {"nix9-roots-v1"},
++    .features = {"nix9-roots-v1", "nix9-shell-root-v1"},
 +#endif
  };
  
@@ -57,12 +58,26 @@
              throw Error(
                  "you are not privileged to create perm roots\n\n"
                  "hint: you can just do this client-side without special privileges, and probably want to do that instead.");
-@@ -690,6 +698,21 @@
+@@ -690,6 +698,35 @@
          conn.to << gcRoot.string();
          break;
      }
 +
 +#ifdef __plan9__
++    case WorkerProto::Op::Plan9ShellRoot: {
++        auto path = store->parseStorePath(readString(conn.from, 4096));
++        auto root = readString(conn.from, 4096);
++        logger->startWork();
++        auto transfer = postPlan9ShellRoot(*store, path, root);
++        logger->stopWork();
++        conn.to << transfer.service;
++        conn.to.flush();
++        if (readInt(conn.from) != 1) throw Error("invalid shell root acknowledgement");
++        transfer.lease.close();
++        conn.to << 1;
++        break;
++    }
++
 +    case WorkerProto::Op::Plan9Roots: {
 +        auto action = readString(conn.from, 32);
 +        auto count = readNum<unsigned>(conn.from);

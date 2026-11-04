@@ -37,8 +37,42 @@ let
         })
       ];
     };
+  shellPackage = pkgs.mkDerivation {
+    name = "shared-shell-package";
+    nativeBuildInputs = [
+      (pkgs.mkDerivation {
+        name = "shell-lifetime";
+        src = ./shell-lifetime.c;
+        buildCommand = ''
+          mkdir -p $out/bin
+          6c -o lifetime.6 $src
+          6l -o $out/bin/shell-lifetime lifetime.6
+        '';
+      })
+    ];
+    src = builtins.toFile "shell-hello.c" ''
+      #include <u.h>
+      #include <libc.h>
+      void main(void) { print("shared shell C PASS\n"); exits(nil); }
+    '';
+    passAsFile = [ "message" ];
+    message = "a shell's message\nsecond line\n";
+    shellHook = ''
+      test -r $messagePath
+      sharedShellHook=ready
+    '';
+    buildCommand = "exit 'shell target must not be built'";
+  };
 in
 {
+  inherit shellPackage;
+  shell = pkgs.mkShell {
+    nativeBuildInputs = shellPackage.nativeBuildInputs;
+    shellHook = "echo SHARED-SHELL-READY";
+  };
+  failedShell = pkgs.mkShell {
+    shellHook = "exit 'intentional shell hook failure'";
+  };
   envOne = environment "one";
   envTwo = environment "two";
   one = identity "shared-one";

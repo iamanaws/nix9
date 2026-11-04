@@ -39,7 +39,7 @@ It can also select [remote Nix builders](builders.md) by CPU machine name.
 
 ## Nix settings
 
-Use `nix.settings` for `nix.conf` options, as on NixOS:
+Use `nix.settings` for `nix.conf` options:
 
 ```nix
 {

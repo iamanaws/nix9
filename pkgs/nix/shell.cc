@@ -3,19 +3,19 @@
 #include "nix/store/derivations.hh"
 #include "nix/store/derivation-options.hh"
 #include "nix/store/globals.hh"
+#include "nix/store/plan9-roots.hh"
 #include "nix/util/current-process.hh"
 #include "nix/util/file-system.hh"
 #include "nix/util/util.hh"
 #include <unistd.h>
 
-extern "C" long n9_create(const char *, int, unsigned long);
 extern "C" long n9_rfork(int);
 extern "C" void cc9_kill_threads(void);
 extern "C" int cc9_errno_from_errstr_or(int);
 
 namespace nix {
 
-[[noreturn]] static void runRootedProgram(LocalStore &store, const StorePath &output,
+[[noreturn]] static void runRootedProgram(Store &store, const StorePath &output,
     const std::filesystem::path &root, const std::filesystem::path &program, Strings arguments)
 {
     if (!store.isValidPath(output))
@@ -23,13 +23,7 @@ namespace nix {
     if (!pathExists(program))
         throw Error("launcher '%s' does not exist", PathFmt(program));
 
-    createDirs(root.parent_path());
-    // The active store client excludes GC until this root is complete.
-    // OWRITE | ORCLOSE | OEXCL, without OCEXEC: descendants inherit the root.
-    // Exec closes the store's client marker, allowing GC during the session.
-    AutoCloseFD rootFd(n9_create(root.c_str(), 1 | 64 | 0x1000, 0600));
-    if (!rootFd) throw SysError(cc9_errno_from_errstr_or(EIO), "creating session root");
-    writeFull(rootFd.get(), store.printStorePath(output) + '\n');
+    auto rootFd = createPlan9ShellRoot(store, output, root);
 
     Strings args{program.string()};
     args.splice(args.end(), arguments);
@@ -42,7 +36,7 @@ namespace nix {
     throw SysError("executing launcher '%s'", program.string());
 }
 
-[[noreturn]] void runDevelopmentShell(LocalStore &store, const Derivation &drv,
+[[noreturn]] void runDevelopmentShell(Store &store, const Derivation &drv,
     const StorePathSet &inputs, const std::filesystem::path &directory,
     const std::filesystem::path &root, const std::optional<std::string> &command,
     bool pure, const StringSet &keepVars)

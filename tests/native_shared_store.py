@@ -11,6 +11,7 @@ import time
 
 from guest import files_guest
 from shared_profiles import check_profiles
+from shared_shells import check_shells
 
 
 def quote(value):
@@ -33,6 +34,7 @@ with tempfile.TemporaryDirectory() as directory:
     fixtures = {"bootstrap.tar": archive, "shared-store.nix": Path(__file__).with_name("shared-store.nix")}
     fixtures["shared-detached.c"] = Path(__file__).with_name("shared-detached.c")
     fixtures["remote-delay.c"] = Path(__file__).with_name("remote-delay.c")
+    fixtures["shell-lifetime.c"] = Path(__file__).with_name("shell-lifetime.c")
     client = work / "shared-client.rc"
     client.write_text("flag e +\n. /usr/local/pkg/nix9/activate\n"
                       "mkdir -p $home/tmp\nTMPDIR=$home/tmp\n"
@@ -48,6 +50,12 @@ with tempfile.TemporaryDirectory() as directory:
     job.write_text("name=$1\nshift\necho $pid > $home/$name.pid\n"
                    "exec nix-build /usr/shared-store.nix --no-out-link $*\n")
     fixtures[job.name] = job
+    shell_job = work / "shared-shell.rc"
+    shell_job.write_text("flag e +\ndirectory=$1\nmode=$2\ncd $home/project\n"
+                         "echo $pid > $directory/launcher.pid\n"
+                         "exec nix-shell /usr/shared-store.nix -A shellPackage "
+                         "--run 'shell-lifetime '^$mode^' '^$directory\n")
+    fixtures[shell_job.name] = shell_job
     for user in ("nixhost", "alice", "bob", "carol"):
         key = secrets.token_bytes(16)
         role = "server" if user == "nixhost" else "client"
@@ -73,11 +81,14 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command("cp /tmp/shared-store.nix /usr/shared-store.nix && chmod 444 /usr/shared-store.nix")
         guest.command("cp /tmp/shared-detached.c /usr/shared-detached.c && chmod 444 /usr/shared-detached.c")
         guest.command("cp /tmp/remote-delay.c /usr/remote-delay.c && chmod 444 /usr/remote-delay.c")
+        guest.command("cp /tmp/shell-lifetime.c /usr/shell-lifetime.c && chmod 444 /usr/shell-lifetime.c")
         guest.command("cp /tmp/shared-client.rc /usr/shared-client.rc && chmod 444 /usr/shared-client.rc")
         guest.command("cp /tmp/shared-job.rc /usr/shared-job.rc && chmod 444 /usr/shared-job.rc")
+        guest.command("cp /tmp/shared-shell.rc /usr/shared-shell.rc && chmod 444 /usr/shared-shell.rc")
         for user in ("alice", "bob", "carol"):
             guest.command("echo 'newuser " + user + "' >> /srv/hjfs.cmd")
-        guest.command("echo disallow >> /srv/hjfs.cmd")
+        # Let hjfs finish its console message before waiting for the rc prompt.
+        guest.command("echo disallow >> /srv/hjfs.cmd; sleep 1; echo")
         guest.command("nix-build '<nix9>' -A auth --out-link /usr/local/nix/state/gcroots/shared-auth")
         guest.command("authpkg=`{cat /usr/local/nix/state/gcroots/shared-auth}")
         guest.command("dd -if /tmp/nvram -of /dev/sdF0/nvram -bs 126 -count 1")
@@ -106,10 +117,11 @@ with tempfile.TemporaryDirectory() as directory:
             line = "as " + user + " " + quote(command)
             if len(line) > 220:
                 # The serial console can drop a byte at its line-buffer boundary.
-                guest.command("echo -n > /tmp/shared-command; chmod 644 /tmp/shared-command")
+                guest.command("echo -n > /usr/shared-command; chmod 644 /usr/shared-command")
                 for offset in range(0, len(command), 100):
-                    guest.command("echo -n " + quote(command[offset:offset + 100]) + " >> /tmp/shared-command")
-                line = "as " + user + " '. /tmp/shared-command'"
+                    guest.command("echo -n " + quote(command[offset:offset + 100]) + " >> /usr/shared-command")
+                guest.command("echo >> /usr/shared-command")
+                line = "as " + user + " '. /usr/shared-command'"
             return guest.command(line)
 
         def rejected(user, command, reason):
@@ -225,6 +237,7 @@ with tempfile.TemporaryDirectory() as directory:
             clean_builds()
             print("PASS: separate build identity, protected shared packages and credentials, private output import and cleanup", flush=True)
             check_profiles(guest, user_command, rejected, clean_builds)
+            check_shells(guest, user_command, rejected, until, clean_builds)
         except Exception:
             guest.command("ps; cat /tmp/shared-service.log; echo")
             raise
@@ -238,4 +251,8 @@ Path(output, "results.json").write_text(json.dumps({"status": "passed", "users":
     "repeated-client-death", "client-and-server-process-cleanup",
     "user-roots", "independent-profiles", "profile-rollback", "concurrent-profile-updates", "shared-root-gc",
     "root-access-policy", "consecutive-client-connections",
+    "shared-development-shells", "shell-caller-identity", "shell-native-c-builds",
+    "shell-pure-and-kept-environment", "shell-hooks-and-passAsFile", "shell-command-status",
+    "interactive-shared-shell", "shell-gc", "shell-root-lease-permissions",
+    "shell-descendant-lifetime", "shell-interruption-and-client-death", "shell-root-cleanup",
 ]}, indent=2) + "\n")

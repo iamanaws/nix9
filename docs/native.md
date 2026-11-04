@@ -119,8 +119,8 @@ Enable a shared store in a CPU server's [system configuration](configuration.md)
 `[ "*" ]`, allowing all authenticated users except the anonymous identity `none`;
 an empty list denies everyone. `@group` selectors and nonempty `trusted-users`
 are currently rejected. All daemon clients have ordinary user privileges.
-`nix.daemon` is the Plan 9 extension for enabling the listener and configuring
-its transport; Nix remains usable locally when it is disabled.
+`nix.daemon` enables the listener and configures its transport;
+Nix remains usable locally when it is disabled.
 
 The CPU boots as the store owner. Provision the users, their factotum credentials
 and native authentication discovery first, as for [CPU access](services.md#cpu-access-and-authentication).
@@ -155,7 +155,8 @@ System rollback and disabling the service preserve user roots and profiles.
 Only the owner can write the store. Builds run one at a time as Plan 9's anonymous
 `none` identity in a private RAMFS; the owner imports outputs and revokes the
 filesystem afterward. This provides an ownership boundary, not a full sandbox.
-Shared-store development shells and multi-CPU use are not integrated yet.
+Development shells use ordinary [`nix-shell`](development.md#development-shells).
+Shared-store use across multiple CPUs is not integrated yet.
 See [validation](validation.md) for lifecycle, access and recovery coverage.
 
 ## Store maintenance

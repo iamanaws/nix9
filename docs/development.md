@@ -78,7 +78,8 @@ Inside, use `mk` and `mk clean`. Exiting restores the original namespace.
 
 `nix-shell default.nix` also enters a package's build environment without
 building it. Use `--pure` to clear inherited variables and `--keep NAME` to retain
-one. Dependencies remain rooted until the shell exits.
+one. Shells use the configured local or shared store and run as the calling user.
+Dependencies stay protected from GC until the shell and its children exit.
 
 `mkShell` accepts `nativeBuildInputs`, `buildInputs` and an rc `shellHook`.
 Use `inputsFrom` to reuse derivations' dependencies and shell hooks.

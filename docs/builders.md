@@ -69,7 +69,7 @@ advertised in its `supportedFeatures`. Slot accounting coordinates build clients
 on one submitting machine. Separate terminals count their slots independently.
 Builders run as the authenticated user; choosing a builder trusts its outputs.
 
-For a standalone `mkSystem`, use the NixOS-style builder list:
+For a standalone `mkSystem`, declare builders in `nix.buildMachines`:
 
 ```nix
 {
