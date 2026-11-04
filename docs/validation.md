@@ -104,11 +104,12 @@ nix run .#benchmark-users -- nix9-users-performance
 
 This provisions auth, CWFS and two CPUs, runs the user integration checks, and
 measures initial CPU preparation, first environments, logins, evaluation, source
-imports, cached builds, shells and source edits on both CPUs. Everyday operations
-include a fresh `rcpu` login; the separate login measurement provides context.
-Operations have three samples after GC. The first shell may restore collected
-build inputs; use later samples for warm startup timings. The VMs use two
-virtual CPUs and 2 GiB RAM each, with TCP relays between their user networks.
-Timings describe this VM setup, not a physical network. Temporary disks are
-removed on exit; `timings.json`
-survives a failed run and `results.json` records completed validation.
+imports, cached builds, shells and source edits on both CPUs. `MACHINE/login/*`
+includes a fresh `rcpu` login for each command; `MACHINE/session/*` runs inside
+an existing authenticated login. The `ready` and `version` probes help separate
+connection and program startup costs. Each command has three samples after a
+separately recorded `warmup-shell` restores any inputs collected by GC.
+The VMs use two virtual CPUs and 2 GiB RAM each, connected by a private Ethernet
+link. Timings describe this VM setup, not a physical network. Temporary disks
+are removed on exit; `timings.json` survives a failed run and `results.json`
+records completed validation.

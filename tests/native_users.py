@@ -9,7 +9,6 @@ from pathlib import Path
 import re
 import secrets
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
@@ -18,7 +17,9 @@ import time
 
 from boot_medium import boot_medium
 from guest import boot
-from user_development import benchmark_development, check_development, check_profiles, check_source_edits
+from ethernet import Ethernet
+from user_development import check_development, check_profiles, check_source_edits
+from user_performance import benchmark_development
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
@@ -117,15 +118,10 @@ with ExitStack() as stack:
             guest.command(f"echo -n > {destination}; chmod 600 {destination}")
         guest.command(f"hget -o {destination} {base}/{name}")
 
-    peers, reservations = [], {}
-    for address, port in (("10.0.2.100", 567), ("10.0.2.101", 564), ("10.0.2.102", 17019),
-                          ("10.0.2.103", 17019), ("10.0.2.100", 5356)):
-        reservation = stack.enter_context(socket.socket())
-        reservation.bind(("127.0.0.1", 0))
-        host = reservation.getsockname()[1]
-        peers.append((address, port, host))
-        reservations[host] = reservation
-    peers.append(("10.0.2.104", http.server_port, http.server_port))
+    network = Ethernet(("auth", "files", *CPUS))
+    stack.callback(network.close)
+    macs = {name: f"52:54:00:12:34:{index:02x}"
+            for index, name in enumerate(("auth", "files", *CPUS))}
 
     def disk(path, backing):
         if path.exists():
@@ -181,6 +177,12 @@ with ExitStack() as stack:
                 guest.command("echo never > /mnt/keys/bob/expire")
             else:
                 download(guest, "files.keys", "/adm/files.keys", private=True)
+                # Transfer fixtures before moving the servers off the host's
+                # provisioning network and onto their private Ethernet link.
+                download(guest, "glenda.keys", "/tmp/client.keys", private=True)
+                for cpu in CPUS:
+                    download(guest, cpu + ".keys", private=True)
+                download(guest, "user-development.rc")
                 guest.command("mkdir /adm/storage; chmod 700 /adm/storage")
                 guest.command("dd -if /dev/zero -of /adm/storage/config -bs 16384 -count 1; chmod 600 /adm/storage/config")
                 download(guest, "cwfs.setup")
@@ -202,16 +204,12 @@ with ExitStack() as stack:
 
     @contextmanager
     def server(name):
-        address, port, _ = peers[0 if name == "auth" else 1]
-        forwards = [(host, target) for peer, target, host in peers if peer == address and target != 5356]
-        for host, _ in forwards:
-            reservations[host].close()
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False, prompt=PROMPT,
-                  forward_ports=forwards, guest_forwards=peers, network_options=("restrict=on",),
+                  network_backend=network.backend(name, macs[name]),
                   qemu_options=drives if name == "files" else ()) as guest:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/system")
-            listening(guest, port)
+            listening(guest, 567 if name == "auth" else 564)
             try:
                 yield guest
             finally:
@@ -228,9 +226,6 @@ with ExitStack() as stack:
         auth.command(f"cat /adm/{identity}.keys > /mnt/factotum/ctl")
     auth.command("ls -ld /srv/nix9-keys | grep -s '^-[-l]rw------- '")
     auth.command("mount -c /srv/nix9-keys /mnt/keys")
-    files.command("webfs")
-    base = f"http://10.0.2.104:{http.server_port}"
-    download(files, "glenda.keys", "/tmp/client.keys", private=True)
     files.command("cat /tmp/client.keys > /mnt/factotum/ctl && mount -c /srv/cwfs-nix9 /n/site main")
     files.command("cat /n/site/adm/users | grep '^1010:alice:alice:$'")
     files.command("cat /n/site/adm/users | grep '^1012:project:alice:alice,bob$'")
@@ -238,8 +233,7 @@ with ExitStack() as stack:
     measure("setup/publish-root", lambda: files.command(f"rc {root}/publish /n/site"))
     # The foundation already has the archive needed to seed CPU state.
     files.command("installation=" + bundles["first"])
-    cpu_networks = {}
-    for name, address in zip(CPUS, ("10.0.2.102", "10.0.2.103")):
+    for name in CPUS:
         artifact = path(files, f"cat {bundles['first']}/boot/{name}/path")
         files.command("boot=" + artifact)
         directory = "/n/site/machines/" + name
@@ -250,21 +244,15 @@ with ExitStack() as stack:
             f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}"))
         rejected(files, f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}",
                  "machine state already exists")
-        download(files, name + ".keys", directory + "/adm/cpu.keys", private=True)
-        download(files, "user-development.rc", directory + "/usr/user-development.rc")
+        files.command(f"cp /tmp/{name}.keys {directory}/adm/cpu.keys && chmod 600 {directory}/adm/cpu.keys")
+        files.command(f"cp /tmp/user-development.rc {directory}/usr/user-development.rc")
         files.command("chmod 444 " + directory + "/usr/user-development.rc")
         settings = files.command("cat " + artifact + "/plan9.ini")
         configuration = "\n".join(line for line in settings.splitlines() if re.match(r"^[a-z0-9]+=", line)) + "\n"
         disks[name] = work / (name + ".qcow2")
         boot_medium(qemu, image, disks[name], configuration, nvram(keys["glenda"]))
-        network = ("restrict=on",)
-        for peer, port, host in peers:
-            if peer == address:
-                reservations[host].close()
-                network += (f"hostfwd=tcp:127.0.0.1:{host}-{peer}:{port}",)
-        cpu_networks[name] = network
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False, prompt=PROMPT,
-                  boot_prompt=False, guest_forwards=peers, network_options=network) as cpu:
+                  boot_prompt=False, network_backend=network.backend(name, macs[name])) as cpu:
             cpu.child.timeout = 1200
             cpu.command(". /usr/local/pkg/nix9/activate")
             if name == "build":
@@ -283,7 +271,7 @@ with ExitStack() as stack:
     @contextmanager
     def start_cpu(name):
         with boot(qemu, disks[name], snapshot=False, cpu=True, configure_network=False,
-                  prompt=PROMPT, boot_prompt=False, guest_forwards=peers, network_options=cpu_networks[name]) as guest:
+                  prompt=PROMPT, boot_prompt=False, network_backend=network.backend(name, macs[name])) as guest:
             guest.child.timeout = 1200
             guest.command(". /usr/local/pkg/nix9/system")
             listening(guest, 17019)
@@ -341,7 +329,7 @@ with ExitStack() as stack:
     print("PASS: both CPUs expose system packages and shared sources while protecting machine stores", flush=True)
     environments = check_development(auth, cpus, remote, measure)
     if benchmark:
-        benchmark_development(remote, measure)
+        benchmark_development(auth, remote, measure)
     check_source_edits(remote, measure)
 
     updated = path(files, "nix-build /tmp/accounts.nix -A updatedCpu --no-out-link")

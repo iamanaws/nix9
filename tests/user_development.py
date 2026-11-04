@@ -112,29 +112,6 @@ def check_development(auth, cpus, remote, measure):
     return environments
 
 
-def benchmark_development(remote, measure):
-    # Every sample includes a fresh authenticated CPU login, as a terminal user
-    # would invoke it. Measure that baseline separately; do not subtract it.
-    # The preceding GC can collect build inputs. The first shell restores them;
-    # subsequent samples measure reuse, with no further GC during measurement.
-    for machine in ("build", "batch"):
-        def sample(name, command, expected=None):
-            return measure(machine + "/" + name, lambda: remote("alice", command, expected, machine=machine))
-
-        for _ in range(3):
-            sample("login", "echo ready", "ready")
-            sample("eval-constant", "nix-instantiate --eval --expr 42", "42")
-            sample("eval-packages", "nix-instantiate --eval --expr '(import <nix9>).stdenv.cc.name'", '"cc"')
-            sample("source-import", "nix-store --add /n/projects/hello/hello.c")
-            sample("query-profile", "nix-store -qR `{" + SCRIPT + "path}")
-            result = sample("cached-build", "nix-build /n/projects/hello/environment.nix")
-            if "building '" in result or "copying path" in result:
-                raise RuntimeError(machine + ": warm build did not reuse the environment")
-            sample("shell-startup", "cd /n/projects/hello && nix-shell --run 'echo ready'", "ready")
-            sample("shell-compile", "cd /n/projects/hello && nix-shell --run '6c -o $home/hello.6 $src && "
-                   "6l -o $home/hello $home/hello.6 && $home/hello'", HELLO)
-
-
 def check_source_edits(remote, measure):
     original = "/usr/alice/hello-original.c"
     source = "/n/projects/hello/hello.c"

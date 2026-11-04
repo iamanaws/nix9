@@ -8,6 +8,16 @@ let
       imports = [
         <nix9/examples/users/configuration.nix>
         ({ lib, ... }: {
+          machines.auth.configuration.networking.interfaces.ether0 = {
+            useDHCP = false;
+            address = "10.0.2.100";
+            prefixLength = 24;
+          };
+          machines.files.configuration.networking.interfaces.ether0 = {
+            useDHCP = false;
+            address = "10.0.2.101";
+            prefixLength = 24;
+          };
           machines.auth.configuration.services.ndb.dns.enable = false;
           machines.files.configuration.services.ndb.dns.enable = false;
           machines.build.configuration.services.ndb.dns.enable = false;

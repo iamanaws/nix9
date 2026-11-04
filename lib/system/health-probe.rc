@@ -7,7 +7,7 @@ shift 3
 . $healthSystem/health-config
 switch($operation) {
 case listener
-  netstat -n | awk -v 'port='^$1 '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit !found}' || {
+  netstat -n -p tcp | awk -v 'port='^$1 '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit !found}' || {
     echo 'no TCP listener on port' $1 >[1=2]
     exit 'listener unavailable'
   }

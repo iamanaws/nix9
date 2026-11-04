@@ -22,7 +22,9 @@ let
   userFiles = [
     ./accounts.nix
     ./boot_medium.py
+    ./ethernet.py
     ./user_development.py
+    ./user_performance.py
     ./user-development.rc
   ];
   userBootstrap = nativeBootstrap.override {
@@ -77,10 +79,7 @@ in
     } \"$out\"";
   };
   native-user-tests = vmTest "native-user-tests" {
-    nativeBuildInputs = [
-      pkgs.netcat-openbsd
-      pkgs.mtools
-    ];
+    nativeBuildInputs = [ pkgs.mtools ];
     script = ./native_users.py;
     files = userFiles;
     env.NIX9_USERS_TEST_STATE = "user-state";
@@ -88,10 +87,7 @@ in
   };
   benchmark-users = pkgs.writeShellApplication {
     name = "benchmark-users";
-    runtimeInputs = [
-      pkgs.netcat-openbsd
-      pkgs.mtools
-    ];
+    runtimeInputs = [ pkgs.mtools ];
     text = ''
       export NIX9_USERS_BENCHMARK=1
       exec ${python}/bin/python ${testSupport ([ ./native_users.py ] ++ userFiles)}/native_users.py \

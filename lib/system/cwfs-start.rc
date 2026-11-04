@@ -11,7 +11,7 @@
   rc $cwfsSystem/services/cwfs/check || fail 'preflight failed'
   if(test -e /srv/cwfs-nix9 || test -e /srv/cwfs-nix9.cmd)
     fail 'service name is already occupied'
-  netstat -n | awk -v 'port='^$cwfsPort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit found}' ||
+  netstat -n -p tcp | awk -v 'port='^$cwfsPort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit found}' ||
     fail 'TCP port is already occupied'
   if(~ $#cwfsKey 1)
     cat $cwfsKey > /mnt/factotum/ctl || fail 'cannot load server key'

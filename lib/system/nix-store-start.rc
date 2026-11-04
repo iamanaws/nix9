@@ -1,5 +1,5 @@
 # Run as the store owner, with the boot generation's factotum and policy.
-netstat -n | awk -v 'port='^$nix9StorePort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit found}' ||
+netstat -n -p tcp | awk -v 'port='^$nix9StorePort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit found}' ||
   exit 'shared-store TCP port is already occupied'
 if(! grep -s '127.0.0.1' /net/ipselftab)
   ip/ipconfig -P loopback /dev/null 127.1 || exit 'cannot configure store loopback'
@@ -14,7 +14,7 @@ if(! grep -s '127.0.0.1' /net/ipselftab)
     -w $nix9/bin/nix-daemon-worker
 } </dev/null >>/sys/log/nix9-store >[2=1] &
 attempts=0
-while(! netstat -n | awk -v 'port='^$nix9StorePort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit !found}') {
+while(! netstat -n -p tcp | awk -v 'port='^$nix9StorePort '$1 == "tcp" && $4 == "Listen" && $5 == port {found=1} END {exit !found}') {
   if(~ $attempts 5) exit 'shared store did not become ready; see /sys/log/nix9-store'
   sleep 1
   attempts=`{awk -v 'n='^$attempts 'BEGIN {print n+1}'}
