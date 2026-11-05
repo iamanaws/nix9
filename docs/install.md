@@ -1,5 +1,7 @@
 # Set up a development installation
 
+For a locally provisioned VM version, use the [development lab](lab.md).
+
 The [users example](../examples/users/configuration.nix) connects four machines:
 
 | Machine | Address | Provides |
@@ -29,7 +31,7 @@ On `files`, create a writable site directory and save this as `default.nix`:
 { pkgs ? import <nix9> }:
 pkgs.mkInstallation ({ lib, ... }: {
   imports = [ <nix9/examples/users/configuration.nix> ];
-  name = "development";
+  name = lib.mkForce "development";
   machines.files.configuration.services.cwfs.deviceMap = lib.mkForce {
     w0 = "/dev/sdG0/data";
     w1 = "/dev/sdH0/data";

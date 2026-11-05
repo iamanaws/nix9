@@ -63,6 +63,7 @@ pkgs.lib.makeScope pkgs.newScope (
     netrootBase = callPackage ./netroot-base { };
     moduleLibrary = pkgs.callPackage ./native-packages/module-library.nix { };
     nativeBootstrap = callPackage ./bootstrap.nix { };
+    lab = callPackage ../vm/lab { };
     nativeGoBootstrap = nativeBootstrap.override {
       nativePackageSet = nativeGoPackageSet;
       cachePackages = [ ];
@@ -149,6 +150,7 @@ pkgs.lib.makeScope pkgs.newScope (
       vm-image = vm;
       setup-vm = setup;
       run-vm = run;
+      inherit lab;
     };
   }
 )

@@ -48,6 +48,8 @@ and a C development example.
 
 To connect auth, file and CPU servers, follow the
 [development installation walkthrough](docs/install.md).
+To try that installation in a persistent four-machine VM lab, run
+`nix run .#lab`; see [the lab guide](docs/lab.md).
 
 ## Documentation
 

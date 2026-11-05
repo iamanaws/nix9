@@ -56,6 +56,7 @@ in
         touch "$out"
       '';
   checks.installation = tests.installation-tests;
+  checks.lab = tests.lab-configuration-tests;
   checks.directories = tests.directory-tests;
   checks.users = tests.user-tests;
   checks.store-service = tests.store-service-tests;

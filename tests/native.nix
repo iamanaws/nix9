@@ -9,6 +9,7 @@
   nativeBootstrap,
   nativeGoBootstrap,
   nativePackageSource,
+  nativePackageSet,
   nativePackagesArchive,
   nixPackage,
   python,
@@ -17,6 +18,7 @@
   vm,
   webfs,
   vmTest,
+  lab,
 }:
 let
   userFiles = [
@@ -40,6 +42,25 @@ let
   };
 in
 {
+  lab-configuration-tests =
+    pkgs.runCommand "lab-configuration-tests" { nativeBuildInputs = [ pkgs.nix ]; }
+      ''
+        mkdir "$out"
+        export NIX_STATE_DIR="$TMPDIR/nix-state" NIX_LOG_DIR="$TMPDIR/nix-log"
+        NIX_PATH=nix9=${nativePackageSet} nix-instantiate --store dummy:// --eval --strict --json --expr '
+          let installation = import ${../vm/lab/configuration.nix} {};
+          in assert installation.build.name == "nix9-installation-development"; {
+            installation = installation.build.drvPath;
+            machines = builtins.mapAttrs (_: system: system.drvPath) installation.systems;
+          }
+        ' > "$out/results.json"
+      '';
+  lab-tests = pkgs.writeShellApplication {
+    name = "lab-tests";
+    text = ''
+      exec ${python}/bin/python ${testSupport [ ./lab.py ]}/lab.py ${lab}/bin/lab "''${1:-nix9-lab-results}"
+    '';
+  };
   native-store-service-tests = vmTest "native-store-service-tests" {
     script = ./native_store_service.py;
     files = [

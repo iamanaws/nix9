@@ -52,12 +52,13 @@
             program = "${package}/bin/${package.meta.mainProgram}";
           })
           {
-            inherit (project.flakePackages) setup-vm run-vm;
+            inherit (project.flakePackages) setup-vm run-vm lab;
             inherit (tests.packages)
               smoke-test
               smoke-test-c-cross
               benchmark-native
               benchmark-users
+              lab-tests
               ;
           };
       checks.${system} = tests.checks;
