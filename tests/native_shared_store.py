@@ -12,6 +12,7 @@ import time
 from guest import files_guest
 from shared_profiles import check_profiles
 from shared_shells import check_shells
+from shared_sources import check_sources
 
 
 def quote(value):
@@ -238,6 +239,7 @@ with tempfile.TemporaryDirectory() as directory:
             print("PASS: separate build identity, protected shared packages and credentials, private output import and cleanup", flush=True)
             check_profiles(guest, user_command, rejected, clean_builds)
             check_shells(guest, user_command, rejected, until, clean_builds)
+            check_sources(guest, user_command, until, clean_builds)
         except Exception:
             guest.command("ps; cat /tmp/shared-service.log; echo")
             raise
@@ -255,4 +257,6 @@ Path(output, "results.json").write_text(json.dumps({"status": "passed", "users":
     "shell-pure-and-kept-environment", "shell-hooks-and-passAsFile", "shell-command-status",
     "interactive-shared-shell", "shell-gc", "shell-root-lease-permissions",
     "shell-descendant-lifetime", "shell-interruption-and-client-death", "shell-root-cleanup",
+    "shared-source-reuse", "source-edits-and-filters", "source-executable-bit", "source-repair", "source-gc",
+    "source-overrides", "hashed-source-evaluation-gc",
 ]}, indent=2) + "\n")

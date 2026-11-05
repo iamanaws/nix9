@@ -1,4 +1,5 @@
 {
+  pkgs,
   lib,
   runCommand,
   nativeTools,
@@ -16,6 +17,7 @@ let
     "nixpkgs-lib" = moduleLibrary;
     "default.nix" = ./default.nix;
     "bootstrap.nix" = ./bootstrap.nix;
+    "inputs.nix" = ./inputs.nix;
     "pkgs/packages.nix" = ../packages.nix;
     "pkgs/fetchurl" = ../fetchurl;
     "pkgs/fetchgit" = ../fetchgit;
@@ -50,23 +52,31 @@ let
     "sources/go.tar.gz" = goSource;
   });
 in
-runCommand "native-packages" { } ''
-  mkdir -p "$out/pkgs" "$out/bin" "$out/sources" "$out/examples"
-  ${lib.concatStringsSep "\n" (lib.mapAttrsToList copy files)}
-  ${lib.concatStringsSep "\n" (
-    lib.mapAttrsToList (name: copy "sources/${name}") (builtins.removeAttrs sources [ "sysroot" ])
-  )}
-  ${lib.concatMapStringsSep "\n" (
-    definition: copy "pkgs/${builtins.baseNameOf definition.path}" definition.path
-  ) (builtins.attrValues packageDefinitions)}
-  ${lib.concatMapStringsSep "\n" (name: copy name (../../lib + "/${name}")) [
-    "mk-derivation.nix"
-    "call-package.nix"
-    "stdenv.nix"
-    "setup-environment.nix"
-    "collect-inputs.nix"
-    "mk-shell.nix"
-    "build-env.nix"
-  ]}
-  chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild" "$out/bin/nix9"
-''
+runCommand "native-packages"
+  {
+    nativeBuildInputs = [
+      pkgs.nix
+      pkgs.python3
+    ];
+  }
+  ''
+    mkdir -p "$out/pkgs" "$out/bin" "$out/sources" "$out/examples"
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList copy files)}
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (name: copy "sources/${name}") (builtins.removeAttrs sources [ "sysroot" ])
+    )}
+    ${lib.concatMapStringsSep "\n" (
+      definition: copy "pkgs/${builtins.baseNameOf definition.path}" definition.path
+    ) (builtins.attrValues packageDefinitions)}
+    ${lib.concatMapStringsSep "\n" (name: copy name (../../lib + "/${name}")) [
+      "mk-derivation.nix"
+      "call-package.nix"
+      "stdenv.nix"
+      "setup-environment.nix"
+      "collect-inputs.nix"
+      "mk-shell.nix"
+      "build-env.nix"
+    ]}
+    chmod +x "$out/bin/nix-profile" "$out/bin/nix9-rebuild" "$out/bin/nix9"
+    python ${./input-hashes.py} "$out"
+  ''

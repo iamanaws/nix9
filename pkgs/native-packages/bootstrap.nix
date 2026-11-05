@@ -1,15 +1,14 @@
 let
-  rawStdenv = import ./stdenv.nix { tools = ./tools; };
+  inputs = import ./inputs.nix;
+  rawStdenv = import ./stdenv.nix { tools = inputs.tools; };
   seedStdenv = import ./stdenv.nix {
-    tools = ./tools;
+    tools = inputs.tools;
     initialPath = [
       bootstrap.ar
       bootstrap.patch
     ];
   };
-  definitions = import ./pkgs/packages.nix {
-    sources = builtins.mapAttrs (name: _: ./sources + "/${name}") (builtins.readDir ./sources);
-  };
+  definitions = inputs.packages;
   package =
     name: args:
     let
@@ -19,7 +18,7 @@ let
   bootstrap = rec {
     buildPackages = bootstrap;
     stdenv = import ./stdenv.nix {
-      tools = ./tools;
+      tools = inputs.tools;
       initialPath = [
         mk
         ar

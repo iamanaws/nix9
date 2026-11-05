@@ -14,6 +14,10 @@ $result/bin/fortune
 For a local project, run `nix-build` in its directory. See
 [package development](development.md) for recipes and `nix-shell`.
 
+Bundled package inputs have fixed content hashes, so repeated evaluation can reuse
+their store copies. Regenerate the package set when changing those inputs;
+project sources and package overrides continue to track ordinary source paths.
+
 ## Environments
 
 Copy [environment.nix](../examples/environment.nix) into the guest, then run:

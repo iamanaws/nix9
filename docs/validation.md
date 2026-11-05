@@ -109,6 +109,8 @@ includes a fresh `rcpu` login for each command; `MACHINE/session/*` runs inside
 an existing authenticated login. The `ready` and `version` probes help separate
 connection and program startup costs. Each command has three samples after a
 separately recorded `warmup-shell` restores any inputs collected by GC.
+`instantiate-project` measures evaluation and source imports for the complete
+project; `realise-project` checks its already-built derivation without evaluation.
 The VMs use two virtual CPUs and 2 GiB RAM each, connected by a private Ethernet
 link. Timings describe this VM setup, not a physical network. Temporary disks
 are removed on exit; `timings.json` survives a failed run and `results.json`

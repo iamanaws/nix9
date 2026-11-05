@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 
 from guest import Guest
+from user_development import output_path
 
 
 @contextmanager
@@ -31,11 +32,14 @@ def benchmark_commands(run, measure, prefix):
     # separately so all repeated shell samples describe a warm environment.
     shell = "cd /n/projects/hello && nix-shell --run "
     measure(prefix + "/warmup-shell", lambda: run(shell + "'echo ready'", "ready"))
+    derivation = output_path(run("nix-instantiate /n/projects/hello/environment.nix", None))
     commands = (
         ("ready", "echo ready", "ready"),
         ("version", "nix-instantiate --version", None),
         ("eval-constant", "nix-instantiate --eval --expr 42", "42"),
         ("eval-packages", "nix-instantiate --eval --expr '(import <nix9>).stdenv.cc.name'", '"cc"'),
+        ("instantiate-project", "nix-instantiate /n/projects/hello/environment.nix", None),
+        ("realise-project", "nix-store --realise " + derivation, None),
         ("source-import", "nix-store --add /n/projects/hello/hello.c", None),
         ("query-profile", "nix-store -qR `{rc /usr/user-development.rc path}", None),
         ("cached-build", "nix-build /n/projects/hello/environment.nix", None),
@@ -46,7 +50,7 @@ def benchmark_commands(run, measure, prefix):
     for _ in range(3):
         for name, command, expected in commands:
             result = measure(prefix + "/" + name, lambda: run(command, expected))
-            if name == "cached-build" and ("building '" in result or "copying path" in result):
+            if name in ("realise-project", "cached-build") and ("building '" in result or "copying path" in result):
                 raise RuntimeError(prefix + ": warm build did not reuse the environment")
 
 

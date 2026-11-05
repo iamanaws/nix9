@@ -1,7 +1,8 @@
 let
+  inputs = import ./inputs.nix;
   bootstrap = import ./bootstrap.nix;
   buildStdenv = import ./stdenv.nix {
-    tools = ./tools;
+    tools = inputs.tools;
     inherit (bootstrap) cc libc;
     initialPath = [
       bootstrap.mk
@@ -10,7 +11,7 @@ let
     ];
   };
   toolchainStdenv = import ./stdenv.nix {
-    tools = ./tools;
+    tools = inputs.tools;
     shell = "${pkgs.rc}/bin/rc";
     cc = bootstrap.cc;
     libc = pkgs.libc;
@@ -21,7 +22,7 @@ let
     ];
   };
   stdenv = import ./stdenv.nix {
-    tools = ./tools;
+    tools = inputs.tools;
     shell = "${pkgs.rc}/bin/rc";
     inherit (pkgs) cc libc;
     initialPath = with pkgs; [
@@ -32,9 +33,7 @@ let
       buildTools
     ];
   };
-  definitions = import ./pkgs/packages.nix {
-    sources = builtins.mapAttrs (name: _: ./sources + "/${name}") (builtins.readDir ./sources);
-  };
+  definitions = inputs.packages;
   overrides = {
     buildTools = {
       stdenv = buildStdenv;

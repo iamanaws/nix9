@@ -64,6 +64,7 @@ in
     files = [
       ./shared_profiles.py
       ./shared_shells.py
+      ./shared_sources.py
       ./shared-store.nix
       ./shared-detached.c
       ./remote-delay.c
