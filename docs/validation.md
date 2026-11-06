@@ -23,7 +23,7 @@ with the Nix sandbox enabled.
 
 | Target | Checks |
 | --- | --- |
-| `lab-tests` (run with `nix run`) | Public launcher and serial consoles, editing and interrupts, two-CPU development, duplicate-launch rejection, shutdown during a CPU login and retained system generations, shared files, profiles and cached builds after restart. |
+| `lab-tests` (run with `nix run`) | Public consoles, two-CPU development, deployment from the file server, individual CPU reboot and rollback while a batch development shell stays active, console recovery, and retained generations, files, profiles and cached builds after a whole-lab restart. |
 | `lab-configuration-tests` | Host evaluation of the lab installation and all four system derivations. Also runs in `nix flake check`. |
 | `c-abi-tests`, `ape-tests` | Native, cross and mixed objects; arguments, callbacks, structures, floating point, varargs and POSIX behavior. |
 | `PACKAGE-tests` | Package behavior. Libraries use known vectors and independent Python results for hashes, compression and arithmetic. |

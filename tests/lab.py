@@ -1,6 +1,8 @@
 """Exercise the public lab launcher and consoles across a complete shutdown."""
 
+from contextlib import nullcontext
 import json
+import os
 from pathlib import Path
 import re
 import signal
@@ -12,6 +14,7 @@ import time
 import pexpect
 
 from guest import Guest
+from lab_updates import check_updates
 
 
 launcher, output = sys.argv[1:]
@@ -26,12 +29,9 @@ def output_path(result):
     return paths[0]
 
 
-def quote(value):
-    return "'" + value.replace("'", "''") + "'"
-
-
-with tempfile.TemporaryDirectory() as temporary:
-    work = Path(temporary) / "lab"
+state = os.environ.get("NIX9_LAB_TEST_STATE")
+with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporary:
+    work = Path(state).resolve() if state else Path(temporary) / "lab"
     log_path = Path(output) / "launcher.log"
     environments = {}
 
@@ -58,6 +58,7 @@ with tempfile.TemporaryDirectory() as temporary:
 
     def attach(machine="auth"):
         child = pexpect.spawn(launcher, ["console", machine, str(work)], encoding="utf-8", timeout=600)
+        child.logfile_read = sys.stdout
         child.expect("Ctrl-] detaches.")
         child.sendline("")
         child.expect(prompt)
@@ -97,15 +98,7 @@ with tempfile.TemporaryDirectory() as temporary:
                          "nix-profile $roots/environment set " + environment + "; . " + environment
                          + "/activate && hello'", "hello from the shared workspace")
             auth.command("rcpu -u bob -h " + machine + " -c 'cat /n/projects/retained'", "retained")
-        cpu = attach("build")
-        expression = ('let pkgs = import <nix9>; in (pkgs.mkInstallation ({ lib, ... }: { '
-                      'imports = [ <nix9/examples/users/configuration.nix> ]; name = lib.mkForce "development"; '
-                      'machines.build.configuration.files.lab = "retained"; })).systems.build')
-        selected = output_path(cpu.command("nix-build --no-out-link --expr " + quote(expression)))
-        cpu.command("nix9 select " + selected)
-        cpu.child.sendcontrol("]")
-        cpu.child.expect(pexpect.EOF)
-        cpu.child.close()
+        selected = check_updates(work, attach, auth)
         # Leave the public console in a CPU login. Shutdown uses a separate UART.
         auth.child.sendline("rcpu -u alice -h build -c 'echo LAB-LOGIN; exec /bin/rc -i'")
         auth.child.expect(r"(?m)^LAB-LOGIN\r*$")
@@ -118,8 +111,13 @@ with tempfile.TemporaryDirectory() as temporary:
             raise RuntimeError("stopped lab status was incorrect")
         process, log = start()
         auth = attach()
-        auth.command("rcpu -u alice -h build -c 'cat /cfg/nix9/files/lab; echo'", "retained")
+        auth.command("rcpu -u alice -h build -c 'cat /cfg/nix9/files/lab; echo'", "updated")
         auth.command("rcpu -u alice -h build -c 'cat /usr/local/nix/state/gcroots/machines/build/system'", selected)
+        files = attach("files")
+        files.command("cd /cfg/nix9-lab; nix9 status --health build batch")
+        files.child.sendcontrol("]")
+        files.child.expect(pexpect.EOF)
+        files.child.close()
         for machine, environment in environments.items():
             auth.command("rcpu -u bob -h " + machine + " -c 'cat /n/projects/retained'", "retained")
             auth.command("rcpu -u alice -h " + machine + " -c 'roots=`{nix-store --roots-dir}; "
@@ -138,7 +136,9 @@ with tempfile.TemporaryDirectory() as temporary:
             "checks": ["first-setup", "serial-console", "console-line-editing", "console-interrupt", "duplicate-launch-rejected", "two-cpu-builds",
                        "shared-project", "profiles", "shutdown-during-cpu-login", "restart",
                        "system-update", "retained-system-generation", "retained-files",
-                       "retained-profiles", "cached-builds-after-restart"],
+                       "retained-profiles", "cached-builds-after-restart", "deployment-via-files",
+                       "selected-and-booted-status", "individual-cpu-reboot", "console-after-reboot",
+                       "continuous-batch-session", "single-cpu-rollback", "deployment-status-after-restart"],
         }, indent=2) + "\n")
     finally:
         if process is not None and process.poll() is None:

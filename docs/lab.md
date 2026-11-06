@@ -10,9 +10,9 @@ nix run .#lab
 ```
 
 The first run installs Nix, the C toolchain and server packages, creates lab
-credentials and storage,
-publishes the shared OS root and selects each CPU's initial system. Preparation
-takes several minutes. Guest output is saved in `nix9-lab/control.log`.
+credentials and storage, publishes the shared OS root and selects each CPU's
+initial system. Preparation takes several minutes. Guest output is saved in
+`nix9-lab/control.log`.
 Subsequent runs boot the existing disks.
 
 Leave the launcher running. In another terminal, open the auth server's console:
@@ -51,15 +51,51 @@ network; the running machines have no connection to the host or Internet.
 
 The state directory contains private credentials and writable disks and is
 ignored by Git. Keep it at the same path. Nix GC roots retain the backing image
-and bootstrap. The CWFS
-devices are sparse files with an 11 GiB combined capacity; disk usage grows as
-you add data. Existing disks are never replaced. If initial preparation fails,
-keep `control.log` for diagnosis and use a new directory for a fresh attempt.
+and bootstrap. The CWFS devices are sparse files with an 11 GiB combined capacity;
+disk usage grows as you add data. Existing disks are never replaced. If initial
+preparation fails, keep `control.log` for diagnosis and use a new directory for a
+fresh attempt.
 
 The initial site configuration is saved as `configuration.nix` on the host and
 `/cfg/nix9-lab/default.nix` on the auth and file servers. Edit the guest copy on
 `files` and follow [deployment](deployment.md) for changes. The launcher preserves
 the selected systems on later starts.
+
+## Update one CPU
+
+On the `files` console, edit `/cfg/nix9-lab/default.nix`. For example, add this
+module to its existing `imports` list:
+
+```nix
+{
+  machines.build.configuration.files.message = "Updated CPU configuration\n";
+}
+```
+
+Then deploy from that directory:
+
+```sh
+cd /cfg/nix9-lab
+nix9 deploy build
+nix9 status --health build
+```
+
+Status reports the selected and booted systems separately. At the `build`
+console, run `fshalt -r`. The launcher restores that console after boot and
+reports when the CPU's health checks pass. Existing console connections stay
+open; `console build` also reconnects normally. `batch`, auth and storage keep
+running. `nix run .#lab -- status` shows each machine's readiness during the reboot.
+
+To undo the selection, run at the `build` console:
+
+```sh
+nix9-rebuild rollback
+fshalt -r
+```
+
+Rollback preserves projects and user profiles. Update the source configuration
+before deploying again. For auth or file-server changes, stop and resume the
+whole lab so the CPUs halt before their providers.
 
 After stopping the lab, removing its state directory discards the installation
 and releases its Nix GC roots.

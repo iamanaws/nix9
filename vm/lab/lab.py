@@ -6,6 +6,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import select
 import shlex
 import signal
@@ -25,6 +26,7 @@ from provision import ADDRESSES, CPUS, MACHINES, provision
 
 
 PROMPT = r"(?m)^(?:[a-z0-9-]+[%#] |% )"
+BOOT = r"(?m)^Plan 9\r*$"
 
 
 def save(path, value):
@@ -42,6 +44,11 @@ class Lab:
         self.stack.callback(self.network.close)
         self.sockets = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix="nix9-lab-")))
         self.guests = {}
+        self.output = {}
+        self.states = {}
+        self.boots = {}
+        self.console_ready = {}
+        self.awaiting_boot = set()
 
     @contextmanager
     def machine(self, name, *, disk=None, provisioning=False):
@@ -66,38 +73,117 @@ class Lab:
                 if guest.child.isalive() and not guest.crashed:
                     self.progress(f"Halting {name}...")
                     guest.child.timeout = 120
-                    guest.child.send("\x7f")
-                    guest.child.expect(PROMPT, timeout=30)
-                    guest.child.sendline("fshalt")
-                    guest.child.expect("done halting")
-                    guest.crash()
+                    if name in self.awaiting_boot:
+                        try:
+                            guest.child.expect(PROMPT, timeout=120)
+                        except pexpect.TIMEOUT:
+                            self.progress(f"{name} did not finish booting; stopping its VM.")
+                            guest.crash()
+                    if not guest.crashed:
+                        guest.child.send("\x7f")
+                        guest.child.expect(PROMPT, timeout=30)
+                        guest.child.sendline("fshalt")
+                        guest.child.expect("done halting")
+                        guest.crash()
 
     def start(self, name):
         self.progress(f"Starting {name}...")
         guest = self.stack.enter_context(self.machine(name))
         self.guests[name] = guest
+        self.output[name] = ""
+        self.states[name] = "ready"
+        self.boots[name] = 1
+        self.console_ready[name] = False
+        self.activate(name, guest)
+        return guest
+
+    def activate(self, name, guest):
         guest.command(". /usr/local/pkg/nix9/system")
-        ports = (567,) if name == "auth" else (564,) if name == "files" else (17019, 17051)
+        ports = (567,) if name == "auth" else (564,) if name == "files" else ()
         for port in ports:
             deadline = time.monotonic() + 90
-            while "LAB-READY" not in guest.command(
-                    f"if(netstat -n | grep -s 'Listen *{port} ') echo LAB-READY; status=''"):
+            while not re.search(r"(?m)^LAB-READY$", guest.command(
+                    f"if(netstat -n | grep -s 'Listen *{port} ') echo LAB-READY; status=''")):
                 if time.monotonic() > deadline:
                     raise RuntimeError(f"{name}: service on port {port} did not start")
+                time.sleep(0.2)
+        if name in CPUS:
+            deadline = time.monotonic() + 90
+            while not re.search(r"(?m)^LAB-HEALTH:$", guest.command(
+                    "nix9 status --health; echo LAB-HEALTH:$status")):
+                if time.monotonic() > deadline:
+                    raise RuntimeError(f"{name}: booted service health checks failed")
                 time.sleep(0.2)
         if name == "auth":
             for user in ("glenda", "alice", "bob"):
                 guest.command(f"cat /adm/{user}.keys > /mnt/factotum/ctl")
-        return guest
+        elif name == "files":
+            guest.command("cat /adm/lab-client.keys > /mnt/factotum/ctl")
+
+    def start_console(self, name):
+        guest = self.guests[name]
+        guest.command("bind -a '#t' /dev; test -e /dev/eia1")
+        guest.command("echo b115200 > /dev/eia1ctl")
+        # Each console login has its own namespace, environment and note group.
+        guest.command("@{ while() { @{ rfork ens; exec /bin/ip/telnetd -tn "
+                      "</dev/eia1 >/dev/eia1 >[2=1] } } } &")
+        self.console_ready[name] = True
 
     def consoles(self):
-        for guest in self.guests.values():
-            guest.command("bind -a '#t' /dev; test -e /dev/eia1")
-            guest.command("echo b115200 > /dev/eia1ctl")
-            # The native console simulator supplies editing, /dev/consctl and notes.
-            # It runs over the private UART, without opening a network listener.
-            guest.command("@{ rfork n; while() { @{ rfork s; exec /bin/ip/telnetd -tn "
-                          "</dev/eia1 >/dev/eia1 >[2=1] } } } &")
+        for name in self.guests:
+            self.start_console(name)
+
+    def publish(self):
+        save(self.work / "run.json", {
+            "pid": os.getpid(), "phase": "ready",
+            "consoles": {name: str(self.sockets / name) for name in self.guests},
+            "machines": {name: {"state": self.states[name], "boots": self.boots[name],
+                                "console": self.console_ready[name]} for name in self.guests},
+        })
+
+    def recover_cpu(self, name, output):
+        guest = self.guests[name]
+        self.progress(f"{name} is rebooting...")
+        self.states[name] = "rebooting"
+        self.console_ready[name] = False
+        self.boots[name] += 1
+        self.awaiting_boot.add(name)
+        self.publish()
+        try:
+            if not re.search(PROMPT, output):
+                guest.child.expect(PROMPT, timeout=180)
+            self.awaiting_boot.discard(name)
+            self.activate(name, guest)
+            self.start_console(name)
+            self.states[name] = "ready"
+            self.progress(f"{name} is ready.")
+        except (RuntimeError, pexpect.ExceptionPexpect) as error:
+            self.states[name] = "unavailable"
+            self.progress(f"{name}: {error}; see {self.work / 'control.log'}")
+            if name not in self.awaiting_boot:
+                # Keep administrative console access if a booted service failed.
+                try:
+                    guest.command(". /usr/local/pkg/nix9/activate")
+                    self.start_console(name)
+                except (RuntimeError, pexpect.ExceptionPexpect):
+                    pass
+        finally:
+            self.output[name] = ""
+            self.publish()
+
+    def poll(self):
+        for name, guest in self.guests.items():
+            if not guest.child.isalive():
+                raise RuntimeError(f"{name} stopped unexpectedly; see {self.work / 'control.log'}")
+            try:
+                output = guest.child.read_nonblocking(size=65536, timeout=0)
+            except pexpect.TIMEOUT:
+                continue
+            if name in CPUS:
+                self.output[name] = (self.output[name] + output)[-65536:]
+                marker = re.search(BOOT, self.output[name])
+                if marker:
+                    self.recover_cpu(name, self.output[name][marker.end():])
 
     def close(self):
         self.stack.close()
@@ -109,6 +195,9 @@ def console(work, machine):
     running = json.loads((work / "run.json").read_text())
     if running["phase"] != "ready":
         raise RuntimeError("the lab is still starting")
+    machine_state = running.get("machines", {}).get(machine, {})
+    if not machine_state.get("console", True):
+        raise RuntimeError(f"{machine} is {machine_state['state']}; its console is not ready")
     with socket.socket(socket.AF_UNIX) as connection:
         connection.connect(running["consoles"][machine])
         print("Connected. Press Enter for a prompt; Ctrl-] detaches.", flush=True)
@@ -175,19 +264,12 @@ def run(work):
                     for name in MACHINES:
                         lab.start(name)
                 lab.consoles()
-                save(work / "run.json", {"pid": os.getpid(), "phase": "ready", "consoles": {
-                    name: str(lab.sockets / name) for name in MACHINES}})
+                lab.publish()
                 progress(f"Lab ready in {work}\nConnect: nix run .#lab -- console auth {shlex.quote(str(work))}\n"
                          "At auth: rcpu -u alice -h build\nCtrl-C here stops the lab and preserves its disks.")
                 while True:
                     time.sleep(1)
-                    for name, guest in lab.guests.items():
-                        if not guest.child.isalive():
-                            raise RuntimeError(f"{name} stopped unexpectedly; see {work / 'control.log'}")
-                        try:
-                            guest.child.read_nonblocking(size=65536, timeout=0)
-                        except pexpect.TIMEOUT:
-                            pass
+                    lab.poll()
             finally:
                 previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
                 termination = signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -226,17 +308,19 @@ def main():
         else:
             if not (work / "lab.json").exists():
                 raise RuntimeError(f"no lab in {work}")
+            machines = {}
             with (work / "lock").open("r") as lock:
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
-                    state = (json.loads((work / "run.json").read_text())["phase"]
-                             if (work / "run.json").exists() else "starting")
+                    running = json.loads((work / "run.json").read_text()) if (work / "run.json").exists() else {}
+                    state = running.get("phase", "starting")
+                    machines = running.get("machines", {})
                 else:
                     state = "stopped"
             print(state)
             for name, address in ADDRESSES.items():
-                print(f"{name:5} {address}")
+                print(f"{name:5} {address} {machines.get(name, {}).get('state', state)}")
     except KeyboardInterrupt:
         if args.command != "run":
             return

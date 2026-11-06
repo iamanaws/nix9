@@ -58,7 +58,12 @@ in
   lab-tests = pkgs.writeShellApplication {
     name = "lab-tests";
     text = ''
-      exec ${python}/bin/python ${testSupport [ ./lab.py ]}/lab.py ${lab}/bin/lab "''${1:-nix9-lab-results}"
+      exec ${python}/bin/python ${
+        testSupport [
+          ./lab.py
+          ./lab_updates.py
+        ]
+      }/lab.py ${lab}/bin/lab "''${1:-nix9-lab-results}"
     '';
   };
   native-store-service-tests = vmTest "native-store-service-tests" {
