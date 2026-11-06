@@ -33,12 +33,12 @@ in
         allowed-users = mkOption {
           type = types.listOf types.str;
           default = [ "*" ];
-          description = "Authenticated users allowed to use the daemon. * allows all except the anonymous build identity none; an empty list denies everyone. Group selectors are not yet supported.";
+          description = "Authenticated users allowed to use the daemon. * allows all except the anonymous build identity none; trusted users are also allowed. Group selectors are not yet supported.";
         };
         trusted-users = mkOption {
           type = types.listOf types.str;
           default = [ ];
-          description = "Users with privileged daemon access. Must remain empty until trusted connections are supported on Plan 9; the store owner uses the local store directly.";
+          description = "Authenticated users with privileged daemon access, including remote input-addressed builds and daemon setting overrides. Empty by default. Group selectors are not yet supported.";
         };
         max-jobs = mkOption {
           type = types.either types.ints.unsigned (types.enum [ "auto" ]);
@@ -73,8 +73,10 @@ in
         message = "nix.settings.allowed-users accepts native usernames or *; @group selectors and the anonymous identity none are not supported";
       }
       {
-        assertion = cfg.settings.trusted-users == [ ];
-        message = "nix.settings.trusted-users must be empty: privileged daemon connections are not yet supported on Plan 9";
+        assertion = builtins.all (
+          user: user == "*" || (userName.check user && user != "none")
+        ) cfg.settings.trusted-users;
+        message = "nix.settings.trusted-users accepts native usernames or *; @group selectors and the anonymous identity none are not supported";
       }
       {
         assertion = config.files."nix.conf" == text;

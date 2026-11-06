@@ -15,6 +15,7 @@ import pexpect
 
 from guest import Guest
 from lab_updates import check_updates
+from lab_builders import check_builders, check_builder_restart, check_builder_unavailable
 
 
 launcher, output = sys.argv[1:]
@@ -98,6 +99,7 @@ with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporar
                          "nix-profile $roots/environment set " + environment + "; . " + environment
                          + "/activate && hello'", "hello from the shared workspace")
             auth.command("rcpu -u bob -h " + machine + " -c 'cat /n/projects/retained'", "retained")
+        distributed = check_builders(auth)
         selected = check_updates(work, attach, auth)
         # Leave the public console in a CPU login. Shutdown uses a separate UART.
         auth.child.sendline("rcpu -u alice -h build -c 'echo LAB-LOGIN; exec /bin/rc -i'")
@@ -126,6 +128,8 @@ with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporar
                                   + " -c 'cd /n/projects/hello && nix-build environment.nix'")
             if output_path(reused) != environment or "building '" in reused or "copying path" in reused:
                 raise RuntimeError(machine + ": restart did not reuse the original environment")
+        check_builder_restart(auth, distributed)
+        check_builder_unavailable(work, auth, attach, distributed)
         auth.child.sendcontrol("]")
         auth.child.expect(pexpect.EOF)
         auth.child.close()
@@ -138,7 +142,9 @@ with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporar
                        "system-update", "retained-system-generation", "retained-files",
                        "retained-profiles", "cached-builds-after-restart", "deployment-via-files",
                        "selected-and-booted-status", "individual-cpu-reboot", "console-after-reboot",
-                       "continuous-batch-session", "single-cpu-rollback", "deployment-status-after-restart"],
+                       "continuous-batch-session", "single-cpu-rollback", "deployment-status-after-restart",
+                       "multiuser-remote-builds", "remote-result-reuse", "remote-user-profiles",
+                       "remote-builds-after-restart", "cached-builds-without-builder", "unavailable-builder-failure"],
         }, indent=2) + "\n")
     finally:
         if process is not None and process.poll() is None:

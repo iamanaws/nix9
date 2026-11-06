@@ -38,6 +38,7 @@ assert builtins.all (name: builtins.isString fixtures.${name}.drvPath) [
   "provisioned"
   "wildcard"
   "empty"
+  "trusted"
 ];
 assert merged.nix.settings.allowed-users == [ "bob" ];
 assert

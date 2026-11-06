@@ -14,7 +14,7 @@ namespace nix {
 static struct AuthorizationSettings : Config
 {
     Setting<Strings> allowedUsers{this, {"*"}, "allowed-users", "Users allowed to connect to the daemon."};
-    Setting<Strings> trustedUsers{this, {}, "trusted-users", "Privileged daemon users (not yet supported on Plan 9)."};
+    Setting<Strings> trustedUsers{this, {}, "trusted-users", "Users with privileged daemon access."};
 } authorizationSettings;
 
 static GlobalConfig::Register rAuthorizationSettings(&authorizationSettings);
@@ -26,20 +26,24 @@ void runDaemonConnection()
     if (!getEnv("NIX9_CLIENT_USER") || !getEnv("NIX9_BUILD_USER") || !getEnv("NIX9_BUILD_LAUNCHER"))
         throw Error("the daemon worker requires the native authenticated listener");
     // These settings are loaded by initNix(), before any client protocol data.
-    // Reject unsupported policy rather than silently granting different rights.
-    if (!authorizationSettings.trustedUsers.get().empty())
-        throw Error("trusted-users must be empty: privileged daemon connections are not yet supported on Plan 9");
+    // Native file-server groups are not Unix group selectors.
     const auto & allowed = authorizationSettings.allowedUsers.get();
-    if (std::ranges::any_of(allowed, [](const auto & entry) { return entry.starts_with("@"); }))
-        throw Error("allowed-users: @group selectors are not yet supported on Plan 9");
+    const auto & privileged = authorizationSettings.trustedUsers.get();
+    for (const auto *users : {&allowed, &privileged})
+        if (std::ranges::any_of(*users, [](const auto & entry) { return entry.starts_with("@"); }))
+            throw Error("daemon user settings: @group selectors are not yet supported on Plan 9");
     auto user = *getEnv("NIX9_CLIENT_USER");
-    if (user == "none" || (std::ranges::find(allowed, "*") == allowed.end()
-        && std::ranges::find(allowed, user) == allowed.end()))
+    auto matches = [&](const Strings & users) {
+        return std::ranges::find(users, "*") != users.end() || std::ranges::find(users, user) != users.end();
+    };
+    auto trusted = matches(privileged);
+    if (user == "none" || (!trusted && !matches(allowed)))
         throw Error("user '%s' is not allowed to connect to the Nix daemon", user);
     auto store = openStore();
     if (!store.dynamic_pointer_cast<LocalStore>())
         throw Error("the daemon worker requires its owner's local store");
-    daemon::processConnection(store, FdSource(STDIN_FILENO), FdSink(STDOUT_FILENO), NotTrusted, daemon::NotRecursive);
+    daemon::processConnection(store, FdSource(STDIN_FILENO), FdSink(STDOUT_FILENO),
+        trusted ? Trusted : NotTrusted, daemon::NotRecursive);
 }
 
 }

@@ -121,8 +121,10 @@ Enable a shared store in a CPU server's [system configuration](configuration.md)
 
 `nix.settings` writes ordinary `nix.conf` settings. `allowed-users` defaults to
 `[ "*" ]`, allowing all authenticated users except the anonymous identity `none`;
-an empty list denies everyone. `@group` selectors and nonempty `trusted-users`
-are currently rejected. All daemon clients have ordinary user privileges.
+an empty list admits only trusted users. `trusted-users` defaults to `[]`;
+explicit entries grant privileged store access and daemon build-setting overrides.
+Trusted users are also allowed to connect. Both settings accept native usernames
+or `"*"`; `@group` selectors are unsupported.
 `nix.daemon` enables the listener and configures its transport;
 Nix remains usable locally when it is disabled.
 
@@ -137,7 +139,7 @@ automatically. The store owner and `nix9` system-management commands use the loc
 store directly. The listener binds `127.0.0.1` on port `17051`; `port` overrides
 it. Daemon settings, port and enable changes apply at CPU reboot. Login or session refresh
 uses the booted service even when a different system generation is selected.
-Workers read the booted `nix.conf`; client settings cannot widen access.
+Workers read the booted `nix.conf`; ordinary clients cannot widen access.
 Diagnostics go to `/sys/log/nix9-store`; `nix9 status --health` checks its listener.
 
 Users share package files, with independent roots and environment generations

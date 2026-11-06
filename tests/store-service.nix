@@ -59,10 +59,17 @@ in
   provisioned = make (pkgs.lib.recursiveUpdate settings { daemon.keyFile = null; });
   wildcard = make { daemon = settings.daemon; };
   empty = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ ]; });
+  trusted = make (pkgs.lib.recursiveUpdate settings { settings.trusted-users = [ "builder" ]; });
   invalid = {
     anonymous = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ "none" ]; });
     group = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ "@wheel" ]; });
-    trusted = make (pkgs.lib.recursiveUpdate settings { settings.trusted-users = [ "alice" ]; });
+    trustedGroup = make (pkgs.lib.recursiveUpdate settings { settings.trusted-users = [ "@wheel" ]; });
+    trustedAnonymous = make (
+      pkgs.lib.recursiveUpdate settings { settings.trusted-users = [ "none" ]; }
+    );
+    trustedBadUser = make (
+      pkgs.lib.recursiveUpdate settings { settings.trusted-users = [ "bad user" ]; }
+    );
     badUser = make (pkgs.lib.recursiveUpdate settings { settings.allowed-users = [ "bad user" ]; });
     disabledTransport = make (pkgs.lib.recursiveUpdate settings { daemon.enable = false; });
     secretPattern = make (

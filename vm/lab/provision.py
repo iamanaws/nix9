@@ -73,7 +73,7 @@ def transfers(directory):
 
 def provision(lab):
     work = lab.work
-    keys = {name: secrets.token_bytes(16) for name in ("glenda", "alice", "bob", "files", *CPUS)}
+    keys = {name: secrets.token_bytes(16) for name in ("glenda", "alice", "bob", "builder", "files", *CPUS)}
     transfer = work / "provision"
     transfer.mkdir(mode=0o700)
     shutil.copyfile(Path(__file__).with_name("configuration.nix"), work / "configuration.nix")
@@ -120,6 +120,7 @@ def provision(lab):
                     download(guest, "glenda.keys", "/adm/lab-client.keys", private=True)
                     for cpu in CPUS:
                         download(guest, cpu + ".keys", private=True)
+                    download(guest, "builder.keys", private=True)
                     guest.command("mkdir /adm/storage; chmod 700 /adm/storage")
                     guest.command("dd -if /dev/zero -of /adm/storage/config -bs 16384 -count 1; chmod 600 /adm/storage/config")
                     download(guest, "cwfs.setup")
@@ -146,6 +147,9 @@ def provision(lab):
             artifact = store_path(files, "cat $installation/boot/" + name + "/path")
             files.command("rc " + artifact + "/prepare /n/site /tmp/bootstrap.tar $installation/systems/" + name)
             files.command(f"cp /tmp/{name}.keys /n/site/machines/{name}/adm/cpu.keys; chmod 600 /n/site/machines/{name}/adm/cpu.keys")
+            if name == "build":
+                files.command("cp /tmp/builder.keys /n/site/machines/build/adm/builder.keys; "
+                              "chmod 600 /n/site/machines/build/adm/builder.keys")
             settings = files.command("cat " + artifact + "/plan9.ini")
             configuration = "\n".join(line for line in settings.splitlines() if re.match(r"^[a-z0-9]+=", line)) + "\n"
             boot_medium(lab.qemu, work / "roots/image/9front.qcow2", work / (name + ".qcow2"),

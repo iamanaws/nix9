@@ -53,6 +53,38 @@ $result/bin/hello
 The build log names the selected CPU. Outputs and logs remain on the terminal
 after the builder disconnects. Repeating the build reuses valid local outputs.
 
+## Shared-store daemons
+
+A submitting daemon uses its own factotum, independently of the user's login.
+Give it a dedicated builder identity and load that identity's private client key
+with `nix.daemon.keyFile`. On a shared-store target, the serve protocol needs
+trusted daemon access for input-addressed builds:
+
+```nix
+{
+  machines.build = {
+    builders.batch.user = "builder";
+    configuration.nix = {
+      daemon.keyFile = "/adm/builder.keys";
+      settings.max-jobs = 0;
+    };
+  };
+  machines.batch.configuration = {
+    services.cpu.allowedUsers = [ "builder" ];
+    nix.settings.trusted-users = [ "builder" ];
+  };
+}
+```
+
+Provision the account and key through native authentication. For network-root
+CPUs, allow the boot and CPU identities (`glenda` and `batch` in the lab) to speak
+for the account through `services.auth.speaksFor` on the auth server.
+Trusted access lets that identity control the target store; keep its key private.
+Compilation on the shared target still uses the anonymous build identity.
+Results return to the submitting store, where users keep their own roots and
+profiles. The
+[development lab](lab.md) includes this arrangement.
+
 ## Builder settings
 
 | Setting | Default |
@@ -105,8 +137,9 @@ CPU store URLs accept `user@host`, an optional port, and a percent-encoded
 `key-pattern` query parameter. The remote login must activate Nix.
 
 Nix skips builders that fail to connect. With no usable builder and local builds
-disabled, the build fails. A failed derivation remains a build failure. Interrupting
-`nix-build` stops its remote work. `--keep-failed` retains the failed directory on
+disabled, the build fails. An unresponsive CPU can take the native TCP timeout
+before Nix reports it unavailable. A failed derivation remains a build failure.
+Interrupting `nix-build` stops its remote work. `--keep-failed` retains the failed directory on
 the CPU server. To build locally for one invocation:
 
 ```sh

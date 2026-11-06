@@ -184,9 +184,10 @@ with tempfile.TemporaryDirectory() as directory:
             guest.command("echo 'extra-allowed-users = @users' >> /adm/shared-nix.conf")
             rejected("alice", query, "cannot open connection")
             guest.command("grep '@group selectors are not yet supported' /tmp/shared-service.log")
-            guest.command("echo 'trusted-users = alice' > /adm/shared-nix.conf")
-            rejected("alice", query, "cannot open connection")
-            guest.command("grep 'privileged daemon connections are not yet supported' /tmp/shared-service.log")
+            guest.command("echo 'allowed-users =' > /adm/shared-nix.conf; "
+                          "echo 'trusted-users = alice' >> /adm/shared-nix.conf")
+            user_command("alice", query)
+            rejected("bob", query, "cannot open connection")
             guest.command("echo 'allowed-users = alice bob' > /adm/shared-nix.conf")
             print("PASS: authenticated users reuse one signed package without private stores or database access", flush=True)
 

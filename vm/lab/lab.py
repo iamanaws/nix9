@@ -171,13 +171,27 @@ class Lab:
             self.output[name] = ""
             self.publish()
 
+    def stopped(self, name, guest):
+        if name not in CPUS:
+            raise RuntimeError(f"{name} stopped unexpectedly; see {self.work / 'control.log'}")
+        guest.crashed = True
+        if self.states[name] != "stopped":
+            self.states[name] = "stopped"
+            self.console_ready[name] = False
+            self.progress(f"{name} VM stopped; the other machines are still running.")
+            self.publish()
+
     def poll(self):
         for name, guest in self.guests.items():
             if not guest.child.isalive():
-                raise RuntimeError(f"{name} stopped unexpectedly; see {self.work / 'control.log'}")
+                self.stopped(name, guest)
+                continue
             try:
                 output = guest.child.read_nonblocking(size=65536, timeout=0)
             except pexpect.TIMEOUT:
+                continue
+            except pexpect.EOF:
+                self.stopped(name, guest)
                 continue
             if name in CPUS:
                 self.output[name] = (self.output[name] + output)[-65536:]

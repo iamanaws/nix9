@@ -62,6 +62,8 @@ in
         testSupport [
           ./lab.py
           ./lab_updates.py
+          ./lab_builders.py
+          ./lab-builders.nix
         ]
       }/lab.py ${lab}/bin/lab "''${1:-nix9-lab-results}"
     '';

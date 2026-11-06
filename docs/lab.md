@@ -31,16 +31,34 @@ nix-build environment.nix
 nix-shell --run '6c hello.c && 6l hello.6 && ./6.out'
 ```
 
-Use `batch` for the second CPU, or `-u bob` for Bob. Both CPUs see the same
-project and homes on CWFS; each has its own shared Nix store and generations.
+`build` sends Nix compilation to `batch`; `nix-build` returns the results to
+`build`'s shared store. Both CPUs see the same project and homes on CWFS, with
+separate Nix stores and generations. Use `batch` for a direct CPU login, or
+`-u bob` for Bob.
 Use `exit` to return to the auth console. Ctrl-C interrupts a guest command;
 Ctrl-] detaches the host terminal.
 Other consoles are available with `console files`, `console build` and
 `console batch`.
 
+To see where the sample program was compiled:
+
+```sh
+nix-build default.nix
+roots=`{nix-store --roots-dir}
+result=`{cat $roots/result}
+cat $result/builder
+```
+
+It reports `batch`. Its daemon accepts the lab's dedicated `builder` identity;
+`build` loads that account's client key from `/adm/builder.keys`. Alice and Bob
+use ordinary daemon access and separate profiles. Cached outputs remain usable
+on `build` when the builder is unavailable; a new build requires `batch`.
+
 Press Ctrl-C in the launcher's terminal to stop the lab. It halts the CPUs
 before the file and authentication servers. Run the same command to resume;
 projects, credentials, profiles and selected generations remain on disk.
+If a CPU VM exits, the other machines keep running. Stop and resume the lab to
+bring that CPU back.
 
 ## State and configuration
 
