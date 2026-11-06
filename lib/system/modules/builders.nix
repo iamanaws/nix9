@@ -10,13 +10,20 @@ let
   field = values: if values == [ ] then "-" else lib.concatStringsSep "," values;
   builderLine =
     builder:
+    let
+      query =
+        lib.optional (builder.keyPattern != "") ("key-pattern=" + lib.escapeURL builder.keyPattern)
+        ++ lib.optional (builder.connectTimeout != 30) (
+          "connect-timeout=" + toString builder.connectTimeout
+        );
+    in
     lib.concatStringsSep " " [
       (
         builder.protocol
         + "://"
         + lib.optionalString (builder.user != null) (builder.user + "@")
         + builder.hostName
-        + lib.optionalString (builder.keyPattern != "") ("?key-pattern=" + lib.escapeURL builder.keyPattern)
+        + lib.optionalString (query != [ ]) ("?" + lib.concatStringsSep "&" query)
       )
       (field (if builder.system != null then [ builder.system ] else builder.systems))
       "-"

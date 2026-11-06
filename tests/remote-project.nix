@@ -55,6 +55,11 @@ in
     echo remote-cancel-leaked > /tmp/nix9-remote-cancel-leaked
   '';
   afterCancel = project "remote-after-cancel" "status=''";
+  timeout = project "remote-setup-timeout" "status=''";
+  afterTimeout = project "remote-after-setup-timeout" "status=''";
+  timedFailover = project "remote-timed-failover" "status=''";
+  longBuild = project "remote-long-build" "remote-test-sleep 10";
+  afterRestart = project "remote-after-builder-restart" "status=''";
   failover = project "remote-failover" "status=''";
   unavailable = project "remote-unavailable" "status=''";
   denied = project "remote-denied" "status=''";

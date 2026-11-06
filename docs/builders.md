@@ -91,6 +91,7 @@ profiles. The
 | --- | --- |
 | `user` | Calling native user. |
 | `keyPattern` | Installation authentication domain. |
+| `connectTimeout` | 30 seconds for connection, authentication and serve-protocol setup. `0` disables the deadline. Compilation time is unaffected. |
 | `maxJobs` | One concurrent build slot. |
 | `speedFactor` | One. Higher values prefer this CPU when capacity is available. |
 | `systems` | `[ "x86_64-plan9" ]`. |
@@ -134,11 +135,12 @@ nix-build /usr/glenda/project --builders 'cpu://build' --max-jobs 0
 
 The client needs `pkgs.rcpu` available. System builder declarations include it.
 CPU store URLs accept `user@host`, an optional port, and a percent-encoded
-`key-pattern` query parameter. The remote login must activate Nix.
+`key-pattern` query parameter. `connect-timeout=SECONDS` overrides the setup
+deadline for a direct `cpu://` URL. The remote login must activate Nix.
 
 Nix skips builders that fail to connect. With no usable builder and local builds
-disabled, the build fails. An unresponsive CPU can take the native TCP timeout
-before Nix reports it unavailable. A failed derivation remains a build failure.
+disabled, the build fails. A stalled connection reports its CPU store and setup
+timeout, then releases the scheduling slot. A failed derivation remains a build failure.
 Interrupting `nix-build` stops its remote work. `--keep-failed` retains the failed directory on
 the CPU server. To build locally for one invocation:
 

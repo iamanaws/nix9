@@ -10,7 +10,12 @@
 #include "nix/util/current-process.hh"
 #include "nix/util/processes.hh"
 #include "nix/util/strings.hh"
+#include "nix/util/signals.hh"
+#include <cerrno>
+#include <chrono>
+#include <climits>
 #include <mutex>
+#include <poll.h>
 
 extern "C" long n9_rfork(int);
 extern "C" int cc9_errno_from_errstr_or(int);
@@ -29,6 +34,7 @@ struct CpuStoreConfig : virtual StoreConfig, std::enable_shared_from_this<CpuSto
     Setting<std::string> remoteProgram{this, "nix-store", "remote-program", "Remote nix-store executable."};
     Setting<std::string> remoteStore{this, "", "remote-store", "Remote store URL; empty uses the CPU session's store."};
     Setting<int> logFD{this, 2, "log-fd", "Descriptor receiving remote build logs."};
+    Setting<unsigned int> connectTimeout{this, 30, "connect-timeout", "Seconds allowed for CPU connection setup, including authentication and the serve handshake. Zero disables the deadline."};
     static std::string name() { return "CPU Store"; }
     static StringSet uriSchemes() { return {"cpu"}; }
     static std::string doc() { return "Nix serve protocol over authenticated 9front CPU sessions."; }
@@ -46,6 +52,42 @@ static std::string rcQuote(std::string_view word)
     for (char ch : word) result += ch == '\'' ? "''" : std::string(1, ch);
     return result + "'";
 }
+
+// Keep one deadline across partial handshake reads. The underlying FdSource
+// retains any buffered bytes and returns to normal blocking reads afterwards.
+struct CpuSetupSource : Source
+{
+    FdSource & source;
+    unsigned int seconds;
+    std::string uri;
+    std::optional<std::chrono::steady_clock::time_point> deadline;
+
+    CpuSetupSource(FdSource & source, unsigned int seconds, std::string uri)
+        : source(source), seconds(seconds), uri(std::move(uri))
+    {
+        if (seconds) deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
+    }
+
+    size_t read(char * data, size_t len) override
+    {
+        if (!deadline) return source.BufferedSource::read(data, len);
+        while (true) {
+            checkInterrupt();
+            auto now = std::chrono::steady_clock::now();
+            if (now >= *deadline)
+                throw Error("CPU store '%s': connection setup timed out after %u seconds", uri, seconds);
+            if (source.BufferedSource::hasData()) return source.BufferedSource::read(data, len);
+            auto left = std::chrono::duration_cast<std::chrono::milliseconds>(*deadline - now).count() + 1;
+            struct pollfd fd{source.fd, POLLIN, 0};
+            auto ready = ::poll(&fd, 1, static_cast<int>(std::min<int64_t>(left, INT_MAX)));
+            if (ready > 0) {
+                if (std::chrono::steady_clock::now() >= *deadline) continue;
+                return source.BufferedSource::read(data, len);
+            }
+            if (ready < 0 && errno != EINTR) throw SysError("waiting for CPU connection setup");
+        }
+    }
+};
 
 struct CpuStore : Store
 {
@@ -87,6 +129,7 @@ struct CpuStore : Store
         auto next = std::make_unique<Connection>();
         next->input.create();
         next->output.create();
+        CpuSetupSource setup(next->from, config->connectTimeout, config->getHumanReadableURI());
         next->pid = startProcess([&] {
             if (n9_rfork(1 << 3 /* RFNOTEG */) == -1)
                 throw SysError(cc9_errno_from_errstr_or(EIO), "creating CPU client note group");
@@ -107,7 +150,7 @@ struct CpuStore : Store
         next->from = FdSource(next->output.readSide.get());
         try {
             next->remoteVersion = ServeProto::BasicClientConnection::handshake(
-                next->to, next->from, ServeProto::latest, authority.host);
+                next->to, setup, ServeProto::latest, authority.host);
         } catch (Error & error) {
             error.addTrace({}, "while connecting to CPU store '%s'", config->getHumanReadableURI());
             throw;

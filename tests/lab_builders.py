@@ -101,8 +101,11 @@ def check_builder_unavailable(work, auth, attach, records):
             if output_path(reused) != record["package"] or "building '" in reused or "copying path" in reused:
                 raise RuntimeError("cached result required the unavailable builder: " + reused)
         command = "nix-build /n/projects/builders.nix -A package --argstr label " + records["alice"]["label"] + "-unavailable"
+        started = time.monotonic()
         output = remote(auth, "alice", "rc -c " + quote(command) + "; echo BUILDER-ERROR:$status")
-        if not re.search(r"(?m)^BUILDER-ERROR:.+", output) or "cannot build on" not in output:
+        if (not re.search(r"(?m)^BUILDER-ERROR:.+", output)
+                or "connection setup timed out after 30 seconds" not in output
+                or time.monotonic() - started > 45):
             raise RuntimeError("unavailable builder did not fail clearly: " + output)
         print("PASS: cached results work without the builder and new remote-only builds fail clearly", flush=True)
     finally:

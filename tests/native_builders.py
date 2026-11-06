@@ -17,6 +17,7 @@ import threading
 import time
 
 from guest import boot
+from cpu_connections import check_connections
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
@@ -61,6 +62,7 @@ with ExitStack() as stack:
     for name in ("builders.nix", "remote-project.nix"):
         shutil.copyfile(Path(__file__).with_name(name), work / name)
     shutil.copyfile(Path(__file__).with_name("remote-delay.c"), work / "delay.c")
+    shutil.copyfile(Path(__file__).with_name("cpu-setup.c"), work / "cpu-setup.c")
     (work / "hello.c").write_text('#include <u.h>\n#include <libc.h>\n'
                                   'void main(void) { print("hello from a remote Nix builder\\n"); exits(nil); }\n')
     keys = {name: secrets.token_bytes(16) for name in ("build", "batch", "glenda")}
@@ -134,6 +136,8 @@ with ExitStack() as stack:
                     guest.command(f"mkdir /mnt/keys/{identity}; cp /tmp/{identity}.aes /mnt/keys/{identity}/aeskey")
             if name in ("build", "batch"):
                 download(guest, name + ".keys", "/adm/cpu.keys", private=True)
+            if name == "build":
+                download(guest, "cpu-setup.c")
             if name != "terminal":
                 guest.command(f"mkdir -p /cfg/{name}/service")
             else:
@@ -199,6 +203,8 @@ with ExitStack() as stack:
         raise RuntimeError("remote builder bypassed the authentication server")
     print("PASS: authenticated remote compilation, input transfer, result registration and logs", flush=True)
 
+    connection_timings = check_connections(terminal, build, result, build_project, failed, until)
+
     batch_result, _ = build_project("batch")
     terminal.command("cat " + batch_result + "/builder", "batch")
     parallel = terminal.command("nix-build /tmp/project -A parallelOne -A parallelTwo --no-out-link")
@@ -246,7 +252,14 @@ with ExitStack() as stack:
         raise RuntimeError("cached result changed")
     failover, _ = build_project("failover")
     terminal.command("cat " + failover + "/builder", "batch")
-    failed(terminal, "nix-build /tmp/project -A unavailable --no-out-link --builders cpu://build", "cannot build on")
+    unavailable_started = time.monotonic()
+    failed(terminal, "nix-build /tmp/project -A unavailable --no-out-link --builders "
+           + quote(PRIMARY + "&connect-timeout=5"), "cannot build on")
+    if time.monotonic() - unavailable_started > 15:
+        raise RuntimeError("offline CPU exceeded its connection deadline")
+    build = builders.enter_context(start("build"))
+    recovered, _ = build_project("afterRestart", "--builders " + quote(PRIMARY + "&connect-timeout=5"))
+    terminal.command("cat " + recovered + "/builder", "build")
     local, _ = build_project("localBuild", "--builders '' --max-jobs 1")
     terminal.command("cat " + local + "/builder", "terminal")
     print("PASS: authentication rejection, local result reuse and fallback to an available CPU", flush=True)
@@ -257,4 +270,5 @@ with ExitStack() as stack:
         "remoteOutput": result, "input": input_path, "parallelOutputs": parallel_paths,
         "featureOutput": batch_result, "failoverOutput": failover,
         "sameCpuOutputs": pooled_paths, "localOutput": local,
+        "connectionTimings": connection_timings, "recoveredOutput": recovered,
     }, indent=2) + "\n")

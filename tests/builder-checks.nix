@@ -25,6 +25,25 @@ let
     hostName = "terminal";
     nix.buildMachines = [ machine ];
   };
+  timed = evaluate {
+    hostName = "terminal";
+    nix = {
+      distributedBuilds = true;
+      buildMachines = [ (machine // { connectTimeout = 7; }) ];
+    };
+  };
+  unlimited = evaluate {
+    hostName = "terminal";
+    nix = {
+      distributedBuilds = true;
+      buildMachines = [
+        {
+          hostName = "build";
+          connectTimeout = 0;
+        }
+      ];
+    };
+  };
   explicit = evaluate {
     hostName = "terminal";
     nix.settings.builders = "cpu://build";
@@ -41,6 +60,10 @@ assert
   active.nix.settings.builders
   == "cpu://alice@build?key-pattern=dom%3Dexample x86_64-plan9 - 1 1 batch batch";
 assert inactive.nix.settings.builders == "";
+assert
+  timed.nix.settings.builders
+  == "cpu://alice@build?key-pattern=dom%3Dexample&connect-timeout=7 x86_64-plan9 - 1 1 batch batch";
+assert unlimited.nix.settings.builders == "cpu://build?connect-timeout=0 x86_64-plan9 - 1 1 - -";
 assert explicit.nix.settings.builders == "cpu://build";
 assert builtins.elem pkgs.rcpu explicit.packages;
 assert forced.packages == [ ];
@@ -58,6 +81,7 @@ assert builtins.isString (import <nix9/examples/builders> { }).build.drvPath;
 assert builders.build.hostName == "build";
 assert builders.build.keyPattern == "dom=nix9.builders";
 assert builders.build.maxJobs == 1;
+assert builders.build.connectTimeout == 30;
 assert fixtures.renamed.manifest.machines.terminal.builders.build.hostName == "compile";
 assert fixtures.second.manifest.machines.terminal.builders.batch.maxJobs == 1;
 assert builtins.any (

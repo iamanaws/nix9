@@ -14,6 +14,11 @@ in
     default = "";
     description = "Public attributes selecting the client's factotum key.";
   };
+  connectTimeout = lib.mkOption {
+    type = lib.types.ints.unsigned;
+    default = 30;
+    description = "Seconds allowed for connection, authentication and serve-protocol setup. Zero disables the deadline; compilation time is unaffected.";
+  };
   maxJobs = lib.mkOption {
     type = lib.types.ints.positive;
     default = 1;

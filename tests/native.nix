@@ -203,6 +203,8 @@ in
       ./builders.nix
       ./remote-project.nix
       ./remote-delay.c
+      ./cpu-setup.c
+      ./cpu_connections.py
     ];
     env.NIX9_BUILDER_TEST_STATE = "builder-state";
     args = "${nativeBootstrap} \"$out\"";

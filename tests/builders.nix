@@ -69,6 +69,14 @@ in
     ];
   };
   invalid = {
+    negativeTimeout = system {
+      nix.buildMachines = [
+        {
+          hostName = "build";
+          connectTimeout = -1;
+        }
+      ];
+    };
     removedBuilders = system { nix.builders.build.host = "build"; };
     unknown = (make { machines.terminal.builders.missing = { }; }).build;
     disabledCPU =
