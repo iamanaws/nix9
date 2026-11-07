@@ -11,6 +11,7 @@ pkgs.runCommand "store-service-tests" { nativeBuildInputs = [ pkgs.nix ]; } ''
       testSupport [
         ./store-service.nix
         ./store-service-checks.nix
+        ./configuration-wait.c
       ]
     }/store-service-checks.nix > "$out/results.json"
 ''

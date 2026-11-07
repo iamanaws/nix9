@@ -1,5 +1,6 @@
 {
   pkgs ? import <nix9>,
+  featureName ? "initial",
 }:
 let
   make =
@@ -46,9 +47,50 @@ let
       nix = settings;
       imports = [ extra ];
     };
+  configurationWait = pkgs.mkDerivation {
+    name = "configuration-wait";
+    src = ./configuration-wait.c;
+    buildCommand = ''
+      mkdir -p $out/bin
+      6c -o wait.6 $src
+      6l -o $out/bin/configuration-wait wait.6
+    '';
+  };
 in
 {
   initial = make settings;
+  live = make (
+    pkgs.lib.recursiveUpdate settings {
+      settings = {
+        system-features = [ "live" ];
+        timeout = 2;
+      };
+    }
+  );
+  invalidLive = make (pkgs.lib.recursiveUpdate settings { settings.cores = "invalid"; });
+  delay = configurationWait;
+  held = pkgs.mkDerivation {
+    name = "configuration-held-build";
+    nativeBuildInputs = [ configurationWait ];
+    buildCommand = ''
+      echo CONFIGURATION-BUILD-READY >[1=2]
+      configuration-wait /usr/configuration-release
+      echo retained > $out
+    '';
+  };
+  slow = pkgs.mkDerivation {
+    name = "configuration-timeout-build";
+    nativeBuildInputs = [ configurationWait ];
+    buildCommand = ''
+      configuration-wait /usr/configuration-never-released
+      echo unexpected > $out
+    '';
+  };
+  feature = pkgs.mkDerivation {
+    name = "configuration-feature-${featureName}";
+    requiredSystemFeatures = [ "live" ];
+    buildCommand = "echo feature > $out";
+  };
   moved = make (
     pkgs.lib.recursiveUpdate settings {
       daemon.port = 17052;

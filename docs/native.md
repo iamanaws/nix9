@@ -137,10 +137,22 @@ Nix expressions and the store.
 After selection and reboot, ordinary logins use the authenticated local service
 automatically. The store owner and `nix9` system-management commands use the local
 store directly. The listener binds `127.0.0.1` on port `17051`; `port` overrides
-it. Daemon settings, port and enable changes apply at CPU reboot. Login or session refresh
-uses the booted service even when a different system generation is selected.
-Workers read the booted `nix.conf`; ordinary clients cannot widen access.
+it. Login or session refresh uses the booted service even when a different system
+generation is selected. Ordinary clients cannot widen access.
 Diagnostics go to `/sys/log/nix9-store`; `nix9 status --health` checks its listener.
+
+Selection and rollback apply `builders`, `max-jobs`, `cores`, `system-features`,
+`timeout`, `max-silent-time` and `keep-failed` to new daemon connections.
+Existing connections and builds keep their settings; clients can still override
+build options where Nix permits. This requires unchanged listener settings,
+access policy, other Nix settings and generated files besides `nix.conf`.
+Changes to those, including keys, port or enablement, require reboot; until then,
+the daemon keeps its previous configuration. Eligible settings are checked before
+selection. Applied configuration bundles remain rooted until reboot.
+
+`nix9 status` shows the active `nix-config`, `nix-config-selected` and whether
+`nix-config-reboot` is required. These describe daemon defaults for new
+connections; the general `reboot` field still compares whole system generations.
 
 Users share package files, with independent roots and environment generations
 under `/usr/local/nix/state/gcroots/per-user/USER`:

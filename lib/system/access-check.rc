@@ -31,6 +31,8 @@ for(root in $nix9ExportRoots) {
 if(test -f $nix9AccessSystem/services/nix-store-start) {
   for(binary in nix-store-service nix-daemon-worker)
     test -x $nix9/bin/$binary || fail 'shared-store runtime is unavailable:' $binary
+  if(! ~ `{$nix9/bin/nix-store-service -V} nix9-store-service-2)
+    fail 'update the Nix bootstrap before enabling the shared store'
   test -w /usr/local/nix/state/db/db.sqlite || fail 'shared store must start as the store owner'
   if(~ `{cat /dev/user} none) fail 'the anonymous build identity cannot own the shared store'
 }

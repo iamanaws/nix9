@@ -58,6 +58,8 @@ if(~ $action status) {
     echo reboot $reboot
     echo refresh $refresh
   }
+  if(! ~ $identity -)
+    /$cputype/bin/rc $nix9/packages/system/nix-store-config.rc status $identity $selected || fail 'cannot inspect daemon configuration'
   if(~ $health 1) {
     if(~ $booted -) fail 'no recorded booted system; boot the selected system before checking health'
     if(! test -f $booted/health) fail 'booted system has no health checks; rebuild and reboot'
@@ -97,9 +99,14 @@ changing=0
 retained=0
 previous=()
 previousName=()
+previousConfig=()
+daemonState=/usr/local/nix/state/daemon/^$nix9MachineId
 fn sigexit {
   result=$status
   if(~ $changing 1) {
+    if(~ $#previousConfig 1)
+      if(! $daemonRuntime/bin/nix-store-service -U $daemonState $previousConfig)
+        echo $commandName^': could not restore daemon configuration' >[1=2]
     if(~ $#previous 1) nix-store --realise $previous --add-root $root > /dev/null
     if not if(test -e $root) rm $root
     echo -n $previousName > /dev/sysname
@@ -176,6 +183,7 @@ if(test -f $target/services/namespace-check)
 if(test -f $target/logging) {
   @{ fn sigexit; nix9LogCheck=1; . $target/logging } || fail 'log configuration check failed'
 }
+/$cputype/bin/rc $nix9/packages/system/nix-store-config.rc check $nix9MachineId $target || fail 'daemon configuration check failed'
 
 # Adopt local startup scripts once, and refuse to overwrite later manual edits.
 fn hookTemplate {
@@ -228,10 +236,16 @@ if(! test -f /usr/local/pkg/nix9/system || ! cmp -s /usr/local/pkg/nix9/system $
 }
 if(test -r $root) previous=`{cat $root}
 previousName=`{cat /dev/sysname}
+if(test -f $daemonState/runtime) {
+  daemonRuntime=`{cat $daemonState/runtime}
+  previousConfig=`{$daemonRuntime/bin/nix-store-service -Q $daemonState}
+  if(! ~ $#previousConfig 1) fail 'cannot retain active daemon configuration'
+}
 changing=1
 echo -n `{cat $target/hostName} > /dev/sysname
 nix-profile $root set $target
 chmod 644 $root || fail 'cannot publish the system selection'
+/$cputype/bin/rc $nix9/packages/system/nix-store-config.rc apply $nix9MachineId $target || fail 'daemon configuration activation failed'
 changing=0
 eventSystem=$target
 event=$action

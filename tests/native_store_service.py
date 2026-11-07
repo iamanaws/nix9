@@ -10,6 +10,7 @@ import tempfile
 import time
 
 from guest import boot, files_guest
+from store_configuration import check_configuration
 
 
 ROOT = "/usr/local/nix/state/gcroots/machines/store/system"
@@ -24,10 +25,11 @@ def login(guest, user, command, expected=None):
     # Real login hook, without setting NIX_REMOTE or sourcing a test activation.
     line = "/amd64/bin/auth/as " + user + " /bin/rc -el -c " + quote(command)
     if len(line) > 220:
-        guest.command("echo -n > /tmp/login-command; chmod 644 /tmp/login-command")
+        guest.command("echo -n > /usr/nix9-test-login; chmod 644 /usr/nix9-test-login")
         for offset in range(0, len(command), 100):
-            guest.command("echo -n " + quote(command[offset:offset + 100]) + " >> /tmp/login-command")
-        line = "/amd64/bin/auth/as " + user + " /bin/rc -el -c '. /tmp/login-command'"
+            guest.command("echo -n " + quote(command[offset:offset + 100]) + " >> /usr/nix9-test-login")
+        guest.command("echo >> /usr/nix9-test-login")
+        line = "/amd64/bin/auth/as " + user + " /bin/rc -el -c '. /usr/nix9-test-login'"
     return guest.command(line, expected)
 
 
@@ -61,7 +63,7 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run([str(Path(qemu).with_name("qemu-img")), "create", "-f", "qcow2", "-F", "qcow2",
                     "-b", str(Path(image).resolve()), str(disk)], check=True)
     fixtures = {"bootstrap.tar": archive}
-    for name in ("store-service.nix", "shared-store.nix"):
+    for name in ("store-service.nix", "shared-store.nix", "configuration-wait.c"):
         fixtures[name] = Path(__file__).with_name(name)
     for user in ("nixhost", "alice", "bob"):
         key = secrets.token_bytes(16)
@@ -103,7 +105,9 @@ with tempfile.TemporaryDirectory() as directory:
             guest.command(f"echo 'cat /adm/{user}.keys > /mnt/factotum/ctl' >> /rc/bin/cpurc.local")
         guest.command("rm /tmp/*.keys")
         guest.command("cp /tmp/shared-store.nix /usr/shared-store.nix; chmod 444 /usr/shared-store.nix")
-        for name in ("initial", "moved", "disabled"):
+        for name in ("store-service.nix", "configuration-wait.c"):
+            guest.command(f"cp /tmp/{name} /usr/{name}; chmod 444 /usr/{name}")
+        for name in ("initial", "moved", "disabled", "live", "invalidLive"):
             guest.command(f"echo '(import ./store-service.nix {{}}).{name}' > /tmp/{name}.nix")
         guest.command("nix9-rebuild build /tmp/initial.nix")
         guest.command("initial=`{cat " + ROOT + "-build}")
@@ -131,6 +135,7 @@ with tempfile.TemporaryDirectory() as directory:
         guest.command(". /usr/local/pkg/nix9/system")
         guest.command("echo $NIX_REMOTE", "local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log")
         guest.command("nix9 status --health", "store health nix/daemon ok")
+        check_configuration(guest, login, ROOT)
         for user in ("alice", "bob"):
             login(guest, user, "echo $NIX_REMOTE", "daemon?address=tcp!127.0.0.1!17051&key-pattern=user=" + user)
             login(guest, user, "test ! -w /usr/local/nix/store && test ! -w /usr/local/nix/state/db/db.sqlite")
@@ -142,6 +147,7 @@ with tempfile.TemporaryDirectory() as directory:
         login(guest, "alice", "nix-build /usr/shared-store.nix -A envTwo; roots=`{nix-store --roots-dir}; "
               "nix-profile $roots/environment set `{cat $roots/result}")
         guest.command("nix9-rebuild switch /tmp/moved.nix")
+        guest.command("nix9 status", "nix-config-reboot required")
         check_profile(guest, "alice", "two")
         check_profile(guest, "bob", "one")
         login(guest, "alice", "echo $NIX_REMOTE", "daemon?address=tcp!127.0.0.1!17051&key-pattern=user=alice")
@@ -151,6 +157,7 @@ with tempfile.TemporaryDirectory() as directory:
         guest.child.timeout = 600
         listening(guest, 17052)
         guest.command(". /usr/local/pkg/nix9/system")
+        guest.command("nix9 status", "nix-config-reboot no")
         login(guest, "bob", "echo $NIX_REMOTE", "daemon?address=tcp!127.0.0.1!17052&key-pattern=user=bob")
         check_profile(guest, "bob", "one")
         denied(guest, "alice")
@@ -173,12 +180,15 @@ with tempfile.TemporaryDirectory() as directory:
         check_profile(guest, "alice", "one")
         check_profile(guest, "bob", "one")
         guest.command("nix9-rebuild switch /tmp/disabled.nix")
+        guest.command("nix9 status", "nix-config-reboot required")
         check_profile(guest, "bob", "one")
     print("PASS: system rollback preserves both user profiles and their generations across GC", flush=True)
 
     with start() as guest:
         guest.child.timeout = 600
         guest.command(". /usr/local/pkg/nix9/system")
+        guest.command("nix9 status", "nix-config -")
+        guest.command("test ! -d /usr/local/nix/state/gcroots/machines/store/daemon-configs")
         guest.command("if(netstat -n | grep -s 'Listen *1705[12] ') exit 'store is still listening'; status=''")
         login(guest, "alice", "echo $NIX_REMOTE", "local?store=/usr/local/nix/store&state=/usr/local/nix/state&log=/usr/local/nix/log")
         guest.command("test -r /usr/local/nix/state/gcroots/per-user/alice/environment")
@@ -190,4 +200,5 @@ Path(output, "results.json").write_text(json.dumps({"status": "passed", "checks"
     "private-runtime-keys", "manual-port-collision", "managed-startup", "ordinary-login",
     "owner-local-store", "protected-store", "native-client-identity", "booted-client-defaults", "policy-and-port-reboot", "server-owned-nix-settings",
     "policy-rollback", "retained-user-profiles", "user-profile-rollback", "gc", "disable",
+    "live-configuration", "connection-snapshots", "invalid-live-settings", "live-rollback", "boot-only-policy",
 ]}, indent=2) + "\n")

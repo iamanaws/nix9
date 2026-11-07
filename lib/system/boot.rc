@@ -18,6 +18,8 @@
         if(test -f $nix9SelectedSystem/services/cwfs/start) . $nix9SelectedSystem/services/cwfs/start
         if(test -f $nix9SelectedSystem/services/timesync.rc) . $nix9SelectedSystem/services/timesync.rc
         . $nix9SelectedSystem/activate && {
+          /$cputype/bin/rc $nix9/packages/system/nix-store-config.rc boot $nix9MachineId $nix9SelectedSystem ||
+            exit 'cannot initialize Nix daemon configuration'
           if(test -f $nix9System/ndb/boot.rc) . $nix9System/ndb/boot.rc
           if(test -f $nix9System/services/dhcpd.rc) . $nix9System/services/dhcpd.rc
           if(test -f $nix9System/services/tftpd.rc) . $nix9System/services/tftpd.rc

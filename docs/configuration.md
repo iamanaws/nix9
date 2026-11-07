@@ -113,7 +113,7 @@ Selection and rollback apply settings at different times:
 | --- | --- |
 | Hostname | Immediately on selection, and at boot. |
 | Packages, generated files, certificate pins and managed webfs | Boot, new login, or session refresh. |
-| Nix settings and builders | Local clients: next invocation after login or session refresh. Daemon: next CPU-server boot. |
+| Nix settings and builders | Local clients: next invocation after login or session refresh. Daemon: eligible [build settings](native.md#shared-store) apply to new connections on selection or rollback; other changes require reboot. |
 | Rio, Acme and plumbing settings | Next native program start after sourcing the generated program defaults. |
 | NDB files and tools | Boot, new login, or session refresh. Running cs and DNS change at boot. |
 | Shared-file mounts and directory bindings | New login or session refresh, in that session's namespace. |

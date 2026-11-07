@@ -26,7 +26,7 @@ in
   ];
   options.nix.settings = mkOption {
     default = { };
-    description = "Nix settings written to nix.conf. Shared-store workers read the booted configuration.";
+    description = "Nix settings written to nix.conf. Selection applies eligible build settings to new shared-store connections; other daemon settings require reboot.";
     type = types.submodule {
       freeformType = types.attrsOf value;
       options = {

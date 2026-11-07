@@ -10,6 +10,8 @@ static char *keys = "";
 static char *worker, *launcher;
 static char *builduser = "none";
 static char *clientpid;
+static char *configstate;
+static char configformat[] = "nix9-daemon-config-1\n";
 static int connectionctl = -1;
 
 static void
@@ -36,7 +38,8 @@ static void
 usage(void)
 {
 	fprint(2, "usage: nix-store-service -c [-a address] [-k keypattern] [-p client-pid]\n"
-		"       nix-store-service [-a address] [-k keypattern] -w worker\n");
+		"       nix-store-service [-a address] [-k keypattern] [-s state] -w worker\n"
+		"       nix-store-service -Q state | -U state configuration\n");
 	exits("usage");
 }
 
@@ -132,10 +135,106 @@ writeall(int fd, char *data, long size)
 	while(size > 0){
 		n = write(fd, data, size);
 		if(n <= 0)
-			sysfatal("write build input: %r");
+			sysfatal("write service data: %r");
 		data += n;
 		size -= n;
 	}
+}
+
+/* Publish complete, immutable records by removing their write bits. Plan 9
+ * cannot rename over an existing file. Readers ignore unfinished records;
+ * existing workers keep their private bind of the preceding configuration. */
+static char*
+configuration(char *state, char *next)
+{
+	Dir *dir, *entries, mode;
+	char *owner, *end, *path, *result, data[512], name[32];
+	ulong sequence, latest, number;
+	int fd, i, n, length;
+
+	dir = dirstat(state);
+	if(dir == nil || !(dir->mode & DMDIR) || (dir->mode & 0022) != 0)
+		sysfatal("unsafe daemon configuration directory");
+	owner = strdup(dir->uid);
+	free(dir);
+	if(next != nil && strcmp(owner, getuser()) != 0)
+		sysfatal("only the store owner can change daemon configuration");
+	fd = open(state, OREAD);
+	if(fd < 0 || (n = dirreadall(fd, &entries)) < 0)
+		sysfatal("read daemon configuration directory: %r");
+	close(fd);
+	latest = sequence = 0;
+	for(i = 0; i < n; i++){
+		if(entries[i].name[0] < '1' || entries[i].name[0] > '9')
+			continue;
+		number = strtoul(entries[i].name, &end, 10);
+		if(*end != 0 || number == 0 || number >= 0x7fffffff)
+			continue;
+		if(number > sequence)
+			sequence = number;
+		if((entries[i].mode & 0222) != 0)
+			continue;
+		if((entries[i].mode & DMDIR) || strcmp(entries[i].uid, owner) != 0)
+			sysfatal("unsafe daemon configuration record");
+		if(number > latest)
+			latest = number;
+	}
+	free(entries);
+	if(next == nil){
+		if(latest == 0)
+			sysfatal("no active daemon configuration");
+		path = smprint("%s/%lud", state, latest);
+		fd = open(path, OREAD);
+		free(path);
+		if(fd < 0)
+			sysfatal("open daemon configuration: %r");
+		length = readn(fd, data, sizeof data);
+		close(fd);
+		if(length < 2 || length == sizeof data || data[length-1] != '\n' ||
+		   memchr(data, 0, length-1) != nil)
+			sysfatal("incomplete daemon configuration record");
+		data[length-1] = 0;
+		next = data;
+	}
+	if(strncmp(next, "/usr/local/nix/store/", 21) != 0 || strlen(next) < 55 || next[53] != '-')
+		sysfatal("invalid daemon configuration path");
+	for(i = 21; i < 53; i++)
+		if(strchr("0123456789abcdfghijklmnpqrsvwxyz", next[i]) == nil)
+			sysfatal("invalid daemon configuration hash");
+	for(end = next + 21; *end; end++)
+		if(!((*end >= 'a' && *end <= 'z') || (*end >= 'A' && *end <= 'Z') ||
+		     (*end >= '0' && *end <= '9') || strchr("+._?=-", *end) != nil))
+			sysfatal("invalid daemon configuration path");
+	if(end == next + 21)
+		sysfatal("empty daemon configuration path");
+	result = strdup(next);
+	path = smprint("%s/format", result);
+	fd = open(path, OREAD);
+	free(path);
+	if(fd < 0 || (length = readn(fd, data, sizeof data)) != sizeof configformat-1 ||
+	   memcmp(data, configformat, sizeof configformat-1) != 0)
+		sysfatal("unsupported daemon configuration");
+	close(fd);
+	if(next != data){
+		if(sequence >= 0x7ffffffe)
+			sysfatal("daemon configuration sequence exhausted");
+		snprint(name, sizeof name, "%lud", sequence+1);
+		path = smprint("%s/%s", state, name);
+		fd = create(path, OWRITE|OEXCL, 0600);
+		free(path);
+		if(fd < 0)
+			sysfatal("create daemon configuration record: %r");
+		path = smprint("%s\n", result);
+		writeall(fd, path, strlen(path));
+		free(path);
+		nulldir(&mode);
+		mode.mode = 0444;
+		if(dirfwstat(fd, &mode) < 0)
+			sysfatal("publish daemon configuration: %r");
+		close(fd);
+	}
+	free(owner);
+	return result;
 }
 
 static void
@@ -294,6 +393,12 @@ connection(int ctl)
 		}
 	}
 	putenv("NIX9_CLIENT_USER", ai->cuid);
+	if(configstate != nil){
+		dump = smprint("%s/files", configuration(configstate, nil));
+		if(bind(dump, "/cfg/nix9/files", MREPL) < 0)
+			sysfatal("bind daemon configuration: %r");
+		free(dump);
+	}
 	putenv("NIX9_BUILD_USER", builduser);
 	putenv("NIX9_BUILD_LAUNCHER", launcher);
 	dump = smprint("%.*s/nix-store", (int)(strrchr(worker, '/') - worker), worker);
@@ -565,6 +670,18 @@ main(int argc, char **argv)
 	fmtinstall('[', encodefmt);
 	fmtinstall('H', encodefmt);
 	standardfds();
+	if(argc == 2 && strcmp(argv[1], "-V") == 0){
+		print("nix9-store-service-2\n");
+		exits(nil);
+	}
+	if(argc == 3 && strcmp(argv[1], "-Q") == 0){
+		print("%s\n", configuration(argv[2], nil));
+		exits(nil);
+	}
+	if(argc == 4 && strcmp(argv[1], "-U") == 0){
+		configuration(argv[2], argv[3]);
+		exits(nil);
+	}
 	if(argc == 4 && strcmp(argv[1], "-P") == 0){
 		prepare(argv[2], argv[3]);
 		exits(nil);
@@ -578,6 +695,7 @@ main(int argc, char **argv)
 	case 'a': address = EARGF(usage()); break;
 	case 'k': keys = EARGF(usage()); break;
 	case 'w': worker = EARGF(usage()); break;
+	case 's': configstate = EARGF(usage()); break;
 	default: usage();
 	}ARGEND
 	if(argc != 0)
@@ -586,7 +704,8 @@ main(int argc, char **argv)
 		sysfatal("key pattern must contain public factotum attributes only");
 	if(isclient)
 		client();
-	if(worker == nil || worker[0] != '/' || strrchr(worker, '/') == nil ||
+	if((configstate != nil && configstate[0] != '/') ||
+	   worker == nil || worker[0] != '/' || strrchr(worker, '/') == nil ||
 	   launcher[0] != '/' || !username(builduser) || strcmp(builduser, getuser()) == 0)
 		usage();
 	if(rfork(RFNAMEG|RFENVG|RFFDG|RFNOTEG) < 0)

@@ -1,0 +1,74 @@
+#!/bin/rc -e
+# Internal activation helper. The listener and credentials stay at their boot version.
+rfork ne
+fn fail {
+  echo 'nix9: daemon configuration:' $* >[1=2]
+  exit 'daemon configuration failed'
+}
+if(! ~ $#* 3 || ! ~ $1 boot check apply status) fail 'invalid request'
+action=$1
+machine=$2
+system=$3
+state=/usr/local/nix/state/daemon/^$machine
+roots=/usr/local/nix/state/gcroots/machines/^$machine^/daemon-configs
+selected=-
+if(test -f $system/services/nix-store-start) selected=`{cat $system/services/nix-store-config}
+
+if(~ $action boot) {
+  # #s is reset by a kernel reboot. A repeated boot hook must leave workers alone.
+  if(test -e '#s/nix9-access-'^$machine) exit ''
+  if(test -d $state) rm -rf $state
+  if(test -d $roots) rm -rf $roots
+  if(~ $selected -) exit ''
+  mkdir -p $state $roots || fail 'cannot create state directories'
+  chmod 755 $state $roots
+  echo $nix9 > $state/runtime
+  chmod 444 $state/runtime
+  runtime=$nix9
+  if(echo $runtime | grep -s '^/usr/local/nix/store/')
+    nix-store --option substitute false --realise $runtime --add-root $roots/runtime > /dev/null ||
+      fail 'cannot retain the boot runtime'
+}
+if not {
+  if(test -f $state/runtime) runtime=`{cat $state/runtime}
+  if not runtime=$nix9
+}
+active=-
+if(! ~ $action boot && test -f $state/runtime) {
+  active=`{$runtime/bin/nix-store-service -Q $state}
+  if(! ~ $#active 1) fail 'cannot read active configuration'
+}
+if(~ $action status) {
+  echo nix-config $active
+  echo nix-config-selected $selected
+  reboot=no
+  if(! ~ $active $selected) reboot=required
+  echo nix-config-reboot $reboot
+  exit ''
+}
+if(~ $selected -) exit ''
+@{
+  bind $selected/files /cfg/nix9/files || exit 'cannot bind candidate configuration'
+  NIX_CONF_DIR=$runtime
+  NIX_USER_CONF_FILES=/dev/null
+  NIX_CONFIG=()
+  $runtime/bin/nix-store --version > /dev/null
+} || fail 'invalid Nix settings'
+if(! ~ $action boot) {
+  bootroot=/usr/local/nix/state/gcroots/machines/^$machine^/system-boot
+  if(! test -f $bootroot || ~ $active - || ~ $selected -) exit ''
+  boot=`{cat $bootroot}
+  bootconfig=`{cat $boot/services/nix-store-config}
+  # An ineligible selection succeeds, with the previous settings still active.
+  if(! cmp -s $bootconfig/boot-identity $selected/boot-identity) exit ''
+}
+if(~ $action check || ~ $active $selected) exit ''
+# Keep every applied snapshot until reboot, including connections not yet in LocalStore.
+mkdir -p $roots || fail 'cannot create configuration roots'
+$runtime/bin/nix-store --option substitute false --realise $selected \
+  --add-root $roots/`{basename $selected} > /dev/null || fail 'cannot retain configuration'
+chmod 644 $roots/`{basename $selected}
+$runtime/bin/nix-store-service -U $state $selected || fail 'cannot publish configuration'
+if(~ $action apply)
+  if(! echo 'Nix daemon settings applied to new connections.') status=''
+exit ''

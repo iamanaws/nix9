@@ -49,6 +49,8 @@ if(~ $action status status-health) {
     if(! ~ $rootReboot no) reboot=required
   }
   echo $name reboot $reboot
+  /$cputype/bin/rc $nix9/packages/system/nix-store-config.rc status $identity $selected | \
+    awk -v 'name='^$name '{print name, $0}'
   if(~ $action status-health) {
     if(~ $booted - || ! test -f $booted/health) {
       echo $name health-result failed

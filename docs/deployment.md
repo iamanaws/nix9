@@ -146,6 +146,8 @@ boot artifacts, `root-running`, `root-next`, and the running and next providers'
 `-` means no recorded path. `root-reboot` compares running and next-boot roots;
 `reboot required` covers pending system or root changes. These fields do not test
 service health or mean the machine matches the bundle's intended configuration.
+Shared-store machines also report the active and selected
+[daemon configuration](native.md#shared-store) and pending daemon reboot changes.
 
 Use `nix9 status --health cpu files` to add [native health checks](configuration.md#generations)
 from each machine's booted system. The CPU connection tests remote login and

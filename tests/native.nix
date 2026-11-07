@@ -104,6 +104,8 @@ in
     files = [
       ./store-service.nix
       ./shared-store.nix
+      ./store_configuration.py
+      ./configuration-wait.c
     ];
     args = "${
       nativeBootstrap.override {

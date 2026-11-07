@@ -42,6 +42,36 @@ let
     builtins.match "[a-zA-Z0-9_+.-]+(/[a-zA-Z0-9_+.-]+)*" value != null
     && builtins.all (part: part != "." && part != "..") (parts value);
   targets = builtins.attrNames files;
+  # Only these settings can move independently of the booted listener and policy.
+  liveSettings = [
+    "builders"
+    "max-jobs"
+    "cores"
+    "system-features"
+    "timeout"
+    "max-silent-time"
+    "keep-failed"
+  ];
+  daemonConfiguration = mkDerivation {
+    name = "nix9-daemon-configuration";
+    buildCommand = ''
+      mkdir -p $out/files
+      echo nix9-daemon-config-1 > $out/format
+      echo -n ${
+        quote (
+          builtins.toJSON {
+            inherit (nix) daemon;
+            settings = lib.filterAttrs (_: value: value != null) (
+              builtins.removeAttrs nix.settings liveSettings
+            );
+            files = builtins.removeAttrs files [ "nix.conf" ];
+            cpuPackage = toString cpuPackage;
+          }
+        )
+      } > $out/boot-identity
+      ${builtins.concatStringsSep "\n" (map (target: write ("files/" + target) files.${target}) targets)}
+    '';
+  };
   parentOf =
     parent: child: builtins.substring 0 (builtins.stringLength parent + 1) child == parent + "/";
   validFiles = builtins.all (
@@ -383,6 +413,7 @@ else
         ${write "services/reset.rc" (builtins.readFile ./reset.rc)}
         ${write "services/ndb.rc" (builtins.readFile ./ndb.rc)}
         ${lib.optionalString nix.daemon.enable ''
+          ${write "services/nix-store-config" (toString daemonConfiguration + "\n")}
           ${write "services/nix-store-port" (toString nix.daemon.port + "\n")}
           ${write "services/nix-store-start" (
             ''

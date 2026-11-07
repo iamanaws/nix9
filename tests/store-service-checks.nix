@@ -33,6 +33,8 @@ let
 in
 assert builtins.all (name: builtins.isString fixtures.${name}.drvPath) [
   "initial"
+  "live"
+  "invalidLive"
   "moved"
   "disabled"
   "provisioned"
