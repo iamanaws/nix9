@@ -75,6 +75,8 @@ then follow [archive installation](vm.md#package-archives).
 Copy `$nix9/hello` into a writable project directory and run `nix-shell`.
 Inside, use `mk` and `mk clean`. Exiting restores the original namespace.
 `nix-shell default.nix --run 'mk'` runs one command without an interactive shell.
+Keep an interactive shell open for repeated edits; `mk` reuses its prepared
+toolchain and namespace.
 
 `nix-shell default.nix` also enters a package's build environment without
 building it. Use `--pure` to clear inherited variables and `--keep NAME` to retain

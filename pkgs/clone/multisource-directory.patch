@@ -1,0 +1,13 @@
+diff --git a/clone.c b/clone.c
+--- a/clone.c
++++ b/clone.c
+@@ -217,6 +217,9 @@
+ 		return -1;
+ 	}
+ 	d = *sd;
++	/* Readers need search permission on directories made for file inputs. */
++	if(!(d.mode & DMDIR))
++		d.mode |= (d.mode & 0444) >> 2;
+ 	d.mode = d.mode | DMDIR | 0200;
+ 	fd = create(dst, 0, d.mode);
+ 	if(fd < 0){

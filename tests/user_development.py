@@ -40,7 +40,7 @@ def check_profiles(remote, environments):
                 raise RuntimeError(f"{machine}: {user}'s profile changed")
 
 
-def check_development(auth, cpus, remote, measure):
+def check_development(auth, cpus, remote):
     environments = {}
     for machine, cpu in cpus.items():
         cpu.command("nix9 status --health", machine + " health nix/daemon ok")
@@ -48,8 +48,8 @@ def check_development(auth, cpus, remote, measure):
             remote(user, "echo `{cat /dev/user}", user, machine=machine)
             remote(user, "echo $NIX_REMOTE",
                    "daemon?address=tcp!127.0.0.1!17051&key-pattern=user=" + user, machine=machine)
-            result = measure(machine + "/environment-" + user, lambda: remote(
-                user, "nix-build /n/projects/hello/environment.nix", machine=machine))
+            result = remote(
+                user, "nix-build /n/projects/hello/environment.nix", machine=machine)
             environment = output_path(result)
             if user == "alice":
                 environments[machine] = environment
@@ -112,15 +112,15 @@ def check_development(auth, cpus, remote, measure):
     return environments
 
 
-def check_source_edits(remote, measure):
+def check_source_edits(remote):
     original = "/usr/alice/hello-original.c"
     source = "/n/projects/hello/hello.c"
     remote("alice", f"cp {source} {original}")
     try:
         remote("alice", f"sed 's/shared workspace/edited workspace/' {original} > {source}")
         for machine in ("build", "batch"):
-            result = measure(machine + "/source-edit-build", lambda: remote(
-                "alice", "nix-build /n/projects/hello/environment.nix", machine=machine))
+            result = remote(
+                "alice", "nix-build /n/projects/hello/environment.nix", machine=machine)
             environment = output_path(result)
             if "building '" not in result:
                 raise RuntimeError(machine + ": changed source did not rebuild")
@@ -129,8 +129,8 @@ def check_source_edits(remote, measure):
     finally:
         remote("alice", f"cp {original} {source} && rm {original}")
     for machine in ("build", "batch"):
-        result = measure(machine + "/restored-source-build", lambda: remote(
-            "alice", "nix-build /n/projects/hello/environment.nix", machine=machine))
+        result = remote(
+            "alice", "nix-build /n/projects/hello/environment.nix", machine=machine)
         if "building '" in result or "copying path" in result:
             raise RuntimeError(machine + ": restored source was not reused")
     print("PASS: shared source edits rebuild on both CPUs and restored sources reuse their environments", flush=True)

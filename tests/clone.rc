@@ -1,18 +1,22 @@
 #!/bin/rc -e
+flag e +
 copy=$1
-mkdir -p /mnt/source/nested
-echo copied > /mnt/source/nested/message
-cp /tmp/payload /mnt/source/payload
-touch /mnt/source/empty
-$copy -b 4096 -p 2:4 /mnt/source /mnt/destination
-cmp /mnt/source/nested/message /mnt/destination/nested/message
-cmp /mnt/source/payload /mnt/destination/payload
-test -f /mnt/destination/empty
-test ! -s /mnt/destination/empty
-echo replacement > /mnt/source/nested/message
-$copy /mnt/source/nested/message /mnt/destination/nested/message
-cmp /mnt/source/nested/message /mnt/destination/nested/message
-$copy /mnt/source/payload /mnt/source/empty /mnt/multiple
-cmp /mnt/source/payload /mnt/multiple/payload
-test -f /mnt/multiple/empty
+root=/mnt
+payload=/tmp/payload
+if(~ $#* 3) { root=$2; payload=$3 }
+mkdir -p $root/source/nested
+echo copied > $root/source/nested/message
+cp $payload $root/source/payload
+touch $root/source/empty
+$copy -b 4096 -p 2:4 $root/source $root/destination
+cmp $root/source/nested/message $root/destination/nested/message
+cmp $root/source/payload $root/destination/payload
+test -f $root/destination/empty
+test ! -s $root/destination/empty
+echo replacement > $root/source/nested/message
+$copy $root/source/nested/message $root/destination/nested/message
+cmp $root/source/nested/message $root/destination/nested/message
+$copy $root/source/payload $root/source/empty $root/multiple
+cmp $root/source/payload $root/multiple/payload
+test -f $root/multiple/empty
 echo upstream-clone-PASS

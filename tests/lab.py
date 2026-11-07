@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 import re
-import signal
 import subprocess
 import sys
 import tempfile
@@ -13,7 +12,7 @@ import time
 
 import pexpect
 
-from guest import Guest
+from lab_support import start_lab, stop_lab, attach_console
 from lab_updates import check_updates
 from lab_builders import check_builders, check_builder_restart, check_builder_unavailable
 
@@ -37,43 +36,13 @@ with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporar
     environments = {}
 
     def start():
-        log = log_path.open("a")
-        process = subprocess.Popen([launcher, str(work)], stdout=log, stderr=subprocess.STDOUT)
-        deadline = time.monotonic() + 7200
-        try:
-            while True:
-                if process.poll() is not None:
-                    raise RuntimeError("lab exited before readiness; see " + str(log_path))
-                marker = work / "run.json"
-                if marker.exists() and json.loads(marker.read_text())["phase"] == "ready":
-                    return process, log
-                if time.monotonic() > deadline:
-                    raise RuntimeError("timed out preparing the lab")
-                time.sleep(0.5)
-        except BaseException:
-            if process.poll() is None:
-                process.send_signal(signal.SIGINT)
-                process.wait(timeout=600)
-            log.close()
-            raise
+        return start_lab(launcher, work, log_path)
 
     def attach(machine="auth"):
-        child = pexpect.spawn(launcher, ["console", machine, str(work)], encoding="utf-8", timeout=600)
-        child.logfile_read = sys.stdout
-        child.expect("Ctrl-] detaches.")
-        child.sendline("")
-        child.expect(prompt)
-        return Guest(child, prompt)
+        return attach_console(launcher, work, machine)
 
     def stop(process, log):
-        process.send_signal(signal.SIGINT)
-        try:
-            if process.wait(timeout=600) != 0:
-                raise RuntimeError("lab shutdown failed; see " + str(log_path))
-        finally:
-            log.close()
-        if (work / "run.json").exists():
-            raise RuntimeError("lab retained a running marker after shutdown")
+        stop_lab(process, log, work)
 
     process = None
     try:

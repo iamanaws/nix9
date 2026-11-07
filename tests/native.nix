@@ -2,6 +2,7 @@
   pkgs,
   ar,
   cc,
+  clone,
   cloneRepository,
   compressedText,
   libmach,
@@ -26,7 +27,6 @@ let
     ./boot_medium.py
     ./ethernet.py
     ./user_development.py
-    ./user_performance.py
     ./user-development.rc
   ];
   userBootstrap = nativeBootstrap.override {
@@ -40,6 +40,15 @@ let
       "listen"
     ];
   };
+  cloneWorkspace = pkgs.runCommand "clone-workspace-source" { nativeBuildInputs = [ pkgs.patch ]; } ''
+    cp -r ${clone.src} source
+    chmod -R u+w source
+    cd source
+    patch --fuzz=0 -p1 < ${../pkgs/clone/directories-only.patch}
+    patch --fuzz=0 -p1 < ${../pkgs/clone/multisource-directory.patch}
+    mkdir "$out"
+    cp clone.c mkfile clone.man LICENSE "$out/"
+  '';
 in
 {
   lab-configuration-tests =
@@ -82,6 +91,7 @@ in
       exec ${python}/bin/python ${
         testSupport [
           ./lab.py
+          ./lab_support.py
           ./lab_updates.py
           ./lab_builders.py
           ./lab-builders.nix
@@ -137,12 +147,16 @@ in
   };
   benchmark-users = pkgs.writeShellApplication {
     name = "benchmark-users";
-    runtimeInputs = [ pkgs.mtools ];
     text = ''
-      export NIX9_USERS_BENCHMARK=1
-      exec ${python}/bin/python ${testSupport ([ ./native_users.py ] ++ userFiles)}/native_users.py \
-        ${pkgs.qemu}/bin/qemu-system-x86_64 ${vm}/9front.qcow2 \
-        ${userBootstrap} "''${1:-nix9-users-performance}"
+      exec ${python}/bin/python ${
+        testSupport [
+          ./benchmark_users.py
+          ./lab_support.py
+          ./user_performance.py
+          ./clone-workspace
+          ./clone.rc
+        ]
+      }/benchmark_users.py ${lab}/bin/lab ${cloneWorkspace} "$@"
     '';
   };
   native-health-tests = vmTest "native-health-tests" {

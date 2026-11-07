@@ -19,7 +19,6 @@ from boot_medium import boot_medium
 from guest import boot
 from ethernet import Ethernet
 from user_development import check_development, check_profiles, check_source_edits
-from user_performance import benchmark_development
 
 
 ROOTS = "/usr/local/nix/state/gcroots"
@@ -66,27 +65,10 @@ def nvram(key):
 
 
 qemu, image, archive, output = sys.argv[1:]
-benchmark = os.environ.get("NIX9_USERS_BENCHMARK") == "1"
-timings = {}
-if benchmark:
-    Path(output).mkdir()
-
-
-def measure(name, operation):
-    start = time.monotonic()
-    result = operation()
-    if benchmark:
-        seconds = round(time.monotonic() - start, 3)
-        timings.setdefault(name, []).append(seconds)
-        Path(output, "timings.json").write_text(json.dumps(timings, indent=2) + "\n")
-        print(f"TIMING {name}: {seconds}s", flush=True)
-    return result
-
-
 state = os.environ.get("NIX9_USERS_TEST_STATE")
 with ExitStack() as stack:
     work = Path(stack.enter_context(nullcontext(state) if state else
-        tempfile.TemporaryDirectory(dir=output if benchmark else None))).resolve()
+        tempfile.TemporaryDirectory())).resolve()
     work.mkdir(mode=0o700, parents=True, exist_ok=True)
     work.chmod(0o700)
     (work / "bootstrap.tar").symlink_to(Path(archive).resolve())
@@ -230,7 +212,7 @@ with ExitStack() as stack:
     files.command("cat /n/site/adm/users | grep '^1010:alice:alice:$'")
     files.command("cat /n/site/adm/users | grep '^1012:project:alice:alice,bob$'")
     root = path(files, f"cat {bundles['first']}/roots/stable")
-    measure("setup/publish-root", lambda: files.command(f"rc {root}/publish /n/site"))
+    files.command(f"rc {root}/publish /n/site")
     # The foundation already has the archive needed to seed CPU state.
     files.command("installation=" + bundles["first"])
     for name in CPUS:
@@ -240,8 +222,8 @@ with ExitStack() as stack:
         rejected(files, "rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/files",
                  "system belongs to another machine")
         files.command("test ! -e " + directory)
-        measure("setup/prepare-" + name, lambda: files.command(
-            f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}"))
+        files.command(
+            f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}")
         rejected(files, f"rc $boot/prepare /n/site /tmp/bootstrap.tar $installation/systems/{name}",
                  "machine state already exists")
         files.command(f"cp /tmp/{name}.keys {directory}/adm/cpu.keys && chmod 600 {directory}/adm/cpu.keys")
@@ -257,12 +239,11 @@ with ExitStack() as stack:
             cpu.command(". /usr/local/pkg/nix9/activate")
             if name == "build":
                 cpu.command("mv /adm/cpu.keys /adm/cpu.keys.saved")
-                measure("setup/finish-missing-key", lambda: rejected(
-                    cpu, "rc /cfg/nix9/initial/finish", "cannot select initial system"))
+                rejected(
+                    cpu, "rc /cfg/nix9/initial/finish", "cannot select initial system")
                 cpu.command(f"test ! -e {ROOTS}/machines/build/system && test -f /cfg/nix9/initial/closure")
                 cpu.command("mv /adm/cpu.keys.saved /adm/cpu.keys")
-            measure("setup/finish-" + name + ("-retry" if name == "build" else ""),
-                    lambda: cpu.command("rc /cfg/nix9/initial/finish"))
+            cpu.command("rc /cfg/nix9/initial/finish")
             cpu.command("test ! -e /cfg/nix9/initial/closure && test -f /cfg/nix9/initial/complete")
             cpu.command(f"nix-store --verify-path `{{cat {ROOTS}/machines/{name}/system-initial-boot}}")
             cpu.command("rc /cfg/nix9/initial/finish",
@@ -327,10 +308,8 @@ with ExitStack() as stack:
     remote("bob", "echo bob >> /n/projects/hello/participants", machine="batch")
     remote("alice", "cat /n/projects/hello/participants", "bob")
     print("PASS: both CPUs expose system packages and shared sources while protecting machine stores", flush=True)
-    environments = check_development(auth, cpus, remote, measure)
-    if benchmark:
-        benchmark_development(auth, remote, measure)
-    check_source_edits(remote, measure)
+    environments = check_development(auth, cpus, remote)
+    check_source_edits(remote)
 
     updated = path(files, "nix-build /tmp/accounts.nix -A updatedCpu --no-out-link")
     # The update adds a literal file; its dependencies are already on the CPU.

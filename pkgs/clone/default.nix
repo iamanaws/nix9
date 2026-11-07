@@ -7,7 +7,10 @@
 stdenv.mkDerivation {
   name = "clone";
   src = fetchgit upstream;
-  patches = [ ./directories-only.patch ];
+  patches = [
+    ./directories-only.patch
+    ./multisource-directory.patch
+  ];
   buildInputs = [ libthread ];
   installPhase = ''
     mkdir -p $out/bin $out/man/1

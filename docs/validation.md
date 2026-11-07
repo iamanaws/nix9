@@ -104,16 +104,33 @@ For the four-machine [development installation](install.md):
 nix run .#benchmark-users -- nix9-users-performance
 ```
 
-This provisions auth, CWFS and two CPUs, runs the user integration checks, and
-measures initial CPU preparation, first environments, logins, evaluation, source
-imports, cached builds, shells and source edits on both CPUs. `MACHINE/login/*`
-includes a fresh `rcpu` login for each command; `MACHINE/session/*` runs inside
-an existing authenticated login. The `ready` and `version` probes help separate
-connection and program startup costs. Each command has three samples after a
-separately recorded `warmup-shell` restores any inputs collected by GC.
-`instantiate-project` measures evaluation and source imports for the complete
-project; `realise-project` checks its already-built derivation without evaluation.
-The VMs use two virtual CPUs and 2 GiB RAM each, connected by a private Ethernet
-link. Timings describe this VM setup, not a physical network. Temporary disks
-are removed on exit; `timings.json` survives a failed run and `results.json`
-records completed validation.
+This uses the reference lab and a writable checkout of the pinned `clone` utility
+on CWFS. `build` submits compilation to `batch` through its shared Nix daemon.
+Checks cover parallel copies, empty files, overwrites, missing-source errors,
+independent CPU profiles, source edits and restored-source reuse.
+
+Provisioning, project transfer, the first build and shell warmup are recorded
+separately. Warm commands have three samples: `MACHINE/login/*` includes a fresh
+`rcpu` login; `MACHINE/session/*` uses an existing CPU session. Evaluation,
+source imports, cached builds and shell startup have separate probes.
+`MACHINE/shell/*` measures `mk` inside an already-open development shell.
+Compilation uses a separate work directory per CPU to keep generated files out
+of the shared source imported by Nix.
+The edited result returns to `build`; `batch` then reuses its own result.
+
+To reuse a provisioned lab:
+
+```sh
+nix run .#benchmark-users -- nix9-users-performance --lab ./nix9-lab
+```
+
+A stopped lab is started and stopped by the benchmark. An already-running lab
+is left running. Each run creates a new shared project and prints its path;
+with `--lab`, it remains available for ordinary `nix-build` and `nix-shell` use.
+Use an otherwise idle lab for comparisons.
+First-build times include missing dependencies; reused labs may have a warm toolchain.
+
+The VMs have two virtual CPUs and 2 GiB RAM each on private virtual Ethernet.
+`timings.json` retains completed measurements; `results.json` appears after all
+checks and owned-lab shutdown pass, recording source hashes and VM settings.
+Without `--lab`, temporary disks and credentials are removed on exit.
