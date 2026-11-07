@@ -25,11 +25,16 @@ let
       [
         ./lab.py
         ./provision.py
-        ./configuration.nix
         ../../tests/guest.py
         ../../tests/ethernet.py
         ../../tests/boot_medium.py
       ]
+    ++ [
+      {
+        name = "configuration.nix";
+        path = ../../examples/development/default.nix;
+      }
+    ]
   );
 in
 pkgs.writeShellApplication {

@@ -34,7 +34,8 @@ authentication server, a file server and two network-root CPUs, `build` and
 `batch`. Both CPUs expose the same private homes and `/n/projects`, and make
 the declared packages available to Alice and Bob. Each CPU runs a shared Nix
 store for their builds, development shells and individual environment profiles.
-Follow the [installation walkthrough](install.md) to bring up this example.
+The [installation walkthrough](install.md) extends it with a dedicated remote
+builder account in the development installation.
 
 ## File-server identities
 

@@ -83,7 +83,7 @@ Trusted access lets that identity control the target store; keep its key private
 Compilation on the shared target still uses the anonymous build identity.
 Results return to the submitting store, where users keep their own roots and
 profiles. The
-[development lab](lab.md) includes this arrangement.
+[development installation](install.md) includes this arrangement.
 
 ## Builder settings
 

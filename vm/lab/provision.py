@@ -77,7 +77,6 @@ def provision(lab):
     transfer = work / "provision"
     transfer.mkdir(mode=0o700)
     shutil.copyfile(Path(__file__).with_name("configuration.nix"), work / "configuration.nix")
-    shutil.copyfile(work / "configuration.nix", transfer / "configuration.nix")
     for name, key in keys.items():
         roles = ("server", "speakfor") if name in CPUS else ("server",) if name == "files" else ("client",)
         (transfer / (name + ".keys")).write_text("".join(
@@ -107,7 +106,8 @@ def provision(lab):
                 download(guest, "server.nvram", private=True)
                 guest.command("dd -if /tmp/server.nvram -of /dev/sdF0/nvram -bs 126 -count 1; rm /tmp/server.nvram")
                 guest.command("mkdir -p /cfg/nix9-lab")
-                download(guest, "configuration.nix", "/cfg/nix9-lab/default.nix")
+                guest.command("cp $nix9/packages/examples/development/default.nix /cfg/nix9-lab/default.nix && "
+                              "chmod u+w /cfg/nix9-lab/default.nix")
                 if name == "auth":
                     guest.command("rm /adm/keys; auth/keyfs -m /mnt/keys /adm/keys")
                     for identity in keys:
@@ -119,8 +119,8 @@ def provision(lab):
                     download(guest, "files.keys", "/adm/files.keys", private=True)
                     download(guest, "glenda.keys", "/adm/lab-client.keys", private=True)
                     for cpu in CPUS:
-                        download(guest, cpu + ".keys", private=True)
-                    download(guest, "builder.keys", private=True)
+                        download(guest, cpu + ".keys", "/adm/" + cpu + ".keys", private=True)
+                    download(guest, "builder.keys", "/adm/builder.keys", private=True)
                     guest.command("mkdir /adm/storage; chmod 700 /adm/storage")
                     guest.command("dd -if /dev/zero -of /adm/storage/config -bs 16384 -count 1; chmod 600 /adm/storage/config")
                     download(guest, "cwfs.setup")
@@ -146,9 +146,9 @@ def provision(lab):
             lab.progress(f"Preparing {name} and selecting its first system...")
             artifact = store_path(files, "cat $installation/boot/" + name + "/path")
             files.command("rc " + artifact + "/prepare /n/site /tmp/bootstrap.tar $installation/systems/" + name)
-            files.command(f"cp /tmp/{name}.keys /n/site/machines/{name}/adm/cpu.keys; chmod 600 /n/site/machines/{name}/adm/cpu.keys")
+            files.command(f"cp /adm/{name}.keys /n/site/machines/{name}/adm/cpu.keys; chmod 600 /n/site/machines/{name}/adm/cpu.keys")
             if name == "build":
-                files.command("cp /tmp/builder.keys /n/site/machines/build/adm/builder.keys; "
+                files.command("cp /adm/builder.keys /n/site/machines/build/adm/builder.keys; "
                               "chmod 600 /n/site/machines/build/adm/builder.keys")
             settings = files.command("cat " + artifact + "/plan9.ini")
             configuration = "\n".join(line for line in settings.splitlines() if re.match(r"^[a-z0-9]+=", line)) + "\n"

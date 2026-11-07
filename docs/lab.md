@@ -11,7 +11,7 @@ nix run .#lab
 
 The first run installs Nix, the C toolchain and server packages, creates lab
 credentials and storage, publishes the shared OS root and selects each CPU's
-initial system. Preparation takes several minutes. Guest output is saved in
+initial system. Preparation can take tens of minutes. Guest output is saved in
 `nix9-lab/control.log`.
 Subsequent runs boot the existing disks.
 
@@ -74,6 +74,8 @@ disk usage grows as you add data. Existing disks are never replaced. If initial
 preparation fails, keep `control.log` for diagnosis and use a new directory for a
 fresh attempt.
 
+The lab uses the [development example's starter](../examples/development/default.nix),
+also used by the [manual installation guide](install.md).
 The initial site configuration is saved as `configuration.nix` on the host and
 `/cfg/nix9-lab/default.nix` on the auth and file servers. Edit the guest copy on
 `files` and follow [deployment](deployment.md) for changes. The launcher preserves

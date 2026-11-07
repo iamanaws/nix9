@@ -54,8 +54,9 @@ key proto=dp9ik dom=nix9.netroot user=build role=speakfor !password='ACCOUNT-PAS
 Replace the identity, domain and password with the provisioned account's values.
 Keep the file outside the store, owned by the host owner with mode `0600`.
 The `server` entry is sufficient for a file server; CPUs also use `speakfor` for
-users' filesystem authentication. The auth server must grant the corresponding
-delegation in `services.auth.speaksFor`. See native
+users' filesystem authentication. A dedicated remote-builder client key uses
+`role=client` with that account's identity and password. The auth server must
+grant the corresponding delegation in `services.auth.speaksFor`. See native
 [factotum key management](https://github.com/9front/9front/blob/602faae9a52f342a40b086d10b23c71c82dd52d7/sys/man/4/factotum).
 
 ## Authentication server

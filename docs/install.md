@@ -2,20 +2,20 @@
 
 For a locally provisioned VM version, use the [development lab](lab.md).
 
-The [users example](../examples/users/configuration.nix) connects four machines:
+The [development example](../examples/development/configuration.nix) connects four machines:
 
 | Machine | Address | Provides |
 | --- | --- | --- |
 | `auth` | `10.0.2.100` | Authentication for domain `nix9.netroot`. |
 | `files` | `10.0.2.101` | CWFS roots, homes, projects and persistent CPU state. |
-| `build` | `10.0.2.102` | CPU login and a shared Nix store for Alice and Bob. |
-| `batch` | `10.0.2.103` | A second CPU with its own Nix state. |
+| `build` | `10.0.2.102` | CPU login and a shared Nix store for Alice and Bob; sends compilation to `batch`. |
+| `batch` | `10.0.2.103` | CPU login and remote compilation, with its own Nix store. |
 
 Use a network where these addresses can reach each other. Separate VMs launched
 with the default `run-vm` user network do not form this network. For a VM lab,
-connect them through a shared virtual network; reserve the auth/files addresses
-in DHCP, or configure their interfaces statically. The two CPUs use static
-addresses from the example. Adjust addresses, gateway and devices for your site.
+connect them through a shared virtual network. The starter uses static addresses
+for all four machines. Adjust inventory IPs, matching interface addresses,
+gateway and devices for your site.
 
 `auth` and `files` need independently bootable 9front installations and the same
 [Nix bootstrap](../README.md#quick-start). Set their native boot to `service=cpu`
@@ -25,24 +25,20 @@ local kernel media.
 
 ## Keep the configuration
 
-On `files`, create a writable site directory and save this as `default.nix`:
+On `files`, copy the same starter used by the VM lab:
 
-```nix
-{ pkgs ? import <nix9> }:
-pkgs.mkInstallation ({ lib, ... }: {
-  imports = [ <nix9/examples/users/configuration.nix> ];
-  name = lib.mkForce "development";
-  machines.files.configuration.services.cwfs.deviceMap = lib.mkForce {
-    w0 = "/dev/sdG0/data";
-    w1 = "/dev/sdH0/data";
-  };
-})
+```sh
+. /usr/local/pkg/nix9/activate
+mkdir -p /cfg/nix9-site
+cp $nix9/packages/examples/development/default.nix /cfg/nix9-site/default.nix
+chmod u+w /cfg/nix9-site/default.nix
+cd /cfg/nix9-site
 ```
 
-Those devices are examples: choose the cache and worm devices you provision
-below. Keep a copy of this file on `auth` for its initial selection. Imports
-retain the example's users, delegation, namespaces and CPU settings; add site
-overrides here. See [inventory options](installation.md#inventory-and-relationships).
+Edit this file's site overrides, including the cache and worm devices you
+provision below. Its import supplies users, delegation, shared namespaces,
+CPU services and remote builders. Keep the same file in `/cfg/nix9-site` on
+`auth` for its initial selection. See [inventory options](installation.md#inventory-and-relationships).
 
 ## Provision native state
 
@@ -58,7 +54,7 @@ NVRAM; for an existing running keyfs, use its mount. Create the identities with
 interactive password prompts:
 
 ```sh
-for(account in glenda alice bob files build batch)
+for(account in glenda alice bob builder files build batch)
   auth/changeuser $account
 ```
 
@@ -70,19 +66,16 @@ the matching account passwords and domain:
 | `/adm/files.keys` on `files` | `files`, `server`. |
 | `/adm/build.keys` on `files`, for transfer to `build` | `build`, `server` and `speakfor`. |
 | `/adm/batch.keys` on `files`, for transfer to `batch` | `batch`, `server` and `speakfor`. |
+| `/adm/builder.keys` on `files`, for transfer to `build` | `builder`, `client`. |
 
 Make each file owner-only with `chmod 600`. The inventory already declares
-the delegation needed for Alice and Bob's file access. On `files`, load Glenda's
-client key into its factotum when needed:
-
-```sh
-auth/factotum -g 'proto=dp9ik dom=nix9.netroot user=glenda role=client !password?'
-```
+the delegation for user file access and remote builds. The submitting daemon
+uses `builder`'s private client key; Alice and Bob use their own login keys.
 
 Follow [initialize empty storage](storage.md#initialize-empty-storage) on `files`
 to create the CWFS filesystem, Glenda's account and the root/state directories.
-Nix will add Alice, Bob, the project group, their homes and `/projects` from the
-declarations.
+Nix will add Alice, Bob, the builder account, the project group, their homes and
+`/projects` from the declarations.
 
 ## Start authentication and storage
 
@@ -103,10 +96,12 @@ console. Bring both providers up before booting either network-root CPU.
 
 ## Prepare the CPUs
 
-On `files`, in the site directory, build and retain the installation:
+On `files`, return to the site directory after reboot. Load Glenda's client key
+for authenticated CWFS access, then build and retain the installation:
 
 ```sh
 . /usr/local/pkg/nix9/system
+auth/factotum -g 'proto=dp9ik dom=nix9.netroot user=glenda role=client !password?'
 nix-build default.nix -A build --out-link /usr/local/nix/state/gcroots/development
 installation=`{cat /usr/local/nix/state/gcroots/development}
 nix9 show --from $installation
@@ -125,6 +120,8 @@ for(machine in build batch) {
   cp /adm/$machine^.keys /n/site/machines/$machine/adm/cpu.keys
   chmod 600 /n/site/machines/$machine/adm/cpu.keys
 }
+cp /adm/builder.keys /n/site/machines/build/adm/builder.keys
+chmod 600 /n/site/machines/build/adm/builder.keys
 ```
 
 `prepare` initializes separate state, checks the intended machine identity and
@@ -154,7 +151,10 @@ The terminal needs Alice's key in factotum and [NDB entries](discovery.md) for
 `build`, `batch` and `authdom=nix9.netroot auth=10.0.2.100`. Log in with
 `rcpu -u alice -h build`.
 Follow [work on either CPU](users.md#work-on-either-cpu) to prepare a shared
-project, build it and enter its development shell. Use `batch` in the same way.
+project, build it and enter its development shell. On `build`, Nix sends
+compilation to `batch` and retains returned results in `build`'s store. Use
+`batch` for direct development too. See [remote builders](builders.md) for the
+dedicated account's trusted store access and connection failures.
 
 For updates, edit the site configuration on `files`, then run there:
 

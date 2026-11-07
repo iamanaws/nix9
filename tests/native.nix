@@ -48,8 +48,29 @@ in
         mkdir "$out"
         export NIX_STATE_DIR="$TMPDIR/nix-state" NIX_LOG_DIR="$TMPDIR/nix-log"
         NIX_PATH=nix9=${nativePackageSet} nix-instantiate --store dummy:// --eval --strict --json --expr '
-          let installation = import ${../vm/lab/configuration.nix} {};
-          in assert installation.build.name == "nix9-installation-development"; {
+          let
+            pkgs = import <nix9>;
+            installation = import <nix9/examples/development> {};
+            inventory = (pkgs.lib.evalModules {
+              specialArgs = { inherit pkgs; };
+              modules = [ <nix9/installation/options.nix> <nix9/examples/development/configuration.nix> ];
+            }).config;
+            system = name: (import <nix9/system/eval.nix> {
+              inherit pkgs;
+              inherit (pkgs) lib;
+            } inventory.machines.''${name}.configuration).config;
+          in
+          assert installation.build.name == "nix9-installation-development";
+          assert installation.manifest.machines.build.builders.batch.user == "builder";
+          assert builtins.elem "builder" (system "auth").services.auth.requiredUsers;
+          assert builtins.elem "builder" (system "auth").services.auth.speaksFor.batch;
+          assert builtins.elem "builder" (system "auth").services.auth.speaksFor.glenda;
+          assert inventory.users.builder.home == "/usr/builder";
+          assert (system "build").nix.daemon.keyFile == "/adm/builder.keys";
+          assert (system "build").nix.settings.max-jobs == 0;
+          assert (system "batch").nix.settings.trusted-users == [ "builder" ];
+          assert builtins.elem "builder" (system "batch").services.cpu.allowedUsers;
+          {
             installation = installation.build.drvPath;
             machines = builtins.mapAttrs (_: system: system.drvPath) installation.systems;
           }
