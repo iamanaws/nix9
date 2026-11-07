@@ -8,6 +8,7 @@ import secrets
 import signal
 import time
 
+from lab_support import machine_pid
 from lab_updates import detach, quote
 
 
@@ -74,23 +75,14 @@ def check_builder_restart(auth, records):
 
 
 def check_builder_unavailable(work, auth, attach, records):
-    running = json.loads((work / "run.json").read_text())
-    children = Path(f"/proc/{running['pid']}/task/{running['pid']}/children").read_text().split()
-    machines = []
-    for pid in children:
-        args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
-        if args[0].endswith(b"qemu-system-x86_64") and any(
-                arg.startswith(("file=" + str(work / "batch.qcow2") + ",").encode()) for arg in args):
-            machines.append(int(pid))
-    if len(machines) != 1:
-        raise RuntimeError("cannot identify the lab's batch VM")
+    batch_pid = machine_pid(work, "batch")
     batch = attach("batch")
     try:
         batch.child.sendline("fshalt")
         batch.child.expect("done halting", timeout=120)
         detach(batch)
         batch = None
-        os.kill(machines[0], signal.SIGTERM)
+        os.kill(batch_pid, signal.SIGTERM)
         deadline = time.monotonic() + 30
         while json.loads((work / "run.json").read_text())["machines"]["batch"]["state"] != "stopped":
             if time.monotonic() > deadline:

@@ -117,6 +117,9 @@ Rollback preserves projects and user profiles. Update the source configuration
 before deploying again. For auth or file-server changes, stop and resume the
 whole lab so the CPUs halt before their providers.
 
+For an unavailable remote builder, use the [local compilation recovery](builders.md#recover-while-a-builder-is-unavailable)
+workflow. It changes the submitting CPU's build settings without rebooting it.
+
 After stopping the lab, removing its state directory discards the installation
 and releases its Nix GC roots.
 

@@ -23,7 +23,7 @@ with the Nix sandbox enabled.
 
 | Target | Checks |
 | --- | --- |
-| `lab-tests` (run with `nix run`) | Public consoles, multiuser remote C builds through shared stores, result reuse, separate profiles, builder unavailability, CPU update and rollback during an active batch shell, and retained systems, files, profiles and builds after restart. |
+| `lab-tests` (run with `nix run`) | Public consoles, multiuser remote C builds, result reuse and profiles. Builder outage, live local recovery, session refresh and remote rollback without rebooting or replacing a development shell. CPU update, rollback and retained state after restart. |
 | `lab-configuration-tests` | Host evaluation of the shared development starter, builder credentials and access policy, and all four system derivations. Also runs in `nix flake check`. |
 | `c-abi-tests`, `ape-tests` | Native, cross and mixed objects; arguments, callbacks, structures, floating point, varargs and POSIX behavior. |
 | `PACKAGE-tests` | Package behavior. Libraries use known vectors and independent Python results for hashes, compression and arithmetic. |

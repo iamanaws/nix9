@@ -151,3 +151,31 @@ nix-build /usr/glenda/project --builders '' --max-jobs 1
 Remote building covers normal input-addressed and fixed-output derivations.
 Remote evaluation, floating outputs and remote repair are unsupported.
 Each server executes received builds locally, without dispatching them onward.
+
+## Recover while a builder is unavailable
+
+For the [development installation](install.md), temporarily compile on `build`
+by adding this module to the site's `imports`:
+
+```nix
+{ lib, ... }:
+{
+  machines.build.configuration.nix = {
+    distributedBuilds = false;
+    settings.max-jobs = lib.mkForce 1;
+  };
+}
+```
+
+From the configuration directory on `files`, run `nix9 deploy build`, then
+`nix9 status build`. With only [eligible build settings](native.md#shared-store)
+changed, `nix-config-reboot no` confirms the daemon uses the selected settings.
+
+Fresh logins compile locally. An existing login or development shell keeps its
+client settings: use the one-command override above, or run
+`. /usr/local/pkg/nix9/system` before the next build. Cached outputs remain
+usable throughout the outage.
+
+When the builder returns, run `nix9-rebuild rollback` at `build`'s owner console
+and refresh existing sessions again. Remove the temporary module from
+the source before the next deployment. No reboot is needed for these changes.

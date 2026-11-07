@@ -1,0 +1,24 @@
+flag e +
+directory=$1
+cd $directory
+cp $src hello.c
+echo $pid > pid
+# Native rc keeps errexit in functions compiled while it is enabled.
+flag e -
+fn package {
+  label=$1
+  shift
+  nix-build /n/projects/builders.nix -A package --argstr label $label --no-out-link $*
+}
+# Commands run in this same shell, including namespace and environment refreshes.
+while(! test -e stop) {
+  if(test -f command) {
+    . ./command >output >[2=1]
+    result=$status
+    rm command
+    echo $result > status
+  }
+  echo alive >> heartbeat
+  sleep 1
+}
+exit ''

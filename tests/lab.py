@@ -15,6 +15,7 @@ import pexpect
 from lab_support import start_lab, stop_lab, attach_console
 from lab_updates import check_updates
 from lab_builders import check_builders, check_builder_restart, check_builder_unavailable
+from lab_recovery import check_builder_recovery
 
 
 launcher, output = sys.argv[1:]
@@ -98,6 +99,7 @@ with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporar
             if output_path(reused) != environment or "building '" in reused or "copying path" in reused:
                 raise RuntimeError(machine + ": restart did not reuse the original environment")
         check_builder_restart(auth, distributed)
+        check_builder_recovery(work, auth, attach, distributed)
         check_builder_unavailable(work, auth, attach, distributed)
         auth.child.sendcontrol("]")
         auth.child.expect(pexpect.EOF)
@@ -113,12 +115,16 @@ with (nullcontext(None) if state else tempfile.TemporaryDirectory()) as temporar
                        "selected-and-booted-status", "individual-cpu-reboot", "console-after-reboot",
                        "continuous-batch-session", "single-cpu-rollback", "deployment-status-after-restart",
                        "multiuser-remote-builds", "remote-result-reuse", "remote-user-profiles",
-                       "remote-builds-after-restart", "cached-builds-without-builder", "unavailable-builder-failure"],
+                       "remote-builds-after-restart", "cached-builds-without-builder", "unavailable-builder-failure",
+                       "live-builder-recovery", "existing-client-settings", "development-session-refresh",
+                       "live-builder-rollback", "continuous-build-session", "recovery-without-reboot"],
         }, indent=2) + "\n")
     finally:
         if process is not None and process.poll() is None:
             stop(process, log)
         if (work / "control.log").exists():
             # Keep native diagnostics after disposable disks and credentials disappear.
-            import shutil
-            shutil.copyfile(work / "control.log", Path(output) / "control.log")
+            text = (work / "control.log").read_text(errors="replace")
+            text = re.sub(r'http://10\.0\.2\.2:[0-9]+/[^\s\x00-\x1f]+', 'http://10.0.2.2/[redacted]', text)
+            text = re.sub(r'("GET )/[^" ]+', r'\1/[redacted]', text)
+            (Path(output) / "control.log").write_text(text)

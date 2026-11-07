@@ -1,6 +1,7 @@
 """Public launcher and console operations shared by lab checks and benchmarks."""
 
 import json
+from pathlib import Path
 import signal
 import subprocess
 import sys
@@ -12,6 +13,20 @@ from guest import Guest
 
 
 PROMPT = r"(?m)^(?:[a-z0-9-]+[%#] |% )"
+
+
+def machine_pid(work, name):
+    running = json.loads((work / "run.json").read_text())
+    children = Path(f"/proc/{running['pid']}/task/{running['pid']}/children").read_text().split()
+    machines = []
+    for pid in children:
+        args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+        if args[0].endswith(b"qemu-system-x86_64") and any(
+                arg.startswith(("file=" + str(work / (name + ".qcow2")) + ",").encode()) for arg in args):
+            machines.append(int(pid))
+    if len(machines) != 1:
+        raise RuntimeError("cannot identify the lab's " + name + " VM")
+    return machines[0]
 
 
 def start_lab(launcher, work, log_path):

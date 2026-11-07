@@ -125,8 +125,15 @@ class Lab:
         guest.command("bind -a '#t' /dev; test -e /dev/eia1")
         guest.command("echo b115200 > /dev/eia1ctl")
         # Each console login has its own namespace, environment and note group.
-        guest.command("@{ while() { @{ rfork ens; exec /bin/ip/telnetd -tn "
-                      "</dev/eia1 >/dev/eia1 >[2=1] } } } &")
+        prompt = guest.prompt
+        # telnetd can log to the control UART between command status and the
+        # shell prompt. The prompt then follows that message on the same line.
+        guest.prompt = r"(?m)(?:[a-z0-9-]+[%#] |% )"
+        try:
+            guest.command("@{ while() { @{ rfork ens; exec /bin/ip/telnetd -tn "
+                          "</dev/eia1 >/dev/eia1 >[2=1] } } } &")
+        finally:
+            guest.prompt = prompt
         self.console_ready[name] = True
 
     def consoles(self):
